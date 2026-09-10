@@ -388,3 +388,93 @@ def test_compute_composite_master_frame_no_provenance_column_when_absent(tmp_pat
 
     out = compute_composite_master_frame(spec, level="district", state_name=state_name, data_dir=tmp_path)
     assert "climate_fill_method" not in out.columns
+
+
+def test_frozen_ruler_composite_publishes_the_four_part_column_and_absolute_scores(tmp_path) -> None:
+    """CHG-0367d: Heat Risk scores through the committed frozen national ruler.
+
+    Three properties at once, because all three are silent when they break: the
+    published column keeps its 4-part ``slug__scenario__period__stat`` name; the
+    score is *absolute*, so a two-district state does not get a 0 and a 100 the
+    way per-state min-max forced; and only the 9 headline masters are required --
+    the 5 baseline-referenced ones are deliberately absent here and must not
+    block the state from being scored.
+    """
+    from india_resilience_tool.analysis.frozen_rulers import frozen_ruler_dir
+
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = get_composite_metric_for_bundle("Heat Risk")
+    assert spec is not None
+    assert spec.normalization == "frozen_national_cdf"
+
+    if not (frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version) / "ruler.json").exists():
+        import pytest
+
+        pytest.skip("No frozen ruler committed")
+
+    id_frame = pd.DataFrame(
+        {
+            "state": [state_name, state_name],
+            "district": ["A", "B"],
+            "district_key": ["a", "b"],
+        }
+    )
+    # Two districts a little apart, both well inside the national support.
+    for offset, slug in enumerate(spec.headline_metric_slugs):
+        df = id_frame.copy()
+        for column in (
+            f"{slug}__historical__1990-2010__mean",
+            f"{slug}__ssp585__2040-2060__mean",
+        ):
+            df[column] = [20.0 + offset, 24.0 + offset]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(
+        spec, level="district", state_name=state_name, data_dir=tmp_path
+    )
+
+    column = "composite_heat_risk__ssp585__2040-2060__mean"
+    assert column in out.columns
+    scores = dict(zip(out["district"], out[column]))
+    assert all(0.0 <= float(v) <= 100.0 for v in scores.values())
+    # Absolute, not cohort-relative: neither district is pinned to an endpoint.
+    assert 0.0 < float(scores["A"]) < float(scores["B"]) < 100.0
+
+
+def test_frozen_ruler_composite_requires_only_the_headline_masters(tmp_path) -> None:
+    """A baseline-referenced master missing must not empty the frame (CHG-0367d)."""
+    from india_resilience_tool.analysis.frozen_rulers import frozen_ruler_dir
+
+    spec = get_composite_metric_for_bundle("Heat Risk")
+    assert spec is not None
+    if not (frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version) / "ruler.json").exists():
+        import pytest
+
+        pytest.skip("No frozen ruler committed")
+
+    baseline_only = set(spec.component_metric_slugs) - set(spec.headline_metric_slugs)
+    assert len(baseline_only) == 5
+
+    state_name = "Telangana"
+    id_frame = pd.DataFrame(
+        {"state": [state_name], "district": ["A"], "district_key": ["a"]}
+    )
+    for slug in spec.headline_metric_slugs:
+        df = id_frame.copy()
+        df[f"{slug}__ssp585__2040-2060__mean"] = [25.0]
+        _write_component_master(
+            tmp_path,
+            slug=slug,
+            state_name=state_name,
+            filename="master_metrics_by_district.csv",
+            df=df,
+        )
+
+    out = compute_composite_master_frame(
+        spec, level="district", state_name=state_name, data_dir=tmp_path
+    )
+    assert not out.empty
+    assert not math.isnan(
+        float(out["composite_heat_risk__ssp585__2040-2060__mean"].iloc[0])
+    )

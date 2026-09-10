@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -11,6 +12,13 @@ import pandas as pd
 import numpy as np
 
 from india_resilience_tool.analysis.bundle_scores import BundleMetricSpec, compute_bundle_score_frame
+from india_resilience_tool.analysis.frozen_rulers import (
+    FrozenRulerSet,
+    finite_mask_frame,
+    frozen_ruler_dir,
+    load_ruler_set,
+    weighted_row_score,
+)
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.config.composite_metrics import (
     COMPOSITES_BY_SLUG,
@@ -184,8 +192,15 @@ def _intersect_available_pairs(component_frames: dict[str, pd.DataFrame]) -> lis
     ]
 
 
-def _bundle_metric_specs(spec: CompositeMetricSpec) -> list[BundleMetricSpec]:
-    """Return weighted component specs for composite computation."""
+def _bundle_metric_specs(
+    spec: CompositeMetricSpec, *, slugs: Optional[Sequence[str]] = None
+) -> list[BundleMetricSpec]:
+    """Return weighted component specs for composite computation.
+
+    ``slugs`` narrows the set to the metrics actually being scored -- the frozen
+    ruler publishes the headline half only, and passing the full component list
+    there would put weight in the numerator for metrics that were never loaded.
+    """
     from india_resilience_tool.config.bundle_weights import get_bundle_weights
 
     weights = {entry.metric_slug: float(entry.weight) for entry in get_bundle_weights(spec.bundle_domain)}
@@ -197,7 +212,7 @@ def _bundle_metric_specs(spec: CompositeMetricSpec) -> list[BundleMetricSpec]:
             weight=weights[metric_slug],
             higher_is_worse=bool(METRICS_BY_SLUG[metric_slug].rank_higher_is_worse),
         )
-        for metric_slug in spec.component_metric_slugs
+        for metric_slug in (spec.component_metric_slugs if slugs is None else slugs)
     ]
 
 
@@ -417,6 +432,80 @@ def _compute_pre_scaled_ordinal_score_frame(
     return out
 
 
+FROZEN_NATIONAL_CDF = "frozen_national_cdf"
+
+
+@lru_cache(maxsize=8)
+def _frozen_ruler_set(composite_slug: str, version: str) -> FrozenRulerSet:
+    """Load and cache one committed frozen ruler set.
+
+    Cached because the composite is computed state by state and the artifact is
+    identical for every one of them -- and because reading it repeatedly is the
+    only way a run could end up scoring two states against two different files.
+    """
+    if not version:
+        raise ValueError(
+            f"Composite {composite_slug!r} is configured for {FROZEN_NATIONAL_CDF} "
+            "normalization but declares no frozen_ruler_version."
+        )
+    return load_ruler_set(frozen_ruler_dir(composite_slug, version))
+
+
+def _compute_frozen_ruler_score_frame(
+    wide: pd.DataFrame,
+    *,
+    ruler_set: FrozenRulerSet,
+    metric_specs: Sequence[BundleMetricSpec],
+    id_columns: Sequence[str],
+    coverage_gate: float,
+) -> pd.DataFrame:
+    """Score one wide component frame against a frozen national ruler set.
+
+    Every unit is scored through the same transfer function, so a district and a
+    block holding the same physical value receive the same score, and scores are
+    comparable across states and across time. Because the ruler is non-linear,
+    the area-weighted mean of a district's block scores is *not* that district's
+    own score; both are scored from their own physical values by design.
+
+    Unlike the min-max paths, a coverage gate applies: a row backed by less than
+    ``coverage_gate`` of the *configured* headline weight is published as NaN
+    rather than as a full-looking score computed from a fraction of the bundle.
+    """
+    out = wide.loc[:, list(id_columns)].copy()
+    scored: dict[str, pd.Series] = {}
+    clamped = pd.Series(0, index=wide.index, dtype=int)
+    for spec in metric_specs:
+        ruler = ruler_set.rulers.get(spec.slug)
+        if ruler is None or spec.slug not in wide.columns:
+            continue
+        scored[spec.slug] = ruler.apply(wide[spec.slug])
+        clamped = clamped.add(ruler.clamped_mask(wide[spec.slug]).astype(int), fill_value=0)
+
+    if not scored:
+        out["bundle_score"] = np.nan
+        out["available_metric_count"] = 0
+        return out
+
+    score_frame = pd.DataFrame(scored, index=wide.index)
+    weights = pd.Series(
+        {slug: float(ruler_set.weights.get(slug, 0.0)) for slug in score_frame.columns},
+        dtype=float,
+    )
+    # The denominator is the configured headline weight of the whole bundle, not
+    # the weight that happened to fit or to be present. Anything else lets a row
+    # missing a metric entirely report full coverage (CHG-0350).
+    score, coverage = weighted_row_score(
+        score_frame, weights, total_weight=float(ruler_set.configured_weight)
+    )
+    out["bundle_score"] = score.where(coverage >= float(coverage_gate))
+    out["available_metric_count"] = (
+        finite_mask_frame(score_frame, list(score_frame.columns)).sum(axis=1).astype(int)
+    )
+    out["weight_coverage"] = coverage
+    out["clamped_metric_count"] = clamped.astype(int)
+    return out
+
+
 def compute_composite_master_frame(
     spec: CompositeMetricSpec,
     *,
@@ -438,21 +527,39 @@ def compute_composite_master_frame(
     if level_norm == "admin":
         raise ValueError("compute_composite_master_frame requires a concrete level, not 'admin'.")
 
+    normalization_mode = getattr(spec, "normalization", "per_period")
+    ruler_set: Optional[FrozenRulerSet] = None
+    if normalization_mode == FROZEN_NATIONAL_CDF:
+        ruler_set = _frozen_ruler_set(spec.composite_slug, getattr(spec, "frozen_ruler_version", ""))
+
+    # In frozen mode only the headline (absolute-threshold) metrics are published,
+    # so only they are required: the baseline-referenced half is retained as a lens
+    # elsewhere and must not be able to block a state from being scored.
+    required_slugs = (
+        tuple(spec.headline_metric_slugs)
+        if ruler_set is not None and getattr(spec, "headline_metric_slugs", ())
+        else tuple(spec.component_metric_slugs)
+    )
+
     component_frames: dict[str, pd.DataFrame] = {}
-    for metric_slug in spec.component_metric_slugs:
+    for metric_slug in required_slugs:
         frame = _load_component_master(metric_slug, level=level_norm, state_name=state_name, data_dir=data_dir)
         if frame is None or frame.empty:
             return pd.DataFrame(columns=list(_required_id_columns(level_norm)))
         component_frames[metric_slug] = frame
 
     available_pairs = _intersect_available_pairs(component_frames)
+    if ruler_set is not None:
+        # A ruler is fitted over a declared slice grid. Scoring a pair it never saw
+        # would publish a score against a ruler that was never fitted for it (P-04).
+        for scenario, period in available_pairs:
+            ruler_set.validate_slice(scenario, period)
     id_columns = list(_required_id_columns(level_norm))
     if not available_pairs:
         return next(iter(component_frames.values()))[id_columns].drop_duplicates().reset_index(drop=True)
 
     output = next(iter(component_frames.values()))[id_columns].drop_duplicates().reset_index(drop=True)
-    bundle_metric_specs = _bundle_metric_specs(spec)
-    normalization_mode = getattr(spec, "normalization", "per_period")
+    bundle_metric_specs = _bundle_metric_specs(spec, slugs=required_slugs)
     anchor_wide = None
     if normalization_mode == "baseline_anchored":
         anchor_wide = _build_wide_component_frame(
@@ -463,7 +570,15 @@ def compute_composite_master_frame(
         )
     for scenario, period in available_pairs:
         wide = _build_wide_component_frame(component_frames, level=level_norm, scenario=scenario, period=period)
-        if normalization_mode == "pre_scaled_ordinal":
+        if ruler_set is not None:
+            score_frame = _compute_frozen_ruler_score_frame(
+                wide,
+                ruler_set=ruler_set,
+                metric_specs=bundle_metric_specs,
+                id_columns=id_columns,
+                coverage_gate=ruler_set.coverage_gate,
+            )
+        elif normalization_mode == "pre_scaled_ordinal":
             score_frame = _compute_pre_scaled_ordinal_score_frame(
                 wide,
                 metric_specs=bundle_metric_specs,

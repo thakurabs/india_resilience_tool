@@ -18,6 +18,20 @@ class BundleWeightEntry:
     substitution_note: str = ""
     workbook_group: Optional[str] = None
     is_attribute: bool = False
+    #: True when the metric's value is defined *relative to the unit's own
+    #: baseline distribution* (ETCCDI percentile and percentile-spell indices)
+    #: rather than against an absolute physical threshold or level. The frozen
+    #: national ruler publishes the absolute half only, so this partition
+    #: decides which metrics carry the headline composite (CHG-0367b).
+    is_baseline_referenced: bool = False
+
+
+#: Configured headline weight a bundle must carry, i.e. the sum of its
+#: non-attribute, non-baseline-referenced weights. Only bundles published against
+#: a frozen national ruler are pinned; the rest have no headline split.
+EXPECTED_HEADLINE_WEIGHT_TOTALS: dict[str, float] = {
+    "Heat Risk": 0.2 / 3.0 * 3 + 0.25 / 3.0 * 2 + 0.2 / 3.0 * 3 + 0.2 / 3.0,
+}
 
 
 LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
@@ -56,6 +70,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.25 / 3.0,
             source_note="Bundles_comp_Score.xlsx / Heat Risk",
             workbook_group="Extremes",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Heat Risk",
@@ -92,6 +107,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.15 / 2.0,
             source_note="Bundles_comp_Score.xlsx / Heat Risk",
             workbook_group="Percentile Extremes",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Heat Risk",
@@ -99,6 +115,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.15 / 2.0,
             source_note="Bundles_comp_Score.xlsx / Heat Risk",
             workbook_group="Percentile Extremes",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Heat Risk",
@@ -106,6 +123,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.2 / 3.0,
             source_note="Bundles_comp_Score.xlsx / Heat Risk",
             workbook_group="Heatwave Characteristics",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Heat Risk",
@@ -120,6 +138,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.2 / 3.0,
             source_note="Bundles_comp_Score.xlsx / Heat Risk",
             workbook_group="Heatwave Characteristics",
+            is_baseline_referenced=True,
         ),
     ),
     "Heat Stress": (
@@ -417,6 +436,40 @@ def has_bundle_weights(bundle_domain: str) -> bool:
     return bool(get_bundle_weights(bundle_domain))
 
 
+def get_bundle_headline_weights(bundle_domain: str) -> tuple[BundleWeightEntry, ...]:
+    """Return the entries that carry a bundle's published headline composite.
+
+    The headline is the non-attribute, non-baseline-referenced half: metrics
+    scored against absolute physical thresholds or levels. Their configured
+    weights sum to less than 1.0 by construction and are renormalized at scoring
+    time, so this accessor returns the configured weights unchanged (CHG-0367b).
+    """
+    return tuple(
+        e
+        for e in get_bundle_weights(bundle_domain)
+        if not e.is_attribute and not e.is_baseline_referenced
+    )
+
+
+def get_bundle_baseline_referenced_slugs(bundle_domain: str) -> tuple[str, ...]:
+    """Return metric slugs whose value is defined against the unit's own baseline."""
+    return tuple(
+        e.metric_slug
+        for e in get_bundle_weights(bundle_domain)
+        if not e.is_attribute and e.is_baseline_referenced
+    )
+
+
+def get_bundle_headline_weight_total(bundle_domain: str) -> float:
+    """Configured headline weight of a bundle, i.e. the coverage denominator.
+
+    This is the *configured* total, not the total of whatever fitted. Using the
+    fitted sum would let a row missing a metric entirely report full coverage
+    against a smaller universe than the gate claims (CHG-0350).
+    """
+    return float(sum(e.weight for e in get_bundle_headline_weights(bundle_domain)))
+
+
 def get_bundle_attribute_slugs(bundle_domain: str) -> tuple[str, ...]:
     """Return metric slugs declared as inline glance attributes for a bundle."""
     return tuple(
@@ -471,5 +524,22 @@ def validate_bundle_weights() -> list[str]:
             issues.append(
                 f"Bundle {bundle_domain!r} non-attribute weights sum to {non_attr_weights:.12f}, expected 1.0."
             )
+
+        # The frozen national ruler publishes the absolute half of Heat Risk and
+        # renormalizes it 0.6333... -> 1.0. If that configured total drifts, every
+        # published score changes silently under an unchanged column name, so it
+        # is pinned here rather than merely documented (CHG-0367b).
+        expected_headline = EXPECTED_HEADLINE_WEIGHT_TOTALS.get(bundle_domain)
+        if expected_headline is not None:
+            headline_total = sum(
+                float(e.weight)
+                for e in entries
+                if not e.is_attribute and not e.is_baseline_referenced
+            )
+            if not isclose(headline_total, expected_headline, rel_tol=0.0, abs_tol=1e-9):
+                issues.append(
+                    f"Bundle {bundle_domain!r} headline (absolute-threshold) weights sum to "
+                    f"{headline_total:.12f}, expected {expected_headline:.12f}."
+                )
 
     return issues

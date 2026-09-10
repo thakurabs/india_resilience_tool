@@ -23,6 +23,10 @@ class DashboardBundleSpec:
     show_in_landing: bool
     supported_scenarios: tuple[str, ...] = ("ssp245", "ssp585")
     composite_normalization: str = "per_period"
+    #: Version directory of the committed frozen ruler this bundle is scored
+    #: against. Only meaningful when ``composite_normalization`` is
+    #: ``"frozen_national_cdf"`` (CHG-0367b).
+    frozen_ruler_version: str = ""
 
 
 DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
@@ -35,6 +39,8 @@ DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
         composite_label="Composite Heat Risk",
         supported_levels=("district", "block"),
         show_in_landing=True,
+        composite_normalization="frozen_national_cdf",
+        frozen_ruler_version="cdf_v1",
     ),
     DashboardBundleSpec(
         group_key="thematic",

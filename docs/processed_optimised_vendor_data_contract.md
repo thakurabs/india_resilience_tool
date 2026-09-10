@@ -25,9 +25,95 @@ Observed bundle facts:
 | Admin block index rows | 6,300 |
 | Exposure summary rows | 7,091 |
 | Hydrology context rows | 7,090 |
+| `artifact_version` | 4 |
+| Composites on a frozen national ruler | 1 (`composite_heat_risk`) |
 
 Treat `bundle_manifest.json` and `parity_report.json` as the first files to
 read. A clean handover must have `parity_report.json` with `issue_count: 0`.
+
+## Read This First: `composite_heat_risk` Changed Meaning (artifact version 4)
+
+`bundle_manifest.json` now carries `"artifact_version": 4`. If you have cached a
+bundle at version 3, **the `composite_heat_risk` score columns are not
+comparable to what you have** — the column names are byte-identical while the
+number behind them changed twice:
+
+| | Version 3 | Version 4 |
+|---|---|---|
+| Metrics in the composite | 14 | 9 (the absolute-threshold half, weights renormalized 0.6333 -> 1.0) |
+| Normalization | per-`(state, level, scenario, period)` min-max | one frozen national CDF ruler |
+| Comparable across states? | **No** — every state contained a 0 and a 100 | Yes |
+| Comparable across scenarios/periods? | **No** | Yes |
+| Score dtype | float32 | float64 |
+
+The manifest records exactly which ruler produced the numbers:
+
+```json
+"frozen_rulers": {
+  "composite_heat_risk": {
+    "ruler_id": "composite_heat_risk_cdf_v1",
+    "ruler_sha256": "...",
+    "data_snapshot_hash": "...",
+    "colour_scale_id": "whbgyr-101-floor045-v1",
+    "headline_metric_count": 9,
+    "coverage_gate": 0.7,
+    "configured_weight": 0.6333333333333333,
+    "slices": [["historical", "1990-2010"], ["ssp245", "2020-2040"], "..."]
+  }
+}
+```
+
+**Check `ruler_id` before serving a cached tile or screenshot.** When it changes,
+every score changed and every cached rendering of it is stale.
+
+### What the score means
+
+A district's or block's raw physical value for each of the 9 metrics is mapped
+through a fixed transfer function fitted once over the national district pool
+(784 districts x 7 scenario/period slices), then averaged with the configured
+weights. Consequences you should build for rather than around:
+
+- **A block and a district holding the same physical value get the same score
+  and the same colour.** That is the point.
+- **A district's score is not the mean of its blocks' scores.** The ruler is
+  non-linear, so an area-weighted rollup of blocks lands near, but not on, the
+  district's own score (observed maximum gap: 4.8 points). Each level is scored
+  from its own physical values; neither is derived from the other. Do not
+  "correct" one to match the other.
+- **A state whose units all score alike is correct, not broken.** Ladakh's 20
+  blocks span 1.8 points and Delhi's 12 span 2.6 at SSP5-8.5 2040-2060 — on the
+  101-stop ramp below that is three adjacent stops, i.e. one colour to the eye
+  (Ladakh `#e2f4fd`/`#ddf2fc`/`#d5effc`, Delhi `#f7a13f`/`#f7a842`/`#f8af45`).
+  If your map shows either state in several **visually distinct** colours, the
+  scale has been rescaled somewhere in your stack. `golden_canaries.csv`, beside
+  the ruler artifact in the repository, pins 236 named unit x slice rows with
+  their expected score and expected hex so you can assert this in your own build.
+- **A row can be null.** A unit backed by less than 70% of the configured
+  headline weight is published as null rather than as a full-looking score.
+  Render it as "no data", never as 0.
+
+### Colour scale: `colour_scale.json`
+
+`processed_optimised/colour_scale.json` ships the exact ramp the score is meant
+to be painted with — 101 hex stops over a fixed 0-100 domain, plus the grey used
+for missing data:
+
+```json
+{ "colour_scale_id": "whbgyr-101-floor045-v1", "stops": ["#e2f4fd", "..."],
+  "domain_min": 0, "domain_max": 100, "missing": "#d5d8dc", "rescale": "forbidden" }
+```
+
+`"rescale": "forbidden"` is a contract term, not a hint. Binding the ramp to the
+min and max of whatever subset is on screen — one state, one scenario, the
+filtered rows — re-introduces exactly the incomparability the frozen ruler was
+built to remove, and it does so invisibly: the map still looks plausible.
+
+### The other composites
+
+The remaining 14 composite slugs are **still on per-state min-max** in this same
+bundle, under the same word "score". They are comparable within a state and
+within a slice only. `frozen_rulers` in the manifest lists precisely which slugs
+carry a national ruler; treat every slug absent from it as state-relative.
 
 ## Directory Contract
 

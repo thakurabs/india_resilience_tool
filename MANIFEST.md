@@ -208,6 +208,7 @@ Aqueduct methodology note:
 |------|---------|
 | `area_weighting.py` | Streamlit-free area-weighted state aggregation: `with_area_weights` (attach `__area_m2`, prefer `area_m2`, lazy geodesic fallback) and `weighted_state_mean`→`(value, n_units)` from one mask. Single definition shared by `state_summary_view` and `build_state_values` |
 | `bundle_scores.py` | Streamlit-free landing bundle-score normalization, aggregation, and driver helpers |
+| `frozen_rulers.py` | Frozen national CDF rulers: `MetricRuler` (apply/clamp), exact pooled mid-rank fit, `FrozenRulerSet` with slice-grid validation, and `save_ruler_set`/`load_ruler_set` for the committed artifact under `config/frozen_rulers/` |
 | `__init__.py` | Package marker |
 | `map_enrichment.py` | Streamlit-free map enrichment helpers: baseline/delta, ranking, tooltip prep |
 | `metrics.py` | Risk-class and percentile/ranking helpers |
@@ -434,6 +435,7 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `build_all_csv.ps1` | PowerShell helper for CSV build workflows |
 | `build_composite_metrics.py` | CLI wrapper that writes persisted district/block composite masters for the thematic dashboard bundles |
+| `fit_frozen_ruler.py` | Fits and commits one bundle's frozen national CDF ruler (`config/frozen_rulers/<slug>/cdf_<version>/`) and emits `processed_optimised/colour_scale.json`. Refuses to overwrite a published version |
 | `build_proposal_bundles.py` | CLI wrapper that writes persisted district/block proposal climate-risk bundle masters and the `r95p_interannual_variability` helper masters |
 | `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
@@ -528,6 +530,7 @@ python -m pytest -q
 - `test_bundle_scores.py`
 - `test_bundle_weights.py`
 - `test_composite_metrics.py`
+- `test_frozen_national_ruler.py`
 - `test_dashboard_bundles.py`
 - `test_proposal_bundle_builder.py`
 - `test_proposal_bundle_config.py`

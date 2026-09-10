@@ -109,7 +109,7 @@ def test_block_level_is_rejected_by_the_cli():
 def test_exact_midrank_scores_a_tied_block_at_its_true_midpoint():
     """Ties get 100*(b + c/2)/n, which a 5% quantile grid can only approximate."""
     pool = np.array([0.0] * 33 + list(np.arange(1.0, 68.0)))  # 33 zeros in n=100
-    values, scores, counts = pilot._exact_midrank_cdf(pool)
+    values, scores, counts = pilot.exact_midrank_cdf(pool)
     assert values[0] == 0.0
     assert int(counts[0]) == 33
     assert scores[0] == pytest.approx(100.0 * (0 + 33 / 2) / 100.0)  # 16.5, not the grid's 15.0
@@ -118,7 +118,7 @@ def test_exact_midrank_scores_a_tied_block_at_its_true_midpoint():
 def test_grid_approximation_error_is_measured_not_assumed():
     """The 21-knot grid is retained only as a quantified approximation."""
     pool = np.array([0.0] * 33 + list(np.arange(1.0, 68.0)))
-    values, scores, _ = pilot._exact_midrank_cdf(pool)
+    values, scores, _ = pilot.exact_midrank_cdf(pool)
     max_error, mean_error = pilot._grid_approximation_error(pool, values, scores)
     assert max_error > 0.0
     assert 0.0 <= mean_error <= max_error

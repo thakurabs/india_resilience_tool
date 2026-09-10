@@ -419,6 +419,44 @@ Notes:
 - `--state` is admin-only for `build_master_metrics`
 - hydro levels auto-use `processed/{metric}/hydro/`
 
+### Frozen national ruler (composite_heat_risk)
+
+`composite_heat_risk` is not normalized per state. It is scored against a frozen national CDF
+ruler committed in the repository at
+`india_resilience_tool/config/frozen_rulers/composite_heat_risk/cdf_v1/`.
+
+```bash
+# Fit and report only; writes nothing
+python -m tools.pipeline.fit_frozen_ruler --bundle "Heat Risk" --out-version v1 --dry-run
+
+# Fit and commit a NEW version directory (refuses to overwrite an existing one)
+python -m tools.pipeline.fit_frozen_ruler --bundle "Heat Risk" --out-version v1
+```
+
+Writes `cdf_support.parquet`, `ruler_spec.parquet` and `ruler.json` into the version directory,
+plus `IRT_DATA_DIR/processed_optimised/colour_scale.json`.
+
+Republishing the scores after a fit — run in this order, and back up
+`processed_optimised/` first, because step 2 deletes `bundle_manifest.json` and
+`parity_report.json` before rebuilding them:
+
+```bash
+export IRT_ROSTER_GATE=warn
+python -m india_resilience_tool.compute.composite_metrics --level admin --metric composite_heat_risk --overwrite
+python -m tools.optimized.build_processed_optimised --metric composite_heat_risk --overwrite
+python -m tools.optimized.build_state_values --metric composite_heat_risk
+python -m tools.optimized.audit_processed_optimised_parity --metric composite_heat_risk
+```
+
+Traps:
+- Never add `--state` to `build_processed_optimised` here: a scoped run suppresses the manifest,
+  the parity report and context/glance unless `--include-shared-admin-artifacts` is also passed.
+- `--overwrite` is required or the existing outputs short-circuit and the new scores never land.
+- `build_state_values` is not optional. The audit only *warns* about it, and the app reads the
+  stale state headline rather than falling back to the fresh masters.
+- Re-fitting an existing version in place is refused by design. A new fit is `v2` in its own
+  directory, and every published score changes with it.
+
 ### Visible-Glance composites
 
 ```bash

@@ -12,8 +12,14 @@ Interpreter note (this environment): the WSL `python` has no deps; the suite is 
 with the Windows conda `irt` env
 (`/mnt/c/Users/22015611/AppData/Local/miniconda3/envs/irt/python.exe`).
 
-Baseline (14 failures) — last refreshed 2026-07-02 at `add_flood_depth@1e2d8e1`
-(hydro lean-down Phase 5 docs + G11 river-pair). Full run: **14 failed, 1232 passed**.
+Baseline (15 failures) — last refreshed 2026-09-10 at `add_flood_depth@bb29b71`, verified
+by running the suite in a clean worktree at that commit. Full run: **15 failed, 1466 passed,
+2 skipped**. The frozen-ruler work (CHG-0367a..f, CHG-0385a) was then measured against it:
+**15 failed, 1485 passed** — the same 15, plus 19 new tests passing.
+
+Previous baseline: 2026-07-02 at `add_flood_depth@1e2d8e1` (hydro lean-down Phase 5 docs +
+G11 river-pair), **14 failed, 1232 passed**. The one added failure since then is
+`test_map_view_layout::test_clamp_map_height_enforces_maximum`, listed under Other below.
 All 14 are pre-existing environment / untracked-WIP / repo-text failures, unrelated to
 the hydro lean-down work (verified: identical set at the pre-hydro baseline). The prior
 `test_prepare_dashboard_runner` ×5 failures were resolved in Phase 3 (CHG-0172 folded in
@@ -52,11 +58,12 @@ working docs (`docs/perf_phase2_brief.md`, `docs/REGEN_RUNBOOK.md`). Not trigger
 
 - `tests/test_no_emojis.py::test_no_emoji_characters_in_repo_text`
 
-## Other pre-existing (3)
+## Other pre-existing (4)
 
 Standing pre-existing failures unrelated to the lean-down; carried from before the
 hydro work began.
 
+- `tests/test_map_view_layout.py::test_clamp_map_height_enforces_maximum`
 - `tests/test_color_range_controls.py::test_single_unit_scale_value_preserves_floor_1`
 - `tests/test_compute_indices_task_planning.py::test_metric_role_varnames_uses_level_aware_percentile_and_drought_baselines`
 - `tests/test_heat_risk_gridfirst.py::test_gridfirst_threshold_day_metrics_cover_txge30_and_tropical_nights_gt25_without_baseline`

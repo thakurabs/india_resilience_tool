@@ -630,6 +630,38 @@ must carry `data_snapshot_hash` so a mismatch is loud rather than silent.
 
 ---
 
+## Part D2 — Shipped 2026-09-10 (CHG-0367a..f, CHG-0385a, CHG-0388)
+
+Section A of this document is implemented and published. `composite_heat_risk` in
+`processed_optimised/` is scored against `composite_heat_risk_cdf_v1`: the exact pooled mid-rank
+CDF over 784 districts x 7 slices, headline = the 9 absolute-threshold metrics renormalized
+0.6333 -> 1.0, coverage gate 0.70, blocks scored against the district-fitted ruler unchanged (A5).
+
+Verification of the published bundle:
+
+| check | result |
+|---|---|
+| Published district scores vs `docs/diagnostics/heat_risk_pilot/district_scores.csv` (`ruler == cdf`, `composite_absolute_threshold`) | max abs diff **0.0** over 4,704 rows |
+| Districts / blocks published | 784 / 7,137, **zero nulls** across all 6 published slices |
+| Score dtype in the published master | **float64** (CHG-0385a; was float32) |
+| Jensen guard, area-weighted block rollup vs district's own score | max **4.76**, mean 0.23, none above 10 |
+| Ladakh canary (20 blocks, SSP5-8.5 2040-2060) | span **1.79** points |
+| Delhi canary (12 blocks) | span **2.56** points |
+| `parity_report.json` issue count | **0** |
+| Roster reconciliation at fit | clean — no district missing a master, no master row off-roster |
+
+The State headline is now nationally comparable: at SSP5-8.5 2040-2060 the area-weighted State means
+run Telangana 83.4 / Gujarat 76.6 / Rajasthan 76.1 at the top and Ladakh 0.9 / Sikkim 1.6 /
+Himachal 6.9 at the bottom. Under per-state min-max the same file made West Bengal rank first.
+
+Note the published grid is **6 slices, not 7**: the production composite path has never emitted
+`historical/1990-2010` for this bundle (`SUPPORTED_SCENARIOS` carries no `historical`). The ruler is
+still fitted over all 7 — the baseline slice is in the pool, it is simply not published. That is
+pre-existing behaviour, unchanged here, and it is why P-03's "the baseline map will look benign"
+cannot yet be seen in the bundle at all.
+
+---
+
 ## Part E — Open
 
 | ref | item | why it matters |
@@ -638,9 +670,9 @@ must carry `data_snapshot_hash` so a mismatch is loud rather than silent.
 | P-14 | `75` has changed meaning without the widget changing. Needs UI copy, not a docs change. | Undecided. |
 | P-03 | The pool is 86% future-weighted; the absolute-half baseline median is 38.8 against 78.8 at SSP5-8.5 2060-2080. The baseline map will look benign. | Presentation treatment undecided. |
 | — | District view: inspection state within State view, or a level of its own. | **Resolved 2026-09-09** — inspection state. Workflow doc amended (CHG-0379). |
-| P-04 | Freeze the 7-slice grid with its own version; the validator must refuse off-grid slices. | Not done. |
+| P-04 | Freeze the 7-slice grid with its own version; the validator must refuse off-grid slices. | **Closed 2026-09-10** (CHG-0367c/d). The grid is written into `ruler.json`; `FrozenRulerSet.validate_slice` raises on an off-grid `(scenario, period)` before any row is scored. |
 | P-10 | Data still regenerating. Blocks D4. | Blocking. |
-| P-11 | A frozen CDF must carry the full 5,488-value support per metric, or accept the 21-knot grid's up-to-4.2-point error. | Not decided. |
+| P-11 | A frozen CDF must carry the full 5,488-value support per metric, or accept the 21-knot grid's up-to-4.2-point error. | **Closed 2026-09-10** — full support. The runtime ships only scores, so support size costs the vendor nothing; the committed artifact is 538 KB (`cdf_support.parquet`, 49,363 knots over 9 metrics). |
 | P-16 | Freezing bakes in the 1990–2010 vs 1981–2010 code-baseline gap and the `hwa_heatwave_amplitude` hybrid. | Known, accepted for now. |
 | — | `admin_roster_version` has not been assigned. Counts alone are not a version. | Blocks release. |
 | — | The 12 non-Heat-Risk bundles are unmeasured. Sector bundles need a second ruler for the change lens. | Out of pilot scope. |
@@ -652,6 +684,8 @@ must carry `data_snapshot_hash` so a mismatch is loud rather than silent.
 | tool | produces |
 |---|---|
 | `tools/diagnostics/heat_risk_national_ruler_pilot.py` | the national run, the frozen support, all evidence tables |
+| `tools/pipeline/fit_frozen_ruler.py` | the **published** frozen ruler artifact (`config/frozen_rulers/composite_heat_risk/cdf_v1/`) and `colour_scale.json` |
+| `india_resilience_tool/analysis/frozen_rulers.py` | the production ruler core: exact mid-rank fit, apply/clamp, save/load |
 | `tools/diagnostics/build_heat_risk_frozen_map.py` | national district map, frozen settings |
 | `tools/diagnostics/build_resolution_comparison.py` | district-fill vs block-fill, UP / Kerala / Goa |
 | `tools/diagnostics/build_state_weighting_comparison.py` | area vs population State means |

@@ -19,6 +19,7 @@ from india_resilience_tool.data.optimized_bundle import (
 )
 from tools.diagnostics.list_optimized_yearly_metrics import list_metrics as list_optimized_yearly_metrics
 from tools.optimized.build_processed_optimised import (
+    MANIFEST_ARTIFACT_VERSION,
     YEARLY_PARALLEL_CHUNK_SIZE,
     BuildPlan,
     BuildProgress,
@@ -235,7 +236,7 @@ def test_optimized_context_copies_population_overlay_artifacts_and_manifest_vers
         "population/overlay/population_exposure_2025_overlay_meta.json",
         data_dir=tmp_path,
     ).read_text(encoding="utf-8") == '{"artifact": true}'
-    assert _read_manifest(tmp_path / "processed_optimised")["artifact_version"] == 3
+    assert _read_manifest(tmp_path / "processed_optimised")["artifact_version"] == MANIFEST_ARTIFACT_VERSION
 
 
 def test_optimized_context_copies_built_up_overlay_artifacts(tmp_path: Path) -> None:
@@ -981,7 +982,7 @@ def test_build_processed_optimised_overwrite_preserves_prior_level_outputs_and_r
 
     manifest = _read_manifest(tmp_path / "processed_optimised")
     summaries = {entry["slug"]: entry for entry in manifest["summaries"]}
-    assert manifest["artifact_version"] == 3
+    assert manifest["artifact_version"] == MANIFEST_ARTIFACT_VERSION
     assert manifest["summary_semantics"] == "bundle_inventory"
     assert {"txx_annual_max", "tas_annual_mean"}.issubset(set(summaries))
     assert summaries["tas_annual_mean"]["has_masters"] is True

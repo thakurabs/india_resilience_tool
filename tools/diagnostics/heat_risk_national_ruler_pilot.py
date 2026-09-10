@@ -90,7 +90,7 @@ import argparse
 import itertools
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -98,6 +98,15 @@ import numpy as np
 import pandas as pd
 
 from india_resilience_tool.analysis.bundle_scores import BundleMetricSpec
+from india_resilience_tool.analysis.frozen_rulers import (
+    MetricRuler,
+    _collapse_duplicate_knots,
+    build_cdf_ruler,
+    exact_midrank_cdf,
+    finite_mask_frame as _finite_mask_frame,
+    pool_stats as _pool_stats,
+    weighted_row_score as _weighted_row_score,
+)
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.compute.composite_metrics import (
     _bundle_metric_specs,
@@ -105,6 +114,7 @@ from india_resilience_tool.compute.composite_metrics import (
     _load_component_master,
     _required_id_columns,
 )
+from india_resilience_tool.config.bundle_weights import get_bundle_baseline_referenced_slugs
 from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
 from india_resilience_tool.config.paths import get_paths_config, resolve_processed_root
 
@@ -130,15 +140,10 @@ SLICES: tuple[tuple[str, str], ...] = (
 #: Heat Risk metrics whose value is defined *relative to the district's own
 #: baseline distribution* (ETCCDI percentile and percentile-spell indices). The
 #: complement is scored against absolute physical thresholds or absolute levels.
-#: Verified against config/bundle_weights.py: 0.367 vs 0.633 of bundle weight.
+#: Read from config (``is_baseline_referenced``) rather than restated here, so
+#: the pilot and the published composite cannot drift apart (CHG-0367b).
 BASELINE_REFERENCED_SLUGS: frozenset[str] = frozenset(
-    {
-        "tn90p_warm_nights_pct",
-        "tx90p_hot_days_pct",
-        "wsdi_warm_spell_days",
-        "hwfi_tmean_90p",
-        "hwfi_events_tmean_90p",
-    }
+    get_bundle_baseline_referenced_slugs(BUNDLE_DOMAIN)
 )
 
 #: The 21-point quantile grid. No longer the ``cdf`` ruler itself — it is fitted
@@ -193,93 +198,11 @@ DISAGREEMENT_THRESHOLDS: tuple[float, ...] = (10.0, 20.0)
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class MetricRuler:
-    """One frozen national ruler for a single metric, on a 0-100 higher-worse scale."""
-
-    metric_slug: str
-    kind: str  # "linear" | "cdf"
-    higher_is_worse: bool
-    knot_values: np.ndarray  # strictly increasing
-    knot_scores: np.ndarray  # 0..100, same length as knot_values
-    pooled_min: float
-    pooled_max: float
-    pooled_n: int
-    duplicate_knots: int
-    modal_value: float
-    modal_mass: float
-    #: Observation count behind each knot. Only the exact ``cdf`` ruler has one.
-    knot_counts: Optional[np.ndarray] = None
-    #: Max/mean |score| deviation of the 21-knot grid from this exact ruler,
-    #: evaluated on the pooled sample. NaN for ``linear`` (CHG-0353).
-    approx_max_score_error: float = float("nan")
-    approx_mean_score_error: float = float("nan")
-
-    def apply(self, values: pd.Series) -> pd.Series:
-        """Score a value series against this ruler, clamping outside the knot range."""
-        numeric = pd.to_numeric(values, errors="coerce")
-        out = pd.Series(np.nan, index=numeric.index, dtype=float)
-        finite_mask = np.isfinite(numeric.to_numpy(dtype=float, na_value=np.nan))
-        if not finite_mask.any():
-            return out
-        finite = numeric.to_numpy(dtype=float, na_value=np.nan)[finite_mask]
-        if self.knot_values.size == 1:
-            scored = np.full(finite.shape, 50.0)
-        else:
-            scored = np.interp(finite, self.knot_values, self.knot_scores)
-        if not self.higher_is_worse:
-            scored = 100.0 - scored
-        out.iloc[np.flatnonzero(finite_mask)] = np.clip(scored, 0.0, 100.0)
-        return out
-
-    def clamped_mask(self, values: pd.Series) -> pd.Series:
-        """True where a finite value falls outside the ruler's knot range."""
-        numeric = pd.to_numeric(values, errors="coerce")
-        arr = numeric.to_numpy(dtype=float, na_value=np.nan)
-        finite = np.isfinite(arr)
-        low = self.knot_values[0]
-        high = self.knot_values[-1]
-        return pd.Series(finite & ((arr < low) | (arr > high)), index=numeric.index)
-
-
-def _collapse_duplicate_knots(
-    values: np.ndarray, scores: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, int]:
-    """Collapse tied knot values to a single strictly increasing knot at mid-rank score.
-
-    Zero-inflated metrics (day counts, spell days) produce several identical
-    quantile knots. Interpolating over a zero-width segment is undefined, so ties
-    are merged and given the mean of the tied scores, i.e. the mid-rank score for
-    that tied block (pitfall P-05).
-    """
-    frame = pd.DataFrame({"value": values, "score": scores})
-    grouped = frame.groupby("value", as_index=False, sort=True)["score"].mean()
-    duplicates = int(len(frame) - len(grouped))
-    return (
-        grouped["value"].to_numpy(dtype=float),
-        grouped["score"].to_numpy(dtype=float),
-        duplicates,
-    )
-
-
-def _exact_midrank_cdf(pool: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Exact empirical mid-rank CDF of a pooled sample (CHG-0353, pitfall P-05).
-
-    A value observed ``c`` times with ``b`` strictly smaller observations scores
-    ``100 * (b + c / 2) / n``. This is the exact mid-rank of the tied block; a
-    fixed quantile grid reproduces it only when tie boundaries happen to fall on
-    grid points, which is precisely what P-05 warns about.
-
-    Note the range is open: the lowest score is ``100 * (c / 2) / n > 0`` and the
-    highest is below 100, so no district is scored a hard 0 or 100 by rank alone.
-
-    Returns ``(distinct_values, midrank_scores, tie_counts)``.
-    """
-    values, counts = np.unique(pool, return_counts=True)
-    n = float(pool.size)
-    below = np.concatenate(([0.0], np.cumsum(counts, dtype=float)[:-1]))
-    scores = 100.0 * (below + counts / 2.0) / n
-    return values.astype(float), scores.astype(float), counts.astype(np.int64)
+#: The ruler core -- ``MetricRuler``, the exact mid-rank fit, and the weighted
+#: row score -- now lives in ``india_resilience_tool.analysis.frozen_rulers`` and
+#: is imported above (CHG-0367a). Only the pieces this pilot needs and production
+#: does not remain here: the ``linear`` comparison ruler, whose question has been
+#: decided, and the 21-knot grid error that measures it (P-05).
 
 
 def _grid_approximation_error(
@@ -306,14 +229,6 @@ def _grid_approximation_error(
     return (float(deviation.max()), float(deviation.mean()))
 
 
-def _pool_stats(pool: np.ndarray) -> tuple[float, float]:
-    """Return (modal_value, modal_mass) for a pooled sample."""
-    if pool.size == 0:
-        return (float("nan"), float("nan"))
-    counts = pd.Series(pool).value_counts()
-    return (float(counts.index[0]), float(counts.iloc[0]) / float(pool.size))
-
-
 def build_ruler(
     metric_slug: str,
     pool: np.ndarray,
@@ -321,37 +236,42 @@ def build_ruler(
     kind: str,
     higher_is_worse: bool,
 ) -> Optional[MetricRuler]:
-    """Fit one frozen national ruler from a pooled full-span sample."""
+    """Fit one candidate national ruler from a pooled full-span sample.
+
+    ``cdf`` delegates to the production fit (``analysis.frozen_rulers``) so the
+    pilot and the published pipeline cannot drift, and adds the 21-knot grid
+    error, which is a pilot measurement only. ``linear`` is the pilot's
+    comparison ruler and exists nowhere else.
+    """
+    pool = np.asarray(pool, dtype=float)
     pool = pool[np.isfinite(pool)]
     if pool.size == 0:
         return None
-    modal_value, modal_mass = _pool_stats(pool)
-    pooled_min = float(pool.min())
-    pooled_max = float(pool.max())
 
-    knot_counts: Optional[np.ndarray] = None
-    approx_max = float("nan")
-    approx_mean = float("nan")
-
-    if kind == "linear":
-        low = float(np.quantile(pool, LINEAR_LOW_Q))
-        high = float(np.quantile(pool, LINEAR_HIGH_Q))
-        if not np.isfinite(low) or not np.isfinite(high) or high <= low:
-            knot_values = np.array([pooled_min], dtype=float)
-            knot_scores = np.array([50.0], dtype=float)
-            duplicates = 0
-        else:
-            knot_values = np.array([low, high], dtype=float)
-            knot_scores = np.array([0.0, 100.0], dtype=float)
-            duplicates = 0
-    elif kind == "cdf":
-        knot_values, knot_scores, knot_counts = _exact_midrank_cdf(pool)
-        approx_max, approx_mean = _grid_approximation_error(pool, knot_values, knot_scores)
-        # Every observation beyond the first in each tied block: the tie mass the
-        # 21-knot grid used to approximate away (P-05).
-        duplicates = int(pool.size - knot_values.size)
-    else:
+    if kind == "cdf":
+        ruler = build_cdf_ruler(metric_slug, pool, higher_is_worse=higher_is_worse)
+        if ruler is None:
+            return None
+        approx_max, approx_mean = _grid_approximation_error(
+            pool, ruler.knot_values, ruler.knot_scores
+        )
+        return replace(
+            ruler,
+            approx_max_score_error=approx_max,
+            approx_mean_score_error=approx_mean,
+        )
+    if kind != "linear":
         raise ValueError(f"Unknown ruler kind: {kind!r}")
+
+    modal_value, modal_mass = _pool_stats(pool)
+    low = float(np.quantile(pool, LINEAR_LOW_Q))
+    high = float(np.quantile(pool, LINEAR_HIGH_Q))
+    if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+        knot_values = np.array([float(pool.min())], dtype=float)
+        knot_scores = np.array([50.0], dtype=float)
+    else:
+        knot_values = np.array([low, high], dtype=float)
+        knot_scores = np.array([0.0, 100.0], dtype=float)
 
     return MetricRuler(
         metric_slug=metric_slug,
@@ -359,15 +279,12 @@ def build_ruler(
         higher_is_worse=higher_is_worse,
         knot_values=knot_values,
         knot_scores=knot_scores,
-        pooled_min=pooled_min,
-        pooled_max=pooled_max,
+        pooled_min=float(pool.min()),
+        pooled_max=float(pool.max()),
         pooled_n=int(pool.size),
-        duplicate_knots=duplicates,
+        duplicate_knots=0,
         modal_value=modal_value,
         modal_mass=modal_mass,
-        knot_counts=knot_counts,
-        approx_max_score_error=approx_max,
-        approx_mean_score_error=approx_mean,
     )
 
 
@@ -579,49 +496,6 @@ def load_national_long_frame(
 # ---------------------------------------------------------------------------
 
 
-def _finite_mask_frame(frame: pd.DataFrame, columns: Sequence[str]) -> pd.DataFrame:
-    """Boolean frame: True where a column holds a finite value.
-
-    `MetricRuler.apply` scores only finite values, so every count of "available"
-    data — coverage report included — must use this mask rather than `.notna()`,
-    which admits +/-inf and would report coverage a district never receives
-    (CHG-0351).
-    """
-    present = [column for column in columns if column in frame.columns]
-    numeric = frame.loc[:, present].apply(pd.to_numeric, errors="coerce")
-    return pd.DataFrame(
-        np.isfinite(numeric.to_numpy(dtype=float, na_value=np.nan)),
-        index=frame.index,
-        columns=present,
-    )
-
-
-def _weighted_row_score(
-    score_frame: pd.DataFrame,
-    weights: pd.Series,
-    *,
-    total_weight: Optional[float] = None,
-) -> tuple[pd.Series, pd.Series]:
-    """Weighted mean over available columns, renormalized per row.
-
-    Returns (score, available_weight_fraction). Mirrors
-    `analysis/bundle_scores.compute_bundle_score_frame` so the pilot's composite
-    is comparable to the production one apart from the normalization step.
-
-    `total_weight` is the coverage **denominator** and must be the total
-    *configured* bundle weight. Defaulting it to `weights.sum()` would silently
-    drop a metric that is absent from the whole pool out of both numerator and
-    denominator, letting such rows report full coverage against a smaller
-    universe than the gate claims (CHG-0350).
-    """
-    denominator = float(weights.sum()) if total_weight is None else float(total_weight)
-    available = _finite_mask_frame(score_frame, list(score_frame.columns)).mul(
-        weights, axis=1
-    ).sum(axis=1)
-    weighted = score_frame.mul(weights, axis=1).sum(axis=1, skipna=True)
-    score = weighted.div(available.where(available > 0.0))
-    coverage = available / denominator if denominator > 0 else available * np.nan
-    return score, coverage
 
 
 def score_national_frame(

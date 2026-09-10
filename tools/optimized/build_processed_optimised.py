@@ -149,7 +149,12 @@ LEVEL_SELECTIONS = {
 }
 
 YEARLY_PARALLEL_CHUNK_SIZE = 64
-MANIFEST_ARTIFACT_VERSION = 3
+# 4: composite_heat_risk moved from per-state min-max to a frozen national CDF
+# ruler, and its published composite narrowed from 14 metrics to the 9
+# absolute-threshold ones. The score column name did not change, so the version
+# bump and the ``frozen_rulers`` block below are the only signal a consumer has
+# that the number means something different (CHG-0367e).
+MANIFEST_ARTIFACT_VERSION = 4
 PARITY_REPORT_FILENAME = "parity_report.json"
 T = TypeVar("T")
 
@@ -447,10 +452,23 @@ def _write_parquet(df: pd.DataFrame, path: Path) -> None:
     df.to_parquet(path, index=False, compression="zstd")
 
 
-def _safe_numeric_downcast(df: pd.DataFrame) -> pd.DataFrame:
+def _safe_numeric_downcast(
+    df: pd.DataFrame, *, exclude_columns: Optional[Iterable[str]] = None
+) -> pd.DataFrame:
+    """Shrink numeric columns for the runtime bundle.
+
+    ``exclude_columns`` keeps named float columns at full float64. Composite score
+    columns use it: the vendor contract stores full precision and rounds only at
+    display, and the ranking contract's exact-equality tie rule is not safe at
+    float32's ~7 significant digits (CHG-0385a). Integer downcasting is unaffected.
+    """
+    skip = {str(c) for c in (exclude_columns or ())}
     out = df.copy()
     for col in out.columns:
         if pd.api.types.is_float_dtype(out[col]):
+            if str(col) in skip:
+                out[col] = out[col].astype("float64")
+                continue
             out[col] = pd.to_numeric(out[col], downcast="float")
         elif pd.api.types.is_integer_dtype(out[col]):
             out[col] = pd.to_numeric(out[col], downcast="integer")
@@ -659,7 +677,14 @@ def _select_master_columns(
     out = df[keep_cols].copy()
     if level in {"district", "block"}:
         out = _admin_keys(out, level=level)
-    return _safe_numeric_downcast(out)
+    # A composite score is the published number the vendor renders and ranks on;
+    # it keeps float64 (CHG-0385a).
+    score_cols = (
+        _metric_value_cols(out, supported_stats=supported_stats)
+        if str(slug).startswith("composite_")
+        else ()
+    )
+    return _safe_numeric_downcast(out, exclude_columns=score_cols)
 
 
 def _read_legacy_master(path: Path) -> pd.DataFrame:
@@ -1305,6 +1330,42 @@ def _bundle_inventory_summaries(*, data_dir: Path) -> list[dict[str, object]]:
     return summaries
 
 
+def _frozen_ruler_manifest_payload() -> dict[str, dict[str, object]]:
+    """Per composite slug, which frozen ruler its published scores were produced with.
+
+    Without this a consumer cannot tell a correctly-rendered new score from a
+    wrongly-rendered old one: the column name is unchanged while its meaning is
+    not. ``ruler_sha256`` dates the transfer function and ``data_snapshot_hash``
+    dates the pool it was fitted over.
+    """
+    from india_resilience_tool.analysis.frozen_rulers import frozen_ruler_dir, load_ruler_set
+    from india_resilience_tool.compute.composite_metrics import FROZEN_NATIONAL_CDF
+    from india_resilience_tool.config.composite_metrics import VISIBLE_GLANCE_COMPOSITES
+
+    payload: dict[str, dict[str, object]] = {}
+    for spec in VISIBLE_GLANCE_COMPOSITES:
+        if getattr(spec, "normalization", "") != FROZEN_NATIONAL_CDF:
+            continue
+        version = getattr(spec, "frozen_ruler_version", "")
+        try:
+            ruler_set = load_ruler_set(frozen_ruler_dir(spec.composite_slug, version))
+        except (FileNotFoundError, ValueError) as exc:  # pragma: no cover - build guard
+            payload[spec.composite_slug] = {"error": str(exc), "frozen_ruler_version": version}
+            continue
+        payload[spec.composite_slug] = {
+            "ruler_id": ruler_set.ruler_id,
+            "ruler_sha256": ruler_set.ruler_sha256,
+            "data_snapshot_hash": ruler_set.data_snapshot_hash,
+            "fitted_utc": ruler_set.fitted_utc,
+            "colour_scale_id": ruler_set.meta.get("colour_scale_id", ""),
+            "headline_metric_count": len(ruler_set.rulers),
+            "coverage_gate": ruler_set.coverage_gate,
+            "configured_weight": ruler_set.configured_weight,
+            "slices": [list(pair) for pair in ruler_set.slices],
+        }
+    return payload
+
+
 def _write_manifest(
     *,
     data_dir: Path,
@@ -1331,6 +1392,7 @@ def _write_manifest(
         },
         "summaries": _bundle_inventory_summaries(data_dir=data_dir),
         "glance_view_model": glance_manifest_payload(data_dir=data_dir),
+        "frozen_rulers": _frozen_ruler_manifest_payload(),
     }
     path = bundle_manifest_path(data_dir=data_dir)
 

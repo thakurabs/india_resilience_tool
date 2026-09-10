@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from india_resilience_tool.config.bundle_weights import get_bundle_weights
+from india_resilience_tool.config.bundle_weights import (
+    get_bundle_headline_weights,
+    get_bundle_weights,
+)
 from india_resilience_tool.config.dashboard_bundles import (
     THEMATIC_DASHBOARD_BUNDLES,
     composite_slug_for_bundle,
@@ -29,6 +32,13 @@ class CompositeMetricSpec:
     supported_spatial_families: tuple[str, ...] = ("admin",)
     supported_levels: tuple[str, ...] = ("district", "block")
     normalization: str = "per_period"
+    #: Component slugs carrying the published headline composite. Equal to
+    #: ``component_metric_slugs`` for every mode except ``frozen_national_cdf``,
+    #: where the baseline-referenced half is retained as a lens and excluded from
+    #: the published score (CHG-0367b).
+    headline_metric_slugs: tuple[str, ...] = ()
+    #: Version directory of the frozen ruler, e.g. ``"cdf_v1"``.
+    frozen_ruler_version: str = ""
     anchor_scenario: str = "historical"
     anchor_period: str = "1990-2010"
     min_anchored_components: int = 4
@@ -46,6 +56,10 @@ VISIBLE_GLANCE_COMPOSITES: tuple[CompositeMetricSpec, ...] = tuple(
         ),
         supported_levels=spec.supported_levels,
         normalization=spec.composite_normalization,
+        headline_metric_slugs=tuple(
+            entry.metric_slug for entry in get_bundle_headline_weights(spec.canonical_bundle)
+        ),
+        frozen_ruler_version=spec.frozen_ruler_version,
     )
     for spec in THEMATIC_DASHBOARD_BUNDLES
 )
