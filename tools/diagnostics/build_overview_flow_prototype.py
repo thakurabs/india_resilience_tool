@@ -69,7 +69,13 @@ from tools.diagnostics.heat_risk_national_ruler_pilot import (
 )
 
 DEFAULT_SCORES = Path("docs/diagnostics/heat_risk_pilot/district_scores.csv")
+DEFAULT_BLOCK_SCORES = Path("docs/diagnostics/heat_risk_pilot/telangana_block_scores.csv")
 DEFAULT_OUT = Path("docs/diagnostics/heat_risk_pilot/overview_flow_prototype.html")
+
+#: The one State/UT whose blocks are scored and whose drill-down is live. Every
+#: other State/UT hovers normally and is deliberately not selectable: the
+#: prototype demonstrates the workflow, and one worked State/UT demonstrates it.
+LIVE_STATE = "Telangana"
 
 #: Douglas-Peucker tolerance in degrees, and SVG canvas width in user units.
 #: Finer than the national-only viewer, because the State view zooms in.
@@ -193,6 +199,58 @@ def load_frozen_scores(path: Path) -> pd.DataFrame:
     return frame.loc[:, keep + metric_columns]
 
 
+def load_block_scores(path: Path) -> pd.DataFrame:
+    """Frozen-ruler block rows for the live State/UT, over the six public slices."""
+    frame = pd.read_csv(path)
+    required = ("ruler", "block_key", "state", "district", "block", "scenario", "period", FROZEN_FIELD)
+    for column in required:
+        if column not in frame.columns:
+            raise ValueError(f"{path} has no '{column}' column; not a block score table")
+    frame = frame.loc[frame["ruler"] == FROZEN_RULER].copy()
+    wanted = frame.set_index(["scenario", "period"]).index.isin(PUBLIC_SLICES)
+    frame = frame.loc[wanted].copy()
+    if frame.empty:
+        raise ValueError(f"{path} carries no frozen-ruler rows over the public slices")
+    frame[FROZEN_FIELD] = pd.to_numeric(frame[FROZEN_FIELD], errors="coerce")
+
+    metric_columns = [
+        f"score__{slug}" for slug in METRIC_LABELS if f"score__{slug}" in frame.columns
+    ]
+    for column in metric_columns:
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    keep = ["block_key", "state", "district", "block", "scenario", "period", FROZEN_FIELD]
+    return frame.loc[:, keep + metric_columns]
+
+
+def build_block_tables(blocks: pd.DataFrame) -> tuple[dict, dict]:
+    """Per-slice block values and per-block driver orderings."""
+    by_slice: dict[str, dict[str, float]] = {}
+    drivers_by_slice: dict[str, dict[str, list[str]]] = {}
+    metric_columns = [
+        f"score__{slug}" for slug in METRIC_LABELS if f"score__{slug}" in blocks.columns
+    ]
+    for (scenario, period), block in blocks.groupby(["scenario", "period"], sort=False):
+        slice_id = f"{scenario}|{period}"
+        valid = block.loc[block[FROZEN_FIELD].notna()]
+        by_slice[slice_id] = {
+            str(row.block_key): round(float(getattr(row, FROZEN_FIELD)), 4)
+            for row in valid.itertuples(index=False)
+        }
+        drivers: dict[str, list[str]] = {}
+        for row in valid.itertuples(index=False):
+            ordered = sorted(
+                (
+                    (float(getattr(row, column)), column.removeprefix("score__"))
+                    for column in metric_columns
+                    if pd.notna(getattr(row, column))
+                ),
+                key=lambda pair: -pair[0],
+            )
+            drivers[str(row.block_key)] = [slug for _, slug in ordered[:3]]
+        drivers_by_slice[slice_id] = drivers
+    return by_slice, drivers_by_slice
+
+
 def _competition_ranks(values: Sequence[float]) -> list[int]:
     """Descending competition ranks over full-precision values.
 
@@ -305,7 +363,7 @@ def build_shapes(
     *,
     simplify: float,
     precision: int,
-) -> tuple[list[dict], dict[str, str], float]:
+) -> tuple[list[dict], dict[str, str], list[dict], float]:
     """District paths with bounding boxes, State/UT outline paths, canvas height.
 
     Every layer is projected against the same national bounds, so the State view
@@ -351,7 +409,58 @@ def build_shapes(
         if path:
             state_paths[str(state)] = path
 
-    return districts, state_paths, float(height)
+    blocks = _build_block_shapes(
+        data_dir, bounds=bounds, simplify=simplify, precision=precision
+    )
+    return districts, state_paths, blocks, float(height)
+
+
+def _build_block_shapes(
+    data_dir: Path,
+    *,
+    bounds: tuple[float, float, float, float],
+    simplify: float,
+    precision: int,
+) -> list[dict]:
+    """Block paths for the live State/UT, projected against the national bounds.
+
+    Sharing the national bounds is what lets one SVG serve all three views: the
+    block layer sits in the same coordinate space as the district layer, so
+    zooming is a viewBox change and the two layers stay registered.
+    """
+    import geopandas as gpd
+
+    root = Path(data_dir) / "processed_optimised" / "geometry" / "admin" / "block"
+    path = root / f"state={LIVE_STATE}.geojson"
+    if not path.exists():
+        raise FileNotFoundError(f"No block geometry for {LIVE_STATE} at {path}")
+
+    gdf = gpd.read_file(path)
+    if gdf.crs is not None and gdf.crs.to_epsg() != 4326:
+        gdf = gdf.to_crs(4326)
+    if simplify > 0:
+        gdf["geometry"] = gdf.geometry.simplify(simplify, preserve_topology=True)
+
+    out: list[dict] = []
+    for row in gdf.itertuples(index=False):
+        svg_path = _geom_path(row.geometry, bounds, precision)
+        if not svg_path:
+            continue
+        block_key = str(getattr(row, "block_key", ""))
+        # The block geometry carries a district *name*, not a key. The parent key
+        # is the first two segments of the block key, which is the canonical
+        # district key by construction -- safer than re-deriving it from a name.
+        parent = "|".join(block_key.split("|")[:2])
+        out.append(
+            {
+                "k": block_key,
+                "n": str(getattr(row, "block_name", "")),
+                "dk": parent,
+                "s": str(getattr(row, "state_name", "")),
+                "d": svg_path,
+            }
+        )
+    return out
 
 
 def district_areas(data_dir: Path) -> dict[str, float]:
@@ -438,12 +547,17 @@ PAGE_TEMPLATE = r"""<!doctype html>
   /* ---- map ---- */
   .mapcard { padding: 12px; }
   .mapwrap { position: relative; background: #fbfcfd; border-radius: 8px; overflow: hidden; }
-  svg.map { display: block; width: 100%; height: auto; }
+  /* The map box never moves and never resizes: one fixed height for every
+     view, so drilling in changes the map's content and not the page layout. */
+  svg.map { display: block; width: 100%; height: 620px; }
+  @media (max-width: 1080px) { svg.map { height: 460px; } }
   svg.map path { vector-effect: non-scaling-stroke; }
   .dist { stroke: var(--fine); stroke-opacity: .45; stroke-width: .45px; cursor: pointer; }
   .dist.out { fill: #eceff2 !important; stroke-opacity: .25; cursor: default; pointer-events: none; }
-  .dist.muted { opacity: .28; }
-  .dist.hl { stroke: #2b3947; stroke-opacity: .9; stroke-width: 1.1px; }
+  .dist.muted, .blk.muted { opacity: .26; }
+  .dist.hl, .blk.hl { stroke: #2b3947; stroke-opacity: .9; stroke-width: 1.1px; }
+  .dist.locked { cursor: not-allowed; }
+  .blk { stroke: var(--fine); stroke-opacity: .45; stroke-width: .4px; cursor: pointer; }
   .stroke-coarse { fill: none; stroke: var(--coarse); stroke-opacity: .95; stroke-width: 1.9px;
                    pointer-events: none; }
   .sel-stroke { fill: none; stroke: var(--accent); stroke-opacity: 1; stroke-width: 2.6px;
@@ -466,19 +580,28 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .swatch { display: inline-block; width: 12px; height: 12px; border: 1px solid #c3c9cf;
             border-radius: 2px; vertical-align: -2px; margin-right: 5px; }
 
-  /* ---- headline strip ---- */
-  .headline { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px;
-              padding: 13px 18px; margin-bottom: 16px; display: flex; align-items: center;
-              gap: 18px; flex-wrap: wrap; }
+  /* ---- headline ---- */
+  .headline .hl-top { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
   .headline .hl-name { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+  .headline .hl-parent { font-size: 12px; color: var(--ink-3); }
   .headline .bigscore { font-size: 32px; font-weight: 680; letter-spacing: -0.02em;
-                        line-height: 1; margin-left: 2px; }
-  .headline .hl-meta { font-size: 12.5px; color: var(--ink-2); }
+                        line-height: 1; margin-left: auto; }
+  .headline .hl-meta { font-size: 12.5px; color: var(--ink-2); margin: 7px 0 0; }
   .headline .hl-meta b { font-weight: 650; }
-  .headline .hl-scope { display: block; font-size: 11.5px; color: var(--ink-3); }
-  .headline .hl-drv { font-size: 11.5px; color: var(--ink-3); }
-  .headline .hl-drv b { color: var(--ink-2); font-weight: 600; }
-  .headline .spacer { margin-left: auto; }
+  .headline .hl-scope { font-size: 11.5px; color: var(--ink-3); margin: 3px 0 0; }
+
+  /* ---- driver list: each item routes into Detailed Analysis ---- */
+  .drv-head { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+              color: var(--ink-3); font-weight: 650; margin: 13px 0 5px; }
+  ul.drv { list-style: none; margin: 0; padding: 0; }
+  ul.drv li { margin: 0 0 4px; }
+  ul.drv button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+                  font: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
+                  background: #fff; border: 1px solid var(--rule); border-radius: 7px;
+                  padding: 7px 11px; transition: border-color .12s, background .12s; }
+  ul.drv button:hover { border-color: var(--accent); background: var(--accent-soft); }
+  ul.drv button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  ul.drv .drv-go { margin-left: auto; color: var(--accent); font-size: 15px; line-height: 1; }
   .place { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin: 2px 0; }
   .place small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-3);
                  letter-spacing: 0; }
@@ -555,6 +678,8 @@ PAGE_TEMPLATE = r"""<!doctype html>
   #tip b { display: block; font-size: 13px; margin-bottom: 3px; }
   #tip .t-row { color: #c3ced9; }
   #tip .t-row em { color: #fff; font-style: normal; font-weight: 600; }
+  #tip .t-go { color: #8fc4ff; margin-top: 4px; }
+  #tip .t-off { color: #9aa7b4; margin-top: 4px; font-style: italic; }
 
   .method { font-size: 12px; color: var(--ink-2); }
   .method h3 { font-size: 12px; margin: 12px 0 4px; text-transform: uppercase;
@@ -596,20 +721,18 @@ PAGE_TEMPLATE = r"""<!doctype html>
     <div>
       <p style="margin:0 0 6px"><b>Two departures from the target spec, both deliberate.</b></p>
       <p style="margin:0">
-      <b>1. The State view paints districts, not blocks.</b> The specification paints block
-      composite scores here. No block has ever been scored on the frozen ruler, so there are no
-      block values to paint and none have been invented. The State view therefore runs in the
-      spec's <code>District fill</code> mode. Drill-down, inspection, binning, filtering, the
-      breadcrumb and the Detailed Analysis handoff are unaffected.
-      <br><b>2. Detailed Analysis is a stub.</b> The action and the state it carries are real;
-      the destination only displays that state.
+      <b>1. Only Telangana opens below the national view.</b> Its 588 blocks are scored on the
+      frozen ruler and painted for real. Every other State/UT hovers normally — whole-state
+      highlight, State-level tooltip — but is not selectable, because no block outside Telangana
+      has been scored. One worked State/UT demonstrates the workflow.
+      <br><b>2. Detailed Analysis is a stub.</b> The action and the state it carries are real,
+      including which driver metric was selected; the destination only displays that state.
       </p>
     </div>
   </div>
 
   <div class="grid">
     <div>
-      <div class="headline" id="headline" hidden></div>
       <div class="card mapcard">
         <div class="maphead">
           <h2 id="map-title">National view</h2>
@@ -634,6 +757,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     </div>
 
     <div>
+      <div class="card headline" id="headline" hidden></div>
       <div class="card">
         <h2 id="hist-title">Distribution</h2>
         <p class="sub" id="hist-sub"></p>
@@ -676,9 +800,10 @@ PAGE_TEMPLATE = r"""<!doctype html>
     bundle: D.default_bundle,
     scenario: D.default_scenario,
     period: D.default_period,
-    view: "india",
+    view: "india",          /* "india" | "state" | "district" */
     state: null,
     district: null,
+    block: null,
     pinned: null,
     showAll: false,
     da: null
@@ -687,15 +812,22 @@ PAGE_TEMPLATE = r"""<!doctype html>
   var byKey = {};
   D.districts.forEach(function (d) { byKey[d.k] = d; });
   var statesOf = {};
-  D.districts.forEach(function (d) {
-    (statesOf[d.s] = statesOf[d.s] || []).push(d);
+  D.districts.forEach(function (d) { (statesOf[d.s] = statesOf[d.s] || []).push(d); });
+
+  var blockByKey = {};
+  var blocksOfDistrict = {};
+  D.blocks.forEach(function (b) {
+    blockByKey[b.k] = b;
+    (blocksOfDistrict[b.dk] = blocksOfDistrict[b.dk] || []).push(b);
   });
-  var STATE_NAMES = Object.keys(statesOf).sort();
 
   function sliceId() { return S.scenario + "|" + S.period; }
   function dScores() { return D.district_scores[sliceId()] || {}; }
   function sStats() { return D.state_stats[sliceId()] || {}; }
   function dDrivers() { return D.drivers[sliceId()] || {}; }
+  function bScores() { return D.block_scores[sliceId()] || {}; }
+  function bDrivers() { return D.block_drivers[sliceId()] || {}; }
+  function isLive(state) { return state === D.live_state; }
 
   function band(v) {
     for (var i = 0; i < BANDS.length; i++) if (v < BANDS[i][0]) return BANDS[i][1];
@@ -764,6 +896,10 @@ PAGE_TEMPLATE = r"""<!doctype html>
   }
 
   /* ---------- cohort the current view ranks and bins ---------- */
+  /* The units the current view ranks. The District view introduces no ranking of
+     its own -- blocks are painted but never ranked, because subdivision density
+     reflects State administration rather than geography -- so it keeps ranking
+     and binning its parent State/UT's districts. */
   function cohort() {
     return S.view === "india" ? rankedStates() : rankedDistricts(S.state);
   }
@@ -790,6 +926,31 @@ PAGE_TEMPLATE = r"""<!doctype html>
     });
     svg.appendChild(gd);
 
+    var gb = document.createElementNS(ns, "g");
+    gb.setAttribute("id", "g-block");
+    D.blocks.forEach(function (b) {
+      var p = document.createElementNS(ns, "path");
+      p.setAttribute("d", b.d);
+      p.setAttribute("class", "blk");
+      p.dataset.block = b.k;
+      gb.appendChild(p);
+      nodes["B:" + b.k] = p;
+    });
+    svg.appendChild(gb);
+
+    /* the live State/UT's district outlines, drawn as the coarse stroke once
+       blocks are the painted unit */
+    var gdo = document.createElementNS(ns, "g");
+    gdo.setAttribute("id", "g-distline");
+    (statesOf[D.live_state] || []).forEach(function (d) {
+      var p = document.createElementNS(ns, "path");
+      p.setAttribute("d", d.d);
+      p.setAttribute("class", "stroke-coarse");
+      p.dataset.outline = d.k;
+      gdo.appendChild(p);
+    });
+    svg.appendChild(gdo);
+
     var gs = document.createElementNS(ns, "g");
     gs.setAttribute("id", "g-state");
     Object.keys(D.state_paths).forEach(function (name) {
@@ -810,12 +971,17 @@ PAGE_TEMPLATE = r"""<!doctype html>
     gd.addEventListener("mousemove", onHover);
     gd.addEventListener("mouseleave", hideTip);
     gd.addEventListener("click", onMapClick);
+    gb.addEventListener("mousemove", onBlockHover);
+    gb.addEventListener("mouseleave", hideTip);
+    gb.addEventListener("click", onBlockClick);
     built = true;
   }
 
   function viewBox() {
     if (S.view === "india") return [0, 0, D.width, D.height];
-    var ds = statesOf[S.state] || [];
+    var ds = S.view === "district"
+      ? (byKey[S.district] ? [byKey[S.district]] : [])
+      : (statesOf[S.state] || []);
     var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     ds.forEach(function (d) {
       if (d.b[0] < x0) x0 = d.b[0]; if (d.b[1] < y0) y0 = d.b[1];
@@ -833,49 +999,78 @@ PAGE_TEMPLATE = r"""<!doctype html>
 
   function paintMap() {
     if (!built) buildMap();
-    var vb = viewBox();
-    svg.setAttribute("viewBox", vb.join(" "));
+    svg.setAttribute("viewBox", viewBox().join(" "));
 
-    var sc = dScores();
+    var national = S.view === "india";
+    var dsc = dScores(), bsc = bScores();
     var pin = S.pinned;
-    var inScope = S.view === "india" ? null : S.state;
 
-    /* which painted units the pinned bin emphasises */
-    var emph = null;
+    /* the pinned bin always emphasises the units this view RANKS, and those are
+       districts in every view except the national one */
+    var emphDistricts = null;
     if (pin !== null) {
-      emph = {};
-      if (S.view === "india") {
+      emphDistricts = {};
+      if (national) {
         var st = sStats();
         Object.keys(st).forEach(function (name) {
           if (binIndex(st[name].mean) === pin) {
-            (statesOf[name] || []).forEach(function (d) { emph[d.k] = 1; });
+            (statesOf[name] || []).forEach(function (d) { emphDistricts[d.k] = 1; });
           }
         });
       } else {
         rankedDistricts(S.state).forEach(function (r) {
-          if (binIndex(r.score) === pin) emph[r.key] = 1;
+          if (binIndex(r.score) === pin) emphDistricts[r.key] = 1;
         });
       }
     }
 
+    /* ---- district layer: painted nationally, plain backdrop once drilled ---- */
     D.districts.forEach(function (d) {
       var p = nodes[d.k];
-      var out = inScope !== null && d.s !== inScope;
-      p.classList.toggle("out", out);
-      p.setAttribute("fill", out ? "#eceff2" : colour(sc[d.k]));
-      p.classList.toggle("muted", !out && emph !== null && !emph[d.k]);
+      p.style.display = "";
+      if (national) {
+        p.setAttribute("fill", colour(dsc[d.k]));
+        p.classList.remove("out");
+        p.classList.toggle("locked", !isLive(d.s));
+        p.classList.toggle("muted", emphDistricts !== null && !emphDistricts[d.k]);
+      } else {
+        /* neighbours stay as a faint backdrop so the State reads in context */
+        p.setAttribute("fill", "#eceff2");
+        p.classList.add("out");
+        p.classList.remove("muted", "locked");
+      }
       p.classList.remove("hl");
     });
 
-    /* boundary grammar: coarse stroke = the unit the previous view painted */
-    var coarse = svg.querySelectorAll("#g-state path");
-    for (var i = 0; i < coarse.length; i++) {
-      var name = coarse[i].dataset.state;
-      coarse[i].style.display = (inScope === null || name === inScope) ? "" : "none";
+    /* ---- block layer: only once a State/UT is open ---- */
+    D.blocks.forEach(function (b) {
+      var p = nodes["B:" + b.k];
+      if (national) { p.style.display = "none"; return; }
+      p.style.display = "";
+      p.setAttribute("fill", colour(bsc[b.k]));
+      var parentEmph = emphDistricts === null || emphDistricts[b.dk];
+      var inDistrict = S.view !== "district" || b.dk === S.district;
+      p.classList.toggle("muted", !parentEmph || !inDistrict);
+      p.classList.remove("hl");
+    });
+
+    /* ---- boundary grammar: coarse = the unit the previous view painted ---- */
+    var stateLines = svg.querySelectorAll("#g-state path");
+    for (var i = 0; i < stateLines.length; i++) {
+      stateLines[i].style.display =
+        national ? "" : (stateLines[i].dataset.state === S.state ? "" : "none");
+    }
+    var distLines = svg.querySelectorAll("#g-distline path");
+    for (var j = 0; j < distLines.length; j++) {
+      distLines[j].style.display = national ? "none" : "";
     }
 
+    /* ---- selection stroke ---- */
     var selPath = document.getElementById("g-sel");
-    selPath.setAttribute("d", S.district && byKey[S.district] ? byKey[S.district].d : "");
+    var selKey = S.block ? ("B:" + S.block) : null;
+    if (selKey && blockByKey[S.block]) selPath.setAttribute("d", blockByKey[S.block].d);
+    else if (S.view === "district" && byKey[S.district]) selPath.setAttribute("d", byKey[S.district].d);
+    else selPath.setAttribute("d", "");
   }
 
   /* ---------- hover ---------- */
@@ -896,68 +1091,94 @@ PAGE_TEMPLATE = r"""<!doctype html>
 
   function onHover(ev) {
     var t = ev.target;
-    if (!t.dataset || !t.dataset.key) { hideTip(); return; }
+    if (!t.dataset || !t.dataset.key || S.view !== "india") { hideTip(); return; }
     var d = byKey[t.dataset.key];
     if (!d) { hideTip(); return; }
     for (var k in nodes) nodes[k].classList.remove("hl");
 
-    if (S.view === "india") {
-      /* the national tooltip is State-level only, though districts are painted */
-      (statesOf[d.s] || []).forEach(function (x) { nodes[x.k].classList.add("hl"); });
-      var st = sStats()[d.s];
-      if (!st) { showTip("<b>" + esc(d.s) + "</b><div class='t-row'>No valid data</div>", ev); return; }
-      var total = Object.keys(sStats()).length;
-      showTip(
-        "<b>" + esc(d.s) + "</b>" +
-        "<div class='t-row'>Area-weighted mean district score <em>" + fmt(st.mean) + "</em> · " +
-        esc(band(st.mean)) + "</div>" +
-        "<div class='t-row'>Rank <em>" + st.rank + "</em> of " + total + " State/UTs</div>" +
-        "<div class='t-row'>" + st.n_valid + " valid districts</div>", ev);
-    } else {
-      if (d.s !== S.state) { hideTip(); return; }
-      nodes[d.k].classList.add("hl");
-      var sc = dScores()[d.k];
-      var rows = rankedDistricts(S.state);
-      var me = null;
-      rows.forEach(function (r) { if (r.key === d.k) me = r; });
-      showTip(
-        "<b>" + esc(d.n) + "</b>" +
-        "<div class='t-row'>" + esc(d.s) + "</div>" +
-        (me
-          ? "<div class='t-row'>Score <em>" + fmt(sc) + "</em> · " + esc(band(sc)) + "</div>" +
-            "<div class='t-row'>Rank <em>" + me.rank + "</em> of " + rows.length +
-            " valid districts</div>"
-          : "<div class='t-row'>No valid data</div>"), ev);
-    }
+    /* the national tooltip is State-level only, though districts are painted */
+    (statesOf[d.s] || []).forEach(function (x) { nodes[x.k].classList.add("hl"); });
+    var st = sStats()[d.s];
+    if (!st) { showTip("<b>" + esc(d.s) + "</b><div class='t-row'>No valid data</div>", ev); return; }
+    var total = Object.keys(sStats()).length;
+    showTip(
+      "<b>" + esc(d.s) + "</b>" +
+      "<div class='t-row'>Area-weighted mean district score <em>" + fmt(st.mean) + "</em> · " +
+      esc(band(st.mean)) + "</div>" +
+      "<div class='t-row'>Rank <em>" + st.rank + "</em> of " + total + " State/UTs</div>" +
+      "<div class='t-row'>" + st.n_valid + " valid districts</div>" +
+      (isLive(d.s)
+        ? "<div class='t-row t-go'>Select to open the State view</div>"
+        : "<div class='t-row t-off'>Not selectable — only " + esc(D.live_state) +
+          " is scored below district level in this prototype</div>"), ev);
+  }
+
+  function onBlockHover(ev) {
+    var t = ev.target;
+    if (!t.dataset || !t.dataset.block || S.view === "india") { hideTip(); return; }
+    var b = blockByKey[t.dataset.block];
+    if (!b) { hideTip(); return; }
+    if (S.view === "district" && b.dk !== S.district) { hideTip(); return; }
+    for (var k in nodes) nodes[k].classList.remove("hl");
+    nodes["B:" + b.k].classList.add("hl");
+    var v = bScores()[b.k];
+    var parent = byKey[b.dk];
+    showTip(
+      "<b>" + esc(b.n) + "</b>" +
+      "<div class='t-row'>" + esc(parent ? parent.n : "") + " · " + esc(b.s) + "</div>" +
+      (v === undefined
+        ? "<div class='t-row'>No valid data</div>"
+        : "<div class='t-row'>Score <em>" + fmt(v) + "</em> · " + esc(band(v)) + "</div>" +
+          "<div class='t-row t-off'>Blocks are painted, never ranked</div>") +
+      "<div class='t-row t-go'>" +
+        (S.view === "district"
+          ? "Select to open Detailed Analysis"
+          : "Select its district to open the District view") + "</div>", ev);
   }
 
   function onMapClick(ev) {
     var t = ev.target;
-    if (!t.dataset || !t.dataset.key) return;
+    if (!t.dataset || !t.dataset.key || S.view !== "india") return;
     var d = byKey[t.dataset.key];
-    if (!d) return;
-    if (S.view === "india") { selectState(d.s); }
-    else if (d.s === S.state) { selectDistrict(d.k); }
+    if (!d || !isLive(d.s)) return;
+    selectState(d.s);
+  }
+
+  function onBlockClick(ev) {
+    var t = ev.target;
+    if (!t.dataset || !t.dataset.block || S.view === "india") return;
+    var b = blockByKey[t.dataset.block];
+    if (!b) return;
+    if (S.view === "state") { openDistrict(b.dk); return; }
+    if (b.dk !== S.district) return;
+    S.block = b.k;
+    S.da = { level: "Block", unit: b.n + ", " + (byKey[b.dk] ? byKey[b.dk].n : "") };
+    render();
   }
 
   /* ================= state transitions ================= */
   function selectState(name) {
-    S.view = "state"; S.state = name; S.district = null;
+    S.view = "state"; S.state = name;
+    S.district = null; S.block = null;
     S.pinned = null; S.showAll = false; S.da = null;
     render();
   }
   function goIndia() {
-    S.view = "india"; S.state = null; S.district = null;
+    S.view = "india"; S.state = null; S.district = null; S.block = null;
     S.pinned = null; S.showAll = false; S.da = null;
     render();
   }
-  function selectDistrict(key) {
+  function goState() {
+    S.view = "state"; S.district = null; S.block = null;
+    S.showAll = false; S.da = null;
+    render();
+  }
+  /* The third navigation level: a district opens its blocks. */
+  function openDistrict(key) {
     var d = byKey[key];
-    if (!d) return;
-    /* a block outside the selected district would reselect its parent district;
-       with no block layer, the district is the only inspection target here */
-    if (d.s !== S.state) { S.view = "state"; S.state = d.s; S.pinned = null; }
-    S.district = key; S.da = null;
+    if (!d || !isLive(d.s)) return;
+    S.view = "district"; S.state = d.s; S.district = key;
+    S.block = null; S.showAll = false; S.da = null;
     render();
   }
 
@@ -979,7 +1200,10 @@ PAGE_TEMPLATE = r"""<!doctype html>
     document.getElementById("hist-sub").textContent =
       S.view === "india"
         ? "Bins the units this view ranks — State/UTs — not the districts it paints."
-        : "Bins the districts this view ranks within " + S.state + ".";
+        : S.view === "state"
+          ? "Bins the districts this view ranks within " + S.state + ", not the blocks it paints."
+          : "Still the districts of " + S.state + ": the District view ranks nothing of its own, " +
+            "because blocks are never ranked.";
 
     var host = document.getElementById("hist");
     host.innerHTML = "";
@@ -1033,17 +1257,26 @@ PAGE_TEMPLATE = r"""<!doctype html>
     }
 
     /* the painted units, as plain figures rather than a second chart */
-    var sc = dScores();
-    var vals = [];
-    D.districts.forEach(function (d) {
-      if (S.view === "state" && d.s !== S.state) return;
-      var v = sc[d.k]; if (v !== undefined) vals.push(v);
-    });
+    var vals = [], noun;
+    if (S.view === "india") {
+      var sc = dScores();
+      noun = "districts";
+      D.districts.forEach(function (d) {
+        var v = sc[d.k]; if (v !== undefined) vals.push(v);
+      });
+    } else {
+      var bsc = bScores();
+      noun = "blocks";
+      D.blocks.forEach(function (b) {
+        if (S.view === "district" && b.dk !== S.district) return;
+        var v = bsc[b.k]; if (v !== undefined) vals.push(v);
+      });
+    }
     vals.sort(function (a, b) { return a - b; });
     var med = vals.length ? (vals.length % 2 ? vals[(vals.length - 1) / 2]
               : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2) : NaN;
     document.getElementById("painted").textContent =
-      "Painted: " + vals.length + " districts · median " + fmt(med) +
+      "Painted: " + vals.length + " " + noun + " · median " + fmt(med) +
       " · min–max " + fmt(vals[0]) + "–" + fmt(vals[vals.length - 1]);
     return vals;
   }
@@ -1080,6 +1313,35 @@ PAGE_TEMPLATE = r"""<!doctype html>
     return "<span class='band' style='color:" + BAND_INK[b] + "'>" + b + "</span>";
   }
 
+  /* A driver list whose every item routes into Detailed Analysis with the
+     current geography, level, bundle, scenario and period preserved and that
+     metric selected -- the driver-to-Detailed-Analysis route of section 7. */
+  function driverList(slugs, level, unit) {
+    if (!slugs || !slugs.length) {
+      return "<p class='sub' style='margin:12px 0 0'>Driver information is not " +
+             "available for this geography.</p>";
+    }
+    return "<p class='drv-head'>" +
+      (D.bundle_kind === "sector" ? "Top rule signals" : "Metric drivers") +
+      "</p><ul class='drv'>" +
+      slugs.map(function (slug) {
+        return "<li><button type='button' data-drv='" + esc(slug) +
+          "' data-lvl='" + esc(level) + "' data-unit='" + esc(unit) + "'>" +
+          esc(metricLabel(slug)) + "<span class='drv-go'>&rsaquo;</span></button></li>";
+      }).join("") + "</ul>";
+  }
+
+  function wireDrivers(host) {
+    var buttons = host.querySelectorAll("ul.drv button");
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener("click", function (ev) {
+        var b = ev.currentTarget;
+        S.da = { level: b.dataset.lvl, unit: b.dataset.unit, driver: b.dataset.drv };
+        render();
+      });
+    }
+  }
+
   /* The State-view Headline the layout contract requires -- score, band, rank,
      valid count, drivers and the one Detailed Analysis action -- as a strip
      above the map rather than a card of prose. The national view has no
@@ -1087,33 +1349,56 @@ PAGE_TEMPLATE = r"""<!doctype html>
      are the answer there. */
   function renderHeadline() {
     var host = document.getElementById("headline");
-    if (S.view !== "state") { host.hidden = true; host.innerHTML = ""; return; }
+    if (S.view === "india") { host.hidden = true; host.innerHTML = ""; return; }
     host.hidden = false;
 
-    var st = sStats()[S.state];
-    var rows = rankedDistricts(S.state);
     var total = Object.keys(sStats()).length;
-    var drv = (st && st.drivers) || [];
+    var rows = rankedDistricts(S.state);
+
+    if (S.view === "state") {
+      var st = sStats()[S.state];
+      var drv = (st && st.drivers) || [];
+      host.innerHTML =
+        "<h2>State/UT headline</h2>" +
+        "<div class='hl-top'><span class='hl-name'>" + esc(S.state) + "</span>" +
+          (st ? bandPill(st.mean) : "") +
+          "<span class='bigscore'>" + fmt(st ? st.mean : NaN) + "</span></div>" +
+        "<p class='hl-meta'>Area-weighted mean district score · rank <b>" +
+          (st ? st.rank : "—") + "</b> of " + total + " State/UTs · <b>" +
+          rows.length + "</b> valid districts · <b>" + D.blocks.length +
+          "</b> blocks painted</p>" +
+        "<p class='hl-scope'>The area-weighted average of its districts' national scores — " +
+          "not a percentile among States. Hazard-only: no exposure, vulnerability or " +
+          "resilience.</p>" +
+        driverList(drv, "State/UT", S.state);
+      wireDrivers(host);
+      return;
+    }
+
+    /* District view */
+    var d = byKey[S.district];
+    var me = null;
+    rows.forEach(function (r) { if (r.key === S.district) me = r; });
+    var blocks = blocksOfDistrict[S.district] || [];
+    var bsc = bScores();
+    var vals = [];
+    blocks.forEach(function (b) { if (bsc[b.k] !== undefined) vals.push(bsc[b.k]); });
+    vals.sort(function (a, b) { return a - b; });
 
     host.innerHTML =
-      "<span class='hl-name'>" + esc(S.state) + "</span>" +
-      "<span class='bigscore'>" + fmt(st ? st.mean : NaN) + "</span>" +
-      (st ? bandPill(st.mean) : "") +
-      "<span class='hl-meta'>Area-weighted mean district score · rank <b>" +
-        (st ? st.rank : "—") + "</b> of " + total + " State/UTs · <b>" +
-        rows.length + "</b> valid districts" +
-        "<span class='hl-scope'>The area-weighted average of its districts' national " +
-        "scores — not a percentile among States. Hazard-only.</span></span>" +
-      (drv.length
-        ? "<span class='hl-drv'><b>Drivers</b> " +
-          drv.map(function (x) { return esc(metricLabel(x)); }).join(" · ") + "</span>"
-        : "") +
-      "<span class='spacer'></span>" +
-      "<button class='btn' id='to-da'>Explore in Detailed Analysis</button>";
-
-    document.getElementById("to-da").addEventListener("click", function () {
-      S.da = { level: "State/UT", unit: S.state }; render();
-    });
+      "<h2>District headline</h2>" +
+      "<div class='hl-top'><span class='hl-name'>" + esc(d.n) + "</span>" +
+        (me ? bandPill(me.score) : "") +
+        "<span class='bigscore'>" + fmt(me ? me.score : NaN) + "</span></div>" +
+      "<p class='hl-parent'>" + esc(S.state) + "</p>" +
+      "<p class='hl-meta'>Composite score · rank <b>" + (me ? me.rank : "—") +
+        "</b> of " + rows.length + " valid districts in " + esc(S.state) + "</p>" +
+      "<p class='hl-scope'>" + vals.length + " blocks painted, scoring <b>" +
+        fmt(vals[0]) + "</b> to <b>" + fmt(vals[vals.length - 1]) + "</b>. Blocks are " +
+        "scored from their own physical values on the same frozen ruler, so this " +
+        "district's score is not their average.</p>" +
+      driverList(dDrivers()[S.district] || [], "District", d.n + ", " + S.state);
+    wireDrivers(host);
   }
 
   /* ================= ranking ================= */
@@ -1134,7 +1419,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
           ? "Area-weighted mean district score, competition ranks over full precision. " +
             "Select a row to open that State/UT."
           : "Composite score on the frozen national scale, ranked within " + esc(S.state) +
-            ". Select a row to inspect that district.") +
+            ". Select a row to open that district's blocks.") +
       "</p>" +
       "<table class='rank'><thead><tr><th class='rk'>#</th><th>" +
         (isIndia ? "State / UT" : "District") +
@@ -1161,44 +1446,36 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (t) t.addEventListener("click", function (ev) {
       var tr = ev.target.closest("tr");
       if (!tr) return;
-      if (isIndia) selectState(tr.dataset.key); else selectDistrict(tr.dataset.key);
+      if (isIndia) selectState(tr.dataset.key); else openDistrict(tr.dataset.key);
     });
     var ta = document.getElementById("toggle-all");
     if (ta) ta.addEventListener("click", function () { S.showAll = !S.showAll; renderRanking(); });
   }
 
-  /* ================= inspection + DA stub ================= */
+  /* ================= block inspection + DA stub ================= */
   function renderInspection() {
     var host = document.getElementById("inspection");
     var html = "";
 
-    if (S.view === "state" && S.district) {
-      var d = byKey[S.district];
-      var rows = rankedDistricts(S.state);
-      var me = null;
-      rows.forEach(function (r) { if (r.key === S.district) me = r; });
-      var drv = (dDrivers()[S.district] || []);
+    if (S.view === "district" && S.block && blockByKey[S.block]) {
+      var b = blockByKey[S.block];
+      var v = bScores()[b.k];
+      var parent = byKey[b.dk];
       html +=
         "<div class='card insp'>" +
-        "<button class='close' id='close-insp' aria-label='Clear district selection'>×</button>" +
-        "<h2>District inspection</h2>" +
-        "<div class='place' style='font-size:17px'>" + esc(d.n) +
-          "<small>" + esc(d.s) + "</small></div>" +
-        "<div class='scoreline'><span class='bigscore' style='font-size:26px'>" +
-          fmt(me ? me.score : NaN) + "</span>" + (me ? bandPill(me.score) : "") + "</div>" +
+        "<button class='close' id='close-insp' aria-label='Clear block selection'>×</button>" +
+        "<h2>Block inspection</h2>" +
+        "<div class='place'>" + esc(b.n) + "<small>" + esc(parent ? parent.n : "") +
+          " · " + esc(b.s) + "</small></div>" +
+        "<div class='scoreline'><span class='bigscore'>" + fmt(v) + "</span>" +
+          (v === undefined ? "" : bandPill(v)) + "</div>" +
         "<dl class='kv'>" +
-          "<dt>Rank</dt><dd>" + (me ? me.rank + " of " + rows.length + " valid districts in " +
-            esc(S.state) : "—") + "</dd>" +
+          "<dt>Rank</dt><dd>Blocks are not ranked at any scope — subdivision density " +
+            "reflects State administration rather than geography</dd>" +
           "<dt>Coverage</dt><dd>Complete — all 9 headline metrics valid</dd>" +
-          "<dt>Blocks</dt><dd><em>Not scored in this prototype.</em> The specified panel shows " +
-            "the min–max score range of this district's blocks and their count.</dd>" +
         "</dl>" +
-        (drv.length
-          ? "<ul class='drivers'>" + drv.map(function (s) {
-              return "<li>" + esc(metricLabel(s)) + "</li>"; }).join("") + "</ul>"
-          : "") +
-        "<div class='btn-row'><button class='btn' id='da-dist'>Explore in Detailed Analysis</button>" +
-        "</div></div>";
+        driverList(bDrivers()[b.k] || [], "Block", b.n + ", " + (parent ? parent.n : "")) +
+        "</div>";
     }
 
     if (S.da) {
@@ -1213,8 +1490,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
           "<dt>Period</dt><dd>" + esc(D.period_labels[S.period]) + "</dd>" +
           "<dt>Level</dt><dd>" + esc(S.da.level) + "</dd>" +
           "<dt>Unit</dt><dd>" + esc(S.da.unit) + "</dd>" +
-          "<dt>Opens on</dt><dd>the composite metric for " + esc(S.bundle) +
-            ", never <code>Metric = All</code></dd>" +
+          "<dt>Opens on</dt><dd>" +
+            (S.da.driver
+              ? "the metric <b>" + esc(metricLabel(S.da.driver)) + "</b>, the driver that was " +
+                "selected"
+              : "the composite metric for " + esc(S.bundle) + ", never <code>Metric = All</code>") +
+          "</dd>" +
         "</dl>" +
         "<p style='margin:10px 0 0'>Hover, bin filter and temporary map emphasis are not " +
         "carried across.</p></div>" +
@@ -1223,12 +1504,9 @@ PAGE_TEMPLATE = r"""<!doctype html>
     }
 
     host.innerHTML = html;
+    wireDrivers(host);
     var c = document.getElementById("close-insp");
-    if (c) c.addEventListener("click", function () { S.district = null; S.da = null; render(); });
-    var dd = document.getElementById("da-dist");
-    if (dd) dd.addEventListener("click", function () {
-      S.da = { level: "District", unit: byKey[S.district].n + ", " + S.state }; render();
-    });
+    if (c) c.addEventListener("click", function () { S.block = null; S.da = null; render(); });
     var bo = document.getElementById("back-ov");
     if (bo) bo.addEventListener("click", function () { S.da = null; render(); });
   }
@@ -1244,32 +1522,41 @@ PAGE_TEMPLATE = r"""<!doctype html>
       else b.addEventListener("click", fn);
       host.appendChild(b);
     }
-    crumb("India", S.view === "india", goIndia);
-    if (S.view === "state") {
-      var sep = document.createElement("span");
-      sep.className = "crumb-sep"; sep.textContent = "›";
-      host.appendChild(sep);
-      crumb(S.state, true, null);
+    function sep() {
+      var s = document.createElement("span");
+      s.className = "crumb-sep"; s.textContent = "›";
+      host.appendChild(s);
     }
-    if (S.district) {
+    crumb("India", S.view === "india", goIndia);
+    if (S.view !== "india") { sep(); crumb(S.state, S.view === "state", goState); }
+    if (S.view === "district") { sep(); crumb(byKey[S.district].n, true, null); }
+    if (S.block && blockByKey[S.block]) {
       var note = document.createElement("span");
       note.className = "crumb-sep";
-      note.style.marginLeft = "10px";
-      note.style.fontSize = "12px";
-      note.textContent = "· inspecting " + byKey[S.district].n +
+      note.style.cssText = "margin-left:10px;font-size:12px";
+      note.textContent = "· inspecting " + blockByKey[S.block].n +
         " (an inspection state — it adds no breadcrumb level)";
       host.appendChild(note);
     }
   }
 
   function renderMapHead() {
-    document.getElementById("map-title").textContent =
-      S.view === "india" ? "National view — districts painted" :
-      S.state + " — districts painted";
-    document.getElementById("map-sub").textContent =
-      S.view === "india"
-        ? "Thick State/UT boundary, thin district boundary. State/UT polygons are never filled."
-        : "Block fill is the production default; blocks are unscored, so district fill stands in.";
+    var title, sub;
+    if (S.view === "india") {
+      title = "National view — districts painted";
+      sub = "Thick State/UT boundary, thin district boundary. State/UT polygons are never " +
+            "filled. Hover any State/UT; only " + D.live_state + " opens.";
+    } else if (S.view === "state") {
+      title = S.state + " — blocks painted";
+      sub = "Thick district boundary, thin block boundary. Blocks are painted; districts are " +
+            "what this view ranks.";
+    } else {
+      title = byKey[S.district].n + " — its blocks painted";
+      sub = "The same blocks on the same ruler against the same colourbar, at this district's " +
+            "extent. Select a block to open Detailed Analysis.";
+    }
+    document.getElementById("map-title").textContent = title;
+    document.getElementById("map-sub").textContent = sub;
   }
 
   function renderMethod() {
@@ -1320,7 +1607,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     function onSliceChange() {
       S.scenario = sc.value; S.period = pe.value;
       /* geography survives; transient emphasis and the DA stub do not */
-      S.pinned = null; S.showAll = false; S.da = null;
+      S.pinned = null; S.showAll = false; S.da = null; S.block = null;
       hideTip();
       renderDefaultsNote();
       render();
@@ -1387,8 +1674,11 @@ blocks in production.</p>
 <h3>What each view paints, ranks and bins</h3>
 <ul>
   <li><b>National</b> paints 784 districts, ranks 36 State/UT means, bins those 36 means.</li>
-  <li><b>State</b> paints blocks in production (districts here), ranks that State's districts,
-      bins those district scores.</li>
+  <li><b>State</b> paints that State/UT's blocks, ranks its districts, bins those district
+      scores.</li>
+  <li><b>District</b> paints that district's blocks, and ranks and bins nothing of its own —
+      it keeps its parent State/UT's district ranking and distribution, because blocks are
+      never ranked.</li>
 </ul>
 <p>The histogram bins the units the view <i>ranks</i>, never the units it <i>paints</i>. A mean is
 a summary, so a State's bin does not constrain its districts: hovering a bin can emphasise
@@ -1411,7 +1701,8 @@ filtered subset.</p>
 
 <h3>Not implemented here</h3>
 <ul>
-  <li><b>Block scores and block fill.</b> No block has been scored on the frozen ruler.</li>
+  <li><b>Blocks outside the live State/UT.</b> Only Telangana's 588 blocks are scored, so only
+      Telangana opens below the national view. Every other State/UT hovers normally.</li>
   <li><b>Detailed Analysis.</b> The transition and its carried state are real; the destination is a
       stub.</li>
   <li><b>Twelve of the thirteen eligible bundles</b>, Context and Evidence, coordinate entry,
@@ -1424,17 +1715,24 @@ They are indicative of shape, not a release baseline.</p>
 
 def build_html(
     scores: pd.DataFrame,
+    blocks: pd.DataFrame,
     districts: list[dict],
     state_paths: dict[str, str],
+    block_shapes: list[dict],
     height: float,
     areas: dict[str, float],
 ) -> str:
     """One self-contained page: inline SVG, inline data, no network calls."""
     district_scores, state_stats, drivers = build_tables(scores, areas)
+    block_scores, block_drivers = build_block_tables(blocks)
 
     payload = {
         "districts": districts,
         "state_paths": state_paths,
+        "blocks": block_shapes,
+        "block_scores": block_scores,
+        "block_drivers": block_drivers,
+        "live_state": LIVE_STATE,
         "district_scores": district_scores,
         "state_stats": state_stats,
         "drivers": drivers,
@@ -1471,6 +1769,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--scores", type=Path, default=DEFAULT_SCORES,
                         help="Pilot district_scores.csv (default: %(default)s).")
+    parser.add_argument("--block-scores", type=Path, default=DEFAULT_BLOCK_SCORES,
+                        help="Frozen-ruler block scores for the live State/UT "
+                             "(default: %(default)s).")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT,
                         help="Output HTML path (default: %(default)s).")
     parser.add_argument("--data-dir", type=Path, default=None,
@@ -1484,15 +1785,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     data_dir = Path(args.data_dir) if args.data_dir else Path(get_paths_config().data_dir)
 
     scores = load_frozen_scores(args.scores)
-    print(f"scores    : {len(scores):,} rows over {len(PUBLIC_SLICES)} public slices")
+    print(f"scores    : {len(scores):,} district rows over {len(PUBLIC_SLICES)} public slices")
+
+    blocks = load_block_scores(args.block_scores)
+    print(f"blocks    : {len(blocks):,} block rows for {LIVE_STATE} "
+          f"({blocks['block_key'].nunique()} blocks)")
 
     areas = district_areas(data_dir)
     print(f"areas     : {len(areas):,} districts")
 
-    districts, state_paths, height = build_shapes(
+    districts, state_paths, block_shapes, height = build_shapes(
         data_dir, simplify=args.simplify, precision=args.precision
     )
-    print(f"geometry  : {len(districts):,} district paths, {len(state_paths)} State/UT outlines")
+    print(f"geometry  : {len(districts):,} district paths, {len(state_paths)} State/UT outlines, "
+          f"{len(block_shapes):,} {LIVE_STATE} block paths")
+
+    scored_blocks = set(blocks["block_key"].unique())
+    drawn_blocks = {b["k"] for b in block_shapes}
+    if scored_blocks != drawn_blocks:
+        print(f"WARNING   : block score/geometry mismatch — "
+              f"{len(scored_blocks - drawn_blocks)} scored without geometry, "
+              f"{len(drawn_blocks - scored_blocks)} drawn without a score", file=sys.stderr)
 
     scored = set(scores["district_key"].unique())
     drawn = {d["k"] for d in districts}
@@ -1505,7 +1818,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"WARNING   : {len(orphan_shapes)} drawn districts have no score, "
               f"e.g. {orphan_shapes[:3]}", file=sys.stderr)
 
-    html_text = build_html(scores, districts, state_paths, height, areas)
+    html_text = build_html(
+        scores, blocks, districts, state_paths, block_shapes, height, areas
+    )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(html_text, encoding="utf-8")
     print(f"wrote     : {args.out}  ({len(html_text.encode('utf-8')) / 1e6:.2f} MB)")
