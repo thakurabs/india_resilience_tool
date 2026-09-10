@@ -271,7 +271,7 @@ Aqueduct methodology note:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `composite_metrics.py` | Streamlit-free builders for persisted district/block composite Glance metric masters |
+| `composite_metrics.py` | Streamlit-free builders for persisted district/block composite Glance metric masters; frozen-ruler composites publish the ruler's complete declared slice grid (Heat Risk: historical baseline plus six future pairs) and fail on an incomplete component grid |
 | `glance_view_model.py` | Streamlit-free builder for persisted optimized Glance district/state scores, drivers, attributes, and distributions |
 | `proposal_bundles.py` | Streamlit-free builders for persisted proposal climate-risk bundle masters plus the `r95p_interannual_variability` helper masters |
 | `master_builder.py` | Build admin district/block master CSVs plus Parquet companions for runtime serving |
@@ -775,5 +775,5 @@ For questions about the codebase:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin (district/block) yearly parity outputs, selector-index artifacts, persisted geometry `area_m2`, optional admin level/state filtering, exact-target scoped prune, and a post-build parity audit |
+| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin (district/block) yearly parity outputs, selector-index artifacts, persisted geometry `area_m2`, optional admin level/state filtering, exact-target scoped prune, and a post-build parity audit; artifact version 5 records distinct fitted/published frozen-ruler grids and audits every frozen master and State-value row against the complete grid |
 | `audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the legacy processed contract, with optional level/state filtering and optional scoped report output |

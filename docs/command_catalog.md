@@ -440,6 +440,11 @@ Republishing the scores after a fit — run in this order, and back up
 `processed_optimised/` first, because step 2 deletes `bundle_manifest.json` and
 `parity_report.json` before rebuilding them:
 
+For CHG-0389, **do not run the fitter**: `cdf_v1` is unchanged. Run only the
+republish sequence below. The resulting artifact-version 5 masters and State
+tables contain all seven ruler slices, including
+`composite_heat_risk__historical__1990-2010__mean`; Glance remains future-only.
+
 ```bash
 export IRT_ROSTER_GATE=warn
 python -m india_resilience_tool.compute.composite_metrics --level admin --metric composite_heat_risk --overwrite
@@ -453,7 +458,11 @@ Traps:
   the parity report and context/glance unless `--include-shared-admin-artifacts` is also passed.
 - `--overwrite` is required or the existing outputs short-circuit and the new scores never land.
 - `build_state_values` is not optional. The audit only *warns* about it, and the app reads the
-  stale state headline rather than falling back to the fresh masters.
+  stale state headline rather than falling back to the fresh masters for legacy metrics. For a
+  frozen composite, the audit now treats a missing State-value file or any missing ruler slice as
+  an error.
+- The frozen-composite audit requires every optimized district/block master and every represented
+  State-value row to carry the ruler's complete seven-slice grid.
 - Re-fitting an existing version in place is refused by design. A new fit is `v2` in its own
   directory, and every published score changes with it.
 

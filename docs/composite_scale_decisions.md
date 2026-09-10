@@ -654,11 +654,13 @@ The State headline is now nationally comparable: at SSP5-8.5 2040-2060 the area-
 run Telangana 83.4 / Gujarat 76.6 / Rajasthan 76.1 at the top and Ladakh 0.9 / Sikkim 1.6 /
 Himachal 6.9 at the bottom. Under per-state min-max the same file made West Bengal rank first.
 
-Note the published grid is **6 slices, not 7**: the production composite path has never emitted
-`historical/1990-2010` for this bundle (`SUPPORTED_SCENARIOS` carries no `historical`). The ruler is
-still fitted over all 7 — the baseline slice is in the pool, it is simply not published. That is
-pre-existing behaviour, unchanged here, and it is why P-03's "the baseline map will look benign"
-cannot yet be seen in the bundle at all.
+The observed artifact-version 4 grid is **6 slices, not 7**: that published bundle predates
+CHG-0389. The production source now uses the frozen ruler's own ordered slice grid and requires all
+seven inputs, including `historical/1990-2010`; it no longer relies on the legacy future-only
+`SUPPORTED_SCENARIOS` discovery loop. A missing declared slice fails composite construction, and the
+optimized parity audit fails if a frozen master or State-value table omits one. Republish without
+refitting `cdf_v1` to activate artifact version 5 and make P-03's baseline presentation question
+observable in the runtime data. Glance remains intentionally limited to the six future pairs.
 
 ---
 

@@ -28,10 +28,15 @@ Observed bundle facts:
 | `artifact_version` | 4 |
 | Composites on a frozen national ruler | 1 (`composite_heat_risk`) |
 
+This observed local snapshot predates the CHG-0389 republish. The next valid
+Heat Risk handover has `artifact_version: 5` and publishes the seventh,
+`historical/1990-2010`, slice. Do not treat source-code availability as evidence
+that the local runtime bundle has already been republished.
+
 Treat `bundle_manifest.json` and `parity_report.json` as the first files to
 read. A clean handover must have `parity_report.json` with `issue_count: 0`.
 
-## Read This First: `composite_heat_risk` Changed Meaning (artifact version 4)
+## Read This First: `composite_heat_risk` Changed Meaning (artifact versions 4 and 5)
 
 `bundle_manifest.json` now carries `"artifact_version": 4`. If you have cached a
 bundle at version 3, **the `composite_heat_risk` score columns are not
@@ -46,6 +51,18 @@ number behind them changed twice:
 | Comparable across scenarios/periods? | **No** | Yes |
 | Score dtype | float32 | float64 |
 
+Artifact version 5 preserves the version 4 ruler, weights, normalization, and
+float64 values, but expands the published master and State-value grid from the
+six future pairs to the same seven slices used to fit the ruler. The added
+column is:
+
+```text
+composite_heat_risk__historical__1990-2010__mean
+```
+
+Glance intentionally remains future-only; the historical row is available to
+baseline-aware and detailed consumers, not as a new Glance selector.
+
 The manifest records exactly which ruler produced the numbers:
 
 ```json
@@ -58,7 +75,9 @@ The manifest records exactly which ruler produced the numbers:
     "headline_metric_count": 9,
     "coverage_gate": 0.7,
     "configured_weight": 0.6333333333333333,
-    "slices": [["historical", "1990-2010"], ["ssp245", "2020-2040"], "..."]
+    "slices": [["historical", "1990-2010"], ["ssp245", "2020-2040"], "..."],
+    "fitted_slices": [["historical", "1990-2010"], ["ssp245", "2020-2040"], "..."],
+    "published_slices": [["historical", "1990-2010"], ["ssp245", "2020-2040"], "..."]
   }
 }
 ```

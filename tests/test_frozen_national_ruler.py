@@ -294,3 +294,35 @@ def test_manifest_payload_reports_the_frozen_ruler() -> None:
     assert entry["ruler_id"] == "composite_heat_risk_cdf_v1"
     assert entry["ruler_sha256"]
     assert len(entry["slices"]) == 7
+    assert entry["fitted_slices"] == entry["slices"]
+    assert entry["published_slices"] == entry["slices"]
+
+
+def test_heat_risk_glance_remains_future_only_when_master_includes_historical(
+    tmp_path, monkeypatch
+) -> None:
+    """CHG-0389 publishes baseline data without adding a Glance selector."""
+    from india_resilience_tool.compute import glance_view_model
+    from india_resilience_tool.config.dashboard_bundles import get_dashboard_bundle_spec
+
+    spec = get_dashboard_bundle_spec("Heat Risk")
+    assert spec is not None
+    published_pairs = (
+        ("historical", "1990-2010"),
+        ("ssp245", "2020-2040"),
+        ("ssp245", "2040-2060"),
+        ("ssp245", "2060-2080"),
+        ("ssp585", "2020-2040"),
+        ("ssp585", "2040-2060"),
+        ("ssp585", "2060-2080"),
+    )
+    monkeypatch.setattr(
+        glance_view_model,
+        "_available_pairs_for_slug",
+        lambda _slug, *, data_dir: published_pairs,
+    )
+
+    observed = glance_view_model._bundle_pairs(spec, data_dir=tmp_path)
+
+    assert ("historical", "1990-2010") not in observed
+    assert observed == published_pairs[1:]

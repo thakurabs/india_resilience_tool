@@ -158,38 +158,77 @@ def _load_component_master(
     return frame
 
 
-def _available_pairs_for_frame(df: pd.DataFrame, *, metric_slug: str) -> set[tuple[str, str]]:
-    """Return supported scenario-period pairs for one master frame."""
+def _available_pairs_for_frame(
+    df: pd.DataFrame,
+    *,
+    metric_slug: str,
+    candidate_pairs: Optional[Sequence[tuple[str, str]]] = None,
+) -> set[tuple[str, str]]:
+    """Return available scenario-period pairs for one master frame.
+
+    Legacy composite modes use the historical future/snapshot discovery grid.
+    Frozen-ruler mode instead passes the ruler's immutable fitted-slice grid so
+    publication cannot silently omit a slice that forms part of the ruler
+    contract (CHG-0389).
+    """
     available: set[tuple[str, str]] = set()
-    for scenario in SUPPORTED_SCENARIOS:
-        for period in SUPPORTED_PERIODS:
-            col = _resolve_component_metric_column(
-                df,
-                metric_slug=metric_slug,
-                scenario=scenario,
-                period=period,
-            )
-            # Guard against fuzzy-fallback false positives: verify the resolved
-            # column actually encodes the expected period token.
-            if col and f"__{period.lower()}__" in col.lower():
-                available.add((scenario, period))
+    pairs = (
+        tuple(candidate_pairs)
+        if candidate_pairs is not None
+        else tuple(
+            (scenario, period)
+            for scenario in SUPPORTED_SCENARIOS
+            for period in SUPPORTED_PERIODS
+        )
+    )
+    for scenario, period in pairs:
+        col = _resolve_component_metric_column(
+            df,
+            metric_slug=metric_slug,
+            scenario=scenario,
+            period=period,
+        )
+        # ``resolve_metric_column`` has compatibility fallbacks. Require the
+        # resolved value column itself to encode the requested pair exactly so
+        # one slice cannot be mistaken for another.
+        parts = str(col or "").split("__")
+        if (
+            len(parts) == 4
+            and parts[1].strip().lower() == str(scenario).strip().lower()
+            and parts[2].strip().lower() == str(period).strip().lower()
+        ):
+            available.add((str(scenario), str(period)))
     return available
 
 
-def _intersect_available_pairs(component_frames: dict[str, pd.DataFrame]) -> list[tuple[str, str]]:
-    """Return schema-level scenario-period intersections across all component frames."""
+def _intersect_available_pairs(
+    component_frames: dict[str, pd.DataFrame],
+    *,
+    candidate_pairs: Optional[Sequence[tuple[str, str]]] = None,
+) -> list[tuple[str, str]]:
+    """Return ordered schema-level pair intersections across component frames."""
+    ordered_pairs = (
+        tuple((str(scenario), str(period)) for scenario, period in candidate_pairs)
+        if candidate_pairs is not None
+        else tuple(
+            (scenario, period)
+            for scenario in SUPPORTED_SCENARIOS
+            for period in SUPPORTED_PERIODS
+        )
+    )
     pair_sets: list[set[tuple[str, str]]] = []
     for metric_slug, frame in component_frames.items():
-        pair_sets.append(_available_pairs_for_frame(frame, metric_slug=metric_slug))
+        pair_sets.append(
+            _available_pairs_for_frame(
+                frame,
+                metric_slug=metric_slug,
+                candidate_pairs=ordered_pairs,
+            )
+        )
     if not pair_sets:
         return []
     available = set.intersection(*pair_sets)
-    return [
-        (scenario, period)
-        for scenario in SUPPORTED_SCENARIOS
-        for period in SUPPORTED_PERIODS
-        if (scenario, period) in available
-    ]
+    return [pair for pair in ordered_pairs if pair in available]
 
 
 def _bundle_metric_specs(
@@ -516,7 +555,10 @@ def compute_composite_master_frame(
     """Compute one persisted composite master frame for a bundle/level/state.
 
     Methodology:
-    - Scenario-period availability is based on schema intersection across all component masters.
+    - Legacy scenario-period availability is based on schema intersection across
+      all component masters.
+    - Frozen-ruler composites require and publish every slice declared by the
+      immutable ruler artifact; an incomplete component grid is an error.
     - Row-level partial values are allowed.
     - Weights are renormalized across available values per row.
     - Rows with all component values missing remain NaN for the composite column.
@@ -545,13 +587,31 @@ def compute_composite_master_frame(
     for metric_slug in required_slugs:
         frame = _load_component_master(metric_slug, level=level_norm, state_name=state_name, data_dir=data_dir)
         if frame is None or frame.empty:
+            if ruler_set is not None:
+                raise FileNotFoundError(
+                    f"Frozen composite {spec.composite_slug!r} requires component master "
+                    f"{metric_slug!r} for state={state_name!r}, level={level_norm!r}."
+                )
             return pd.DataFrame(columns=list(_required_id_columns(level_norm)))
         component_frames[metric_slug] = frame
 
-    available_pairs = _intersect_available_pairs(component_frames)
+    declared_pairs = tuple(ruler_set.slices) if ruler_set is not None else None
+    available_pairs = _intersect_available_pairs(
+        component_frames,
+        candidate_pairs=declared_pairs,
+    )
     if ruler_set is not None:
-        # A ruler is fitted over a declared slice grid. Scoring a pair it never saw
-        # would publish a score against a ruler that was never fitted for it (P-04).
+        # The fitted grid is also the publication grid. Previously the global
+        # future-only scenario loop silently omitted historical/1990-2010 even
+        # though it contributed to the ruler fit (CHG-0389).
+        missing_pairs = [pair for pair in ruler_set.slices if pair not in set(available_pairs)]
+        if missing_pairs:
+            rendered = ", ".join(f"{scenario}/{period}" for scenario, period in missing_pairs)
+            raise ValueError(
+                f"Frozen composite {spec.composite_slug!r} cannot publish an incomplete "
+                f"ruler grid for state={state_name!r}, level={level_norm!r}; missing "
+                f"declared slice(s): {rendered}."
+            )
         for scenario, period in available_pairs:
             ruler_set.validate_slice(scenario, period)
     id_columns = list(_required_id_columns(level_norm))

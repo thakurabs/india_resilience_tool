@@ -29,6 +29,8 @@ from tools.optimized.build_processed_optimised import (
     _copy_context_artifacts,
     _execute_parallel_chunks,
     _load_legacy_admin_yearly_models,
+    _missing_frozen_state_value_rows,
+    _select_master_columns,
     _yearly_chunk_size,
     _yearly_executor_kind,
     audit_processed_optimised_parity,
@@ -111,6 +113,93 @@ def _read_output_tables(bundle_root: Path, *, slug: str) -> dict[str, pd.DataFra
 
 def _read_manifest(bundle_root: Path) -> dict:
     return json.loads((bundle_root / "bundle_manifest.json").read_text(encoding="utf-8"))
+
+
+def test_manifest_artifact_version_marks_seven_slice_heat_risk_publication() -> None:
+    assert MANIFEST_ARTIFACT_VERSION == 5
+
+
+def test_frozen_state_value_audit_detects_a_missing_historical_row(tmp_path: Path) -> None:
+    target = tmp_path / "all_states.parquet"
+    pd.DataFrame(
+        [
+            {
+                "state": "Telangana",
+                "metric": "composite_heat_risk",
+                "scenario": "ssp245",
+                "period": "2020-2040",
+                "stat": "mean",
+                "value": 50.0,
+                "n_units": 33,
+            }
+        ]
+    ).to_parquet(target, index=False)
+
+    missing = _missing_frozen_state_value_rows(
+        target,
+        slug="composite_heat_risk",
+        states=["Telangana"],
+        slices=(("historical", "1990-2010"), ("ssp245", "2020-2040")),
+    )
+
+    assert missing == ["Telangana|historical|1990-2010"]
+
+
+def test_frozen_state_value_audit_accepts_36_states_times_seven_slices(tmp_path: Path) -> None:
+    states = [f"State {index:02d}" for index in range(36)]
+    slices = (
+        ("historical", "1990-2010"),
+        ("ssp245", "2020-2040"),
+        ("ssp245", "2040-2060"),
+        ("ssp245", "2060-2080"),
+        ("ssp585", "2020-2040"),
+        ("ssp585", "2040-2060"),
+        ("ssp585", "2060-2080"),
+    )
+    rows = [
+        {
+            "state": state,
+            "metric": "composite_heat_risk",
+            "scenario": scenario,
+            "period": period,
+            "stat": "mean",
+            "value": 50.0,
+            "n_units": 1,
+        }
+        for state in states
+        for scenario, period in slices
+    ]
+    assert len(rows) == 252
+    target = tmp_path / "all_states.parquet"
+    pd.DataFrame(rows).to_parquet(target, index=False)
+
+    assert _missing_frozen_state_value_rows(
+        target,
+        slug="composite_heat_risk",
+        states=states,
+        slices=slices,
+    ) == []
+
+
+def test_optimized_historical_composite_score_remains_float64() -> None:
+    source = pd.DataFrame(
+        {
+            "state": ["Telangana"],
+            "district": ["A"],
+            "composite_heat_risk__historical__1990-2010__mean": pd.Series(
+                [12.3456789012345], dtype="float64"
+            ),
+        }
+    )
+
+    observed = _select_master_columns(
+        source,
+        slug="composite_heat_risk",
+        level="district",
+        supported_stats=("mean",),
+    )
+
+    assert str(observed["composite_heat_risk__historical__1990-2010__mean"].dtype) == "float64"
 
 
 def test_list_available_states_from_optimized_metric_root(tmp_path: Path) -> None:

@@ -20,7 +20,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Optional, TypeVar
+from typing import Iterable, Optional, Sequence, TypeVar
 
 from pyproj import datadir
 
@@ -151,10 +151,11 @@ LEVEL_SELECTIONS = {
 YEARLY_PARALLEL_CHUNK_SIZE = 64
 # 4: composite_heat_risk moved from per-state min-max to a frozen national CDF
 # ruler, and its published composite narrowed from 14 metrics to the 9
-# absolute-threshold ones. The score column name did not change, so the version
-# bump and the ``frozen_rulers`` block below are the only signal a consumer has
-# that the number means something different (CHG-0367e).
-MANIFEST_ARTIFACT_VERSION = 4
+# absolute-threshold ones. 5: its historical/1990-2010 score is now published,
+# making the published grid match the ruler's seven fitted slices (CHG-0389).
+# The score column names did not otherwise change, so the version and the
+# ``frozen_rulers`` block below are the consumer's compatibility signal.
+MANIFEST_ARTIFACT_VERSION = 5
 PARITY_REPORT_FILENAME = "parity_report.json"
 T = TypeVar("T")
 
@@ -1352,6 +1353,7 @@ def _frozen_ruler_manifest_payload() -> dict[str, dict[str, object]]:
         except (FileNotFoundError, ValueError) as exc:  # pragma: no cover - build guard
             payload[spec.composite_slug] = {"error": str(exc), "frozen_ruler_version": version}
             continue
+        slices = [list(pair) for pair in ruler_set.slices]
         payload[spec.composite_slug] = {
             "ruler_id": ruler_set.ruler_id,
             "ruler_sha256": ruler_set.ruler_sha256,
@@ -1361,7 +1363,12 @@ def _frozen_ruler_manifest_payload() -> dict[str, dict[str, object]]:
             "headline_metric_count": len(ruler_set.rulers),
             "coverage_gate": ruler_set.coverage_gate,
             "configured_weight": ruler_set.configured_weight,
-            "slices": [list(pair) for pair in ruler_set.slices],
+            # ``slices`` remains as a compatibility alias for artifact-version 4
+            # readers. Version 5 distinguishes the fit and publication grids;
+            # they are deliberately identical for a frozen ruler.
+            "slices": slices,
+            "fitted_slices": slices,
+            "published_slices": slices,
         }
     return payload
 
@@ -1937,6 +1944,62 @@ def _table_has_required_columns(path: Path, required_columns: set[str]) -> tuple
     return not missing, missing
 
 
+def _frozen_publication_slices(slug: str) -> tuple[tuple[str, str], ...]:
+    """Return the immutable publication grid for one frozen composite slug.
+
+    Non-frozen slugs return an empty tuple. A configured frozen artifact that
+    cannot be loaded is an audit error and therefore propagates to the caller.
+    """
+    from india_resilience_tool.analysis.frozen_rulers import frozen_ruler_dir, load_ruler_set
+    from india_resilience_tool.compute.composite_metrics import FROZEN_NATIONAL_CDF
+    from india_resilience_tool.config.composite_metrics import COMPOSITES_BY_SLUG
+
+    spec = COMPOSITES_BY_SLUG.get(str(slug))
+    if spec is None or getattr(spec, "normalization", "") != FROZEN_NATIONAL_CDF:
+        return ()
+    version = getattr(spec, "frozen_ruler_version", "")
+    ruler_set = load_ruler_set(frozen_ruler_dir(spec.composite_slug, version))
+    return tuple((str(scenario), str(period)) for scenario, period in ruler_set.slices)
+
+
+def _missing_frozen_state_value_rows(
+    path: Path,
+    *,
+    slug: str,
+    states: Iterable[str],
+    slices: Sequence[tuple[str, str]],
+) -> list[str]:
+    """Return missing ``state|scenario|period`` rows for a frozen State table."""
+    required = {"state", "metric", "scenario", "period", "stat"}
+    try:
+        frame = read_table(path)
+    except Exception:
+        return ["<unreadable>"]
+    if not required.issubset(frame.columns):
+        return [f"<missing-column:{column}>" for column in sorted(required - set(frame.columns))]
+
+    selected = frame[
+        frame["metric"].astype("string").str.strip().eq(str(slug))
+        & frame["stat"].astype("string").str.strip().str.lower().eq("mean")
+    ]
+    actual = {
+        (
+            str(row.state).strip(),
+            str(row.scenario).strip().lower(),
+            str(row.period).strip(),
+        )
+        for row in selected[["state", "scenario", "period"]].itertuples(index=False)
+    }
+    expected = {
+        (str(state).strip(), str(scenario).strip().lower(), str(period).strip())
+        for state in states
+        for scenario, period in slices
+    }
+    return [
+        f"{state}|{scenario}|{period}"
+        for state, scenario, period in sorted(expected - actual)
+    ]
+
 
 def _issue(
     *,
@@ -2001,20 +2064,51 @@ def audit_processed_optimised_parity(
     bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
     issues: list[dict[str, str | list[str]]] = []
 
+    frozen_slices_by_slug: dict[str, tuple[tuple[str, str], ...]] = {}
+    for slug in sorted({str(task.slug or "").strip() for task in plan.master_tasks} - {""}):
+        try:
+            slices = _frozen_publication_slices(slug)
+        except (FileNotFoundError, ValueError) as exc:
+            issues.append(
+                _issue(
+                    stage="frozen-ruler",
+                    slug=slug,
+                    level="",
+                    target="config/frozen_rulers",
+                    severity="error",
+                    reason=f"frozen_ruler_unavailable: {exc}",
+                )
+            )
+            slices = ()
+        if slices:
+            frozen_slices_by_slug[slug] = slices
+
     for task in plan.master_tasks:
         target = task.target_path
         if target is None:
             continue
-        ok, missing_cols = _table_has_required_columns(target, _required_columns_for_master(str(task.level)))
+        slug = str(task.slug or "").strip()
+        required_columns = _required_columns_for_master(str(task.level))
+        required_columns.update(
+            f"{slug}__{scenario}__{period}__mean"
+            for scenario, period in frozen_slices_by_slug.get(slug, ())
+        )
+        ok, missing_cols = _table_has_required_columns(target, required_columns)
         if not ok:
+            reason = (
+                "frozen_publication_slice_missing"
+                if slug in frozen_slices_by_slug
+                else ""
+            )
             issues.append(
-                {
-                    "stage": "masters",
-                    "slug": str(task.slug or ""),
-                    "level": str(task.level or ""),
-                    "target": str(target),
-                    "missing_columns": missing_cols,
-                }
+                _issue(
+                    stage="masters",
+                    slug=slug,
+                    level=str(task.level or ""),
+                    target=target,
+                    missing_columns=missing_cols,
+                    reason=reason,
+                )
             )
 
     for job in plan.yearly_model_jobs:
@@ -2100,9 +2194,10 @@ def audit_processed_optimised_parity(
         )
 
 
-    # Non-fatal presence check: the precomputed area-weighted state-values table
-    # is an optional read-path accelerator (the app falls back to live
-    # computation), so its absence is a warning, not a publish-blocking error.
+    # For legacy metrics the precomputed area-weighted State table remains an
+    # optional accelerator. For a frozen composite it is part of the publication
+    # contract: every State represented by a master task must carry every ruler
+    # slice, or the map and State headline can disagree (CHG-0389).
     _state_values_seen: set[tuple[str, str]] = set()
     for task in plan.master_tasks:
         slug = str(task.slug or "").strip()
@@ -2113,6 +2208,7 @@ def audit_processed_optimised_parity(
             continue
         _state_values_seen.add((slug, level))
         state_values_target = optimized_state_values_path(slug, level=level, data_dir=data_dir)
+        frozen_slices = frozen_slices_by_slug.get(slug, ())
         if not state_values_target.exists():
             issues.append(
                 _issue(
@@ -2120,10 +2216,39 @@ def audit_processed_optimised_parity(
                     slug=slug,
                     level=level,
                     target=state_values_target,
-                    severity="warning",
+                    severity="error" if frozen_slices else "warning",
                     reason="precomputed_state_values_missing",
                 )
             )
+            continue
+        if frozen_slices:
+            expected_states = sorted(
+                {
+                    str(candidate.state).strip()
+                    for candidate in plan.master_tasks
+                    if str(candidate.slug or "").strip() == slug
+                    and str(candidate.level or "").strip().lower() == level
+                    and str(candidate.state or "").strip()
+                }
+            )
+            missing_rows = _missing_frozen_state_value_rows(
+                state_values_target,
+                slug=slug,
+                states=expected_states,
+                slices=frozen_slices,
+            )
+            if missing_rows:
+                issues.append(
+                    _issue(
+                        stage="state-values",
+                        slug=slug,
+                        level=level,
+                        target=state_values_target,
+                        missing_columns=missing_rows,
+                        severity="error",
+                        reason="frozen_publication_slice_missing",
+                    )
+                )
 
     if require_block_yearly_models and "block" in set(_selected_levels(effective_levels)):
         for slug in _selected_slugs(metrics):

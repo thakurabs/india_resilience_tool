@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 import pandas as pd
+import pytest
 
 from india_resilience_tool.compute.composite_metrics import (
     build_composite_metrics,
@@ -11,6 +12,17 @@ from india_resilience_tool.compute.composite_metrics import (
 )
 from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
 from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG
+
+
+_HEAT_RISK_RULER_SLICES = (
+    ("historical", "1990-2010"),
+    ("ssp245", "2020-2040"),
+    ("ssp245", "2040-2060"),
+    ("ssp245", "2060-2080"),
+    ("ssp585", "2020-2040"),
+    ("ssp585", "2040-2060"),
+    ("ssp585", "2060-2080"),
+)
 
 
 def _write_component_master(
@@ -409,8 +421,6 @@ def test_frozen_ruler_composite_publishes_the_four_part_column_and_absolute_scor
     assert spec.normalization == "frozen_national_cdf"
 
     if not (frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version) / "ruler.json").exists():
-        import pytest
-
         pytest.skip("No frozen ruler committed")
 
     id_frame = pd.DataFrame(
@@ -423,11 +433,11 @@ def test_frozen_ruler_composite_publishes_the_four_part_column_and_absolute_scor
     # Two districts a little apart, both well inside the national support.
     for offset, slug in enumerate(spec.headline_metric_slugs):
         df = id_frame.copy()
-        for column in (
-            f"{slug}__historical__1990-2010__mean",
-            f"{slug}__ssp585__2040-2060__mean",
-        ):
-            df[column] = [20.0 + offset, 24.0 + offset]
+        for scenario, period in _HEAT_RISK_RULER_SLICES:
+            df[f"{slug}__{scenario}__{period}__mean"] = [
+                20.0 + offset,
+                24.0 + offset,
+            ]
         _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
 
     out = compute_composite_master_frame(
@@ -436,6 +446,13 @@ def test_frozen_ruler_composite_publishes_the_four_part_column_and_absolute_scor
 
     column = "composite_heat_risk__ssp585__2040-2060__mean"
     assert column in out.columns
+    expected_columns = {
+        f"composite_heat_risk__{scenario}__{period}__mean"
+        for scenario, period in _HEAT_RISK_RULER_SLICES
+    }
+    assert expected_columns <= set(out.columns)
+    assert len([col for col in out.columns if col.startswith("composite_heat_risk__")]) == 7
+    assert "composite_heat_risk__historical__1990-2010__mean" in out.columns
     scores = dict(zip(out["district"], out[column]))
     assert all(0.0 <= float(v) <= 100.0 for v in scores.values())
     # Absolute, not cohort-relative: neither district is pinned to an endpoint.
@@ -449,8 +466,6 @@ def test_frozen_ruler_composite_requires_only_the_headline_masters(tmp_path) -> 
     spec = get_composite_metric_for_bundle("Heat Risk")
     assert spec is not None
     if not (frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version) / "ruler.json").exists():
-        import pytest
-
         pytest.skip("No frozen ruler committed")
 
     baseline_only = set(spec.component_metric_slugs) - set(spec.headline_metric_slugs)
@@ -462,7 +477,8 @@ def test_frozen_ruler_composite_requires_only_the_headline_masters(tmp_path) -> 
     )
     for slug in spec.headline_metric_slugs:
         df = id_frame.copy()
-        df[f"{slug}__ssp585__2040-2060__mean"] = [25.0]
+        for scenario, period in _HEAT_RISK_RULER_SLICES:
+            df[f"{slug}__{scenario}__{period}__mean"] = [25.0]
         _write_component_master(
             tmp_path,
             slug=slug,
@@ -478,3 +494,40 @@ def test_frozen_ruler_composite_requires_only_the_headline_masters(tmp_path) -> 
     assert not math.isnan(
         float(out["composite_heat_risk__ssp585__2040-2060__mean"].iloc[0])
     )
+
+
+def test_frozen_ruler_composite_rejects_a_missing_declared_slice(tmp_path) -> None:
+    """The fitted seven-slice grid is also an all-or-nothing publication contract."""
+    from india_resilience_tool.analysis.frozen_rulers import frozen_ruler_dir
+
+    spec = get_composite_metric_for_bundle("Heat Risk")
+    assert spec is not None
+    if not (frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version) / "ruler.json").exists():
+        pytest.skip("No frozen ruler committed")
+
+    state_name = "Telangana"
+    id_frame = pd.DataFrame(
+        {"state": [state_name], "district": ["A"], "district_key": ["a"]}
+    )
+    incomplete_slug = spec.headline_metric_slugs[0]
+    for slug in spec.headline_metric_slugs:
+        df = id_frame.copy()
+        for scenario, period in _HEAT_RISK_RULER_SLICES:
+            if slug == incomplete_slug and scenario == "historical":
+                continue
+            df[f"{slug}__{scenario}__{period}__mean"] = [25.0]
+        _write_component_master(
+            tmp_path,
+            slug=slug,
+            state_name=state_name,
+            filename="master_metrics_by_district.csv",
+            df=df,
+        )
+
+    with pytest.raises(ValueError, match="missing declared slice.*historical/1990-2010"):
+        compute_composite_master_frame(
+            spec,
+            level="district",
+            state_name=state_name,
+            data_dir=tmp_path,
+        )
