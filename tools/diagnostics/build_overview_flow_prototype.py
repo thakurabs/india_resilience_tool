@@ -1,32 +1,40 @@
-"""Overview flow prototype — the two-level national screening workflow as one
-self-contained HTML page (CHG-0385).
+"""Overview flow prototype — the national screening workflow as one
+self-contained HTML page (CHG-0385, extended by CHG-0392 and CHG-0393).
 
 This is a *workflow* prototype for vendor handoff, not a data product. It renders
 the flow specified by ``recommended_target_workflow.md`` section 1-8 so the
 interaction contract can be judged and implemented:
 
-    India view   districts painted, State/UTs ranked, State/UT means binned
+    India view      districts painted, State/UTs ranked, State/UT means binned
         -> select a State/UT
-    State view   districts painted, districts ranked, district scores binned
-        -> select a district   (inspection state; no breadcrumb level)
+    State view      blocks painted, districts ranked, district scores binned
+        -> select a district
+    District view   that district's blocks painted and zoomed; ranking and
+                    distribution inherited from the State, because blocks are
+                    never ranked at any scope
+        -> select a block  (inspection state; no breadcrumb level)
 
 Everything about the score is frozen, exactly as in
 ``tools.diagnostics.build_heat_risk_frozen_map``: the ``cdf`` ruler, the
 ``composite_absolute_threshold`` headline, the ``0-100`` domain and the vendored
 ``WhiteBlueGreenYellowRed`` table. The ``linear`` ruler is not implemented and is
 never exposed. This tool re-scores nothing; it reads the pilot's
-``district_scores.csv``.
+``district_scores.csv`` and ``telangana_block_scores.csv``.
+
+The colourbar carries both A10 mitigations for a fixed domain: an always-on
+bracket marking the range present in the current view, and an opt-in
+``Local contrast`` view that stretches the *map fill only* to the extent of the
+painted units. That extent is recomputed on every render and never stored --
+precomputing it per State/UT would be per-state min-max in a new hat.
 
 Two honest departures from the target spec, both surfaced in the page itself:
 
-- **The State view paints districts, not blocks.** The spec's State view paints
-  block composite scores. The pilot has never scored blocks, so there are no
-  block values to paint. Rather than fabricate them, the State view runs in the
-  spec's ``District fill`` mode and says so. Every interaction under test --
-  drill-down, inspection, histogram binning, bin filtering, breadcrumb,
-  Detailed Analysis handoff -- is unaffected.
+- **Only Telangana opens below the national view.** Its 588 blocks are the only
+  blocks scored on the frozen ruler, so every other State/UT hovers normally but
+  is not selectable. One worked State/UT demonstrates the whole flow.
 - **Detailed Analysis is a stub.** The transition and the state it carries are
-  real; the destination is a panel that displays that state and nothing more.
+  real, including the selected driver metric; the destination is a panel that
+  displays that state and nothing more.
 
 Only Heat Risk carries data. The other twelve eligible bundles appear in the
 selector as disabled options so the intended screening surface is visible
@@ -522,12 +530,30 @@ PAGE_TEMPLATE = r"""<!doctype html>
                    max-width: 1500px; margin: 0 auto; }
   .defaults-note b { color: var(--ink-2); font-weight: 600; }
 
-  nav.crumbs { max-width: 1500px; margin: 0 auto; padding: 10px 20px 12px;
-               display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  /* The breadcrumb rides in the map's top-right corner, on the thing it
+     describes, rather than in the header above the selector row. */
+  nav.crumbs { position: absolute; top: 10px; right: 10px; z-index: 4;
+               max-width: min(58%, 400px);
+               display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
+               font-size: 12.5px; background: rgba(255,255,255,.93);
+               border: 1px solid var(--rule); border-radius: 8px;
+               padding: 6px 11px; box-shadow: 0 1px 4px rgba(16,32,44,.11); }
   .crumb { background: none; border: 0; font: inherit; color: var(--accent);
            cursor: pointer; padding: 2px 0; }
   .crumb[aria-current] { color: var(--ink); font-weight: 600; cursor: default; }
   .crumb-sep { color: var(--ink-3); }
+  .crumb-note { flex-basis: 100%; font-size: 11px; color: var(--ink-3); line-height: 1.35; }
+
+  /* ---- local-contrast view (off by default, never the landing state) ---- */
+  .lc { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
+        color: var(--ink-2); cursor: pointer; }
+  .lc input { margin: 0; cursor: pointer; }
+  .lc input:disabled { cursor: not-allowed; }
+  .lc.off { color: var(--ink-3); cursor: not-allowed; }
+  .lc-on { color: var(--warn-ink); font-weight: 650; }
+  .cbar-warn { margin: 7px 0 0; font-size: 11.5px; color: var(--warn-ink);
+               background: var(--warn-bg); border: 1px solid var(--warn-line);
+               border-radius: 6px; padding: 7px 10px; line-height: 1.45; }
 
   .banner { display: flex; gap: 10px; align-items: flex-start; background: var(--warn-bg);
             border: 1px solid var(--warn-line); color: var(--warn-ink);
@@ -713,7 +739,6 @@ PAGE_TEMPLATE = r"""<!doctype html>
     </div>
   </div>
   <p class="defaults-note" id="defaults-note"></p>
-  <nav class="crumbs" id="crumbs" aria-label="Geography"></nav>
 </header>
 
 <div class="wrap">
@@ -739,6 +764,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
           <span class="sub" id="map-sub"></span>
         </div>
         <div class="mapwrap">
+          <nav class="crumbs" id="crumbs" aria-label="Geography"></nav>
           <svg class="map" id="map" preserveAspectRatio="xMidYMid meet" role="img"
                aria-label="Choropleth of district bundle scores"></svg>
         </div>
@@ -749,8 +775,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
           <div class="cbar-foot">
             <span><span class="swatch" style="background:#d5d8dc"></span>No valid data</span>
             <span id="cbar-range"></span>
-            <span>Domain fixed 0–100 · never rescaled by selection</span>
+            <span id="cbar-domain">Domain fixed 0–100 · never rescaled by selection</span>
+            <label class="lc" id="lc-label" for="lc-toggle">
+              <input type="checkbox" id="lc-toggle"> Local contrast
+            </label>
           </div>
+          <p class="cbar-warn" id="cbar-warn" hidden></p>
         </div>
       </div>
 
@@ -806,6 +836,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     block: null,
     pinned: null,
     showAll: false,
+    local: false,          /* the local-contrast view; opt-in, never the landing state */
     da: null
   };
 
@@ -840,6 +871,17 @@ PAGE_TEMPLATE = r"""<!doctype html>
     return D.ramp[i];
   }
   function fmt(v) { return (v === undefined || v === null || isNaN(v)) ? "—" : v.toFixed(1); }
+
+  /* Local contrast is a *view extent*: recomputed from the visible scores on
+     every render, never stored, never precomputed per State/UT into the
+     artifact. See composite_scale_decisions.md A10 — the moment this becomes a
+     stored parameter it is per-state min-max again, wearing a different hat. */
+  var LX = { on: false, lo: 0, hi: 100 };
+  function mapColour(v) {
+    if (v === undefined || v === null || isNaN(v)) return D.missing;
+    if (!LX.on) return colour(v);
+    return colour(((v - LX.lo) / (LX.hi - LX.lo)) * 100);
+  }
 
   /* Displayed score per row, widened only where 1dp would make two unequal
      scores look identical and so make the rank order unexplainable. Genuine
@@ -1029,7 +1071,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
       var p = nodes[d.k];
       p.style.display = "";
       if (national) {
-        p.setAttribute("fill", colour(dsc[d.k]));
+        p.setAttribute("fill", mapColour(dsc[d.k]));
         p.classList.remove("out");
         p.classList.toggle("locked", !isLive(d.s));
         p.classList.toggle("muted", emphDistricts !== null && !emphDistricts[d.k]);
@@ -1047,7 +1089,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
       var p = nodes["B:" + b.k];
       if (national) { p.style.display = "none"; return; }
       p.style.display = "";
-      p.setAttribute("fill", colour(bsc[b.k]));
+      p.setAttribute("fill", mapColour(bsc[b.k]));
       var parentEmph = emphDistricts === null || emphDistricts[b.dk];
       var inDistrict = S.view !== "district" || b.dk === S.district;
       p.classList.toggle("muted", !parentEmph || !inDistrict);
@@ -1166,6 +1208,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
   function goIndia() {
     S.view = "india"; S.state = null; S.district = null; S.block = null;
     S.pinned = null; S.showAll = false; S.da = null;
+    S.local = false;        /* the landing state is always the frozen domain */
     render();
   }
   function goState() {
@@ -1182,8 +1225,31 @@ PAGE_TEMPLATE = r"""<!doctype html>
     render();
   }
 
+  /* The units this view actually paints, sorted. The colourbar bracket and the
+     local-contrast extent both read exactly this set — the painted units, not
+     the ranked ones. */
+  function paintedValues() {
+    var vals = [], noun;
+    if (S.view === "india") {
+      var sc = dScores();
+      noun = "districts";
+      D.districts.forEach(function (d) {
+        var v = sc[d.k]; if (v !== undefined) vals.push(v);
+      });
+    } else {
+      var bsc = bScores();
+      noun = "blocks";
+      D.blocks.forEach(function (b) {
+        if (S.view === "district" && b.dk !== S.district) return;
+        var v = bsc[b.k]; if (v !== undefined) vals.push(v);
+      });
+    }
+    vals.sort(function (a, b) { return a - b; });
+    return { vals: vals, noun: noun };
+  }
+
   /* ================= histogram ================= */
-  function renderHistogram() {
+  function renderHistogram(pv) {
     var rows = cohort();
     var counts = new Array(10).fill(0);
     var members = []; for (var i = 0; i < 10; i++) members.push([]);
@@ -1257,54 +1323,72 @@ PAGE_TEMPLATE = r"""<!doctype html>
     }
 
     /* the painted units, as plain figures rather than a second chart */
-    var vals = [], noun;
-    if (S.view === "india") {
-      var sc = dScores();
-      noun = "districts";
-      D.districts.forEach(function (d) {
-        var v = sc[d.k]; if (v !== undefined) vals.push(v);
-      });
-    } else {
-      var bsc = bScores();
-      noun = "blocks";
-      D.blocks.forEach(function (b) {
-        if (S.view === "district" && b.dk !== S.district) return;
-        var v = bsc[b.k]; if (v !== undefined) vals.push(v);
-      });
-    }
-    vals.sort(function (a, b) { return a - b; });
+    var vals = pv.vals, noun = pv.noun;
     var med = vals.length ? (vals.length % 2 ? vals[(vals.length - 1) / 2]
               : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2) : NaN;
     document.getElementById("painted").textContent =
       "Painted: " + vals.length + " " + noun + " · median " + fmt(med) +
       " · min–max " + fmt(vals[0]) + "–" + fmt(vals[vals.length - 1]);
-    return vals;
   }
 
   /* ================= colourbar ================= */
   function renderColourbar(vals) {
     var strip = document.getElementById("cbar-strip");
     strip.style.background = "linear-gradient(to right," + D.ramp.join(",") + ")";
+
+    /* Ticks carry the domain. Frozen: 0-100. Local contrast: the visible
+       extent, so the reader can see what the stretched ramp now means. */
     var ticks = document.getElementById("cbar-ticks");
-    if (!ticks.childNodes.length) {
-      [0, 20, 40, 60, 80, 100].forEach(function (t) {
-        var s = document.createElement("span");
-        s.textContent = t; s.style.left = t + "%";
-        ticks.appendChild(s);
-      });
-    }
+    ticks.innerHTML = "";
+    [0, 20, 40, 60, 80, 100].forEach(function (t) {
+      var s = document.createElement("span");
+      s.textContent = LX.on ? fmt(LX.lo + (LX.hi - LX.lo) * t / 100) : String(t);
+      s.style.left = t + "%";
+      ticks.appendChild(s);
+    });
+
+    /* The bracket exists to say "this view is narrow, not broken". Under local
+       contrast the bracket is the whole bar, so it carries no information and
+       is dropped. */
     var br = document.getElementById("cbar-bracket");
-    if (vals.length) {
+    if (vals.length && !LX.on) {
       br.style.display = "";
       br.style.left = vals[0] + "%";
       br.style.width = Math.max(0.6, vals[vals.length - 1] - vals[0]) + "%";
-      document.getElementById("cbar-range").textContent =
-        "Range in view " + fmt(vals[0]) + "–" + fmt(vals[vals.length - 1]);
     } else {
       br.style.display = "none";
-      document.getElementById("cbar-range").textContent = "";
     }
-    document.getElementById("cbar-title").textContent = S.bundle + " score";
+    document.getElementById("cbar-range").textContent = vals.length
+      ? "Range in view " + fmt(vals[0]) + "–" + fmt(vals[vals.length - 1]) +
+        " · " + fmt(vals[vals.length - 1] - vals[0]) + " wide"
+      : "";
+
+    var dom = document.getElementById("cbar-domain");
+    dom.textContent = LX.on
+      ? "Domain stretched to this view — not comparable"
+      : "Domain fixed 0–100 · never rescaled by selection";
+    dom.className = LX.on ? "lc-on" : "";
+
+    var span = vals.length ? vals[vals.length - 1] - vals[0] : 0;
+    var lc = document.getElementById("lc-toggle");
+    lc.checked = !!S.local;
+    lc.disabled = !(vals.length > 1 && span > 0);
+    document.getElementById("lc-label").className = "lc" + (lc.disabled ? " off" : "");
+
+    var warn = document.getElementById("cbar-warn");
+    warn.hidden = !LX.on;
+    if (LX.on) {
+      warn.innerHTML =
+        "<b>Local contrast is on — colours are not comparable.</b> The ramp is " +
+        "stretched to the " + vals.length + " painted " +
+        (S.view === "india" ? "districts" : "blocks") + " in this view (" +
+        fmt(LX.lo) + "–" + fmt(LX.hi) + "), so the same colour means a different " +
+        "score here than in any other selection, period or scenario. The scores " +
+        "are unchanged: this is a view extent, not a normalization. The " +
+        "distribution and the ranking stay on the frozen 0–100 ruler.";
+    }
+    document.getElementById("cbar-title").textContent =
+      S.bundle + " score" + (LX.on ? " — local contrast (not comparable)" : "");
   }
 
   /* ================= answer card ================= */
@@ -1532,10 +1616,9 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (S.view === "district") { sep(); crumb(byKey[S.district].n, true, null); }
     if (S.block && blockByKey[S.block]) {
       var note = document.createElement("span");
-      note.className = "crumb-sep";
-      note.style.cssText = "margin-left:10px;font-size:12px";
-      note.textContent = "· inspecting " + blockByKey[S.block].n +
-        " (an inspection state — it adds no breadcrumb level)";
+      note.className = "crumb-note";
+      note.textContent = "Inspecting " + blockByKey[S.block].n +
+        " — an inspection state; it adds no breadcrumb level.";
       host.appendChild(note);
     }
   }
@@ -1564,11 +1647,18 @@ PAGE_TEMPLATE = r"""<!doctype html>
   }
 
   function render() {
+    /* extent first: paintMap() reads it, so it cannot be a by-product of the
+       histogram the way the bracket range used to be */
+    var pv = paintedValues();
+    LX.lo = pv.vals.length ? pv.vals[0] : 0;
+    LX.hi = pv.vals.length ? pv.vals[pv.vals.length - 1] : 100;
+    LX.on = !!S.local && pv.vals.length > 1 && LX.hi > LX.lo;
+
     renderCrumbs();
     renderMapHead();
     paintMap();
-    var vals = renderHistogram();
-    renderColourbar(vals);
+    renderHistogram(pv);
+    renderColourbar(pv.vals);
     renderHeadline();
     renderRanking();
     renderInspection();
@@ -1631,6 +1721,10 @@ PAGE_TEMPLATE = r"""<!doctype html>
     S.pinned = null; render();
   });
 
+  document.getElementById("lc-toggle").addEventListener("change", function (ev) {
+    S.local = ev.target.checked; render();
+  });
+
   buildSelectors();
   renderDefaultsNote();
   renderMethod();
@@ -1658,11 +1752,33 @@ resilience, and scores are not comparable between bundles.</p>
       absolute physical thresholds or levels, weights renormalized 0.633 &rarr; 1.000 within the
       half. The five baseline-referenced metrics are excluded from the headline by decision.</li>
   <li><b>Domain</b> fixed <code>0-100</code>. It does not rescale when bundle, scenario, period
-      or selection changes, so identical colours mean identical scores everywhere.</li>
+      or selection changes, so identical colours mean identical scores everywhere — outside the
+      labelled local-contrast view below.</li>
   <li><b>Ramp</b> the vendored NCL <code>WhiteBlueGreenYellowRed</code> table, sampled at 101 stops
       from fraction 0.045 so no valid score renders as pure white. Colour is
       <code>index = round(score)</code>, with no binning.</li>
 </ul>
+
+<h3>The range bracket and the local-contrast view</h3>
+<p>A fixed domain means a genuinely narrow view renders nearly monochrome, which is correct but
+reads as broken. Two things address that, and <b>neither touches the score</b>:</p>
+<ul>
+  <li><b>The bracket</b> on the colourbar, always on, marking the score range present in the
+      current view with a numeric readout. A State/UT whose blocks span two points should read as
+      narrow, not as broken.</li>
+  <li><b>Local contrast</b>, off by default and never the landing state: the ramp is stretched to
+      the extent of the units this view paints, the colourbar ticks change to that extent, and the
+      view is labelled as not comparable. Returning to India clears it.</li>
+</ul>
+<p>Local contrast is a <b>view extent, not a normalization parameter</b>. It is recomputed from the
+visible scores on every render and is never stored or precomputed per State/UT — the moment it
+were, it would be per-state min&ndash;max again under a different name, which is the thing the
+frozen ruler exists to remove.</p>
+<p>Rescaling the <i>default</i> colourbar to the on-screen range was considered and rejected: it
+reintroduces per-state min&ndash;max at the legend instead of at the score. At SSP5-8.5 2040-2060
+a score of 66.2 would be deep red in Goa and yellow in Uttar Pradesh, and Ladakh's 1.8-point spread
+would be painted across the whole ramp. Only the map fill responds to local contrast; the
+distribution and the ranking stay on the frozen ruler.</p>
 
 <h3>The State/UT statistic</h3>
 <p>The <b>area-weighted mean of a State/UT's valid district composite scores</b> — the only State

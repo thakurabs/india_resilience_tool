@@ -1,10 +1,10 @@
 /**
- * Smoke check for the Overview flow prototype (CHG-0385/0392).
+ * Smoke check for the Overview flow prototype (CHG-0385/0392/0393).
  *
  * Walks the full three-level flow once -- national view, State-level tooltip,
  * the locked-State tooltip, drill to the live State, drill to a district, block
- * inspection, a driver route into Detailed Analysis, a pinned histogram bin, and
- * a slice change -- screenshotting each step and failing loudly on any console
+ * inspection, a driver route into Detailed Analysis, the local-contrast view, a
+ * pinned histogram bin, and a slice change -- screenshotting each step and failing loudly on any console
  * or page error. It asserts nothing about the numbers; it exists so a rebuild
  * cannot ship a page whose interactions are broken.
  *
@@ -40,6 +40,19 @@ console.log('state headline :', line(await p.locator('#headline').innerText()).s
 console.log('state painted  :', await p.locator('#painted').innerText());
 await p.screenshot({ path: out + '/02-state.png', fullPage: true });
 
+// local contrast: map fill stretches, ticks leave 0-100, the frozen state returns
+const tick0 = () => p.locator('#cbar-ticks span').first().innerText();
+const fill0 = () => p.locator('#g-block path').first().getAttribute('fill');
+console.log('frozen tick/fill:', await tick0(), await fill0());
+await p.locator('#lc-toggle').check();
+await p.waitForTimeout(500);
+console.log('local tick/fill :', await tick0(), await fill0());
+console.log('local warn      :', line(await p.locator('#cbar-warn').innerText()).slice(0, 140));
+await p.screenshot({ path: out + '/02b-local-contrast.png', fullPage: true });
+await p.locator('#lc-toggle').uncheck();
+await p.waitForTimeout(400);
+console.log('back to frozen  :', await tick0(), await fill0());
+
 // drill to a district
 await p.locator('#ranking tbody tr').first().click();
 await p.waitForTimeout(700);
@@ -70,9 +83,16 @@ await p.waitForTimeout(500);
 console.log('filterbar      :', line(await p.locator('#filterbar').innerText()));
 await p.screenshot({ path: out + '/06-pinned.png', fullPage: true });
 
-// back to India and change slice
-await p.locator('#crumbs button').first().click();
+// returning to India must clear local contrast: it is never the landing state
+await p.locator('#lc-toggle').check();
 await p.waitForTimeout(400);
+await p.locator('#crumbs button').first().click();
+await p.waitForTimeout(500);
+console.log('india lc state :', await p.locator('#lc-toggle').isChecked(),
+            '| domain:', line(await p.locator('#cbar-domain').innerText()));
+
+// change slice
+
 await p.selectOption('#sel-scenario', 'ssp245');
 await p.selectOption('#sel-period', '2060-2080');
 await p.waitForTimeout(700);
