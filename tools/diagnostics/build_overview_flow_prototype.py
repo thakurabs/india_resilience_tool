@@ -1573,6 +1573,8 @@ PAGE_TEMPLATE = r"""<!doctype html>
       if (cmpIdentity(member) === selectedId) return;
       var path = null, visible = false;
       if (member.level === "State/UT") {
+        /* A drilled viewport contains only its active State/UT. Other compared
+           States deliberately remain tray-only until the user returns to India. */
         path = D.state_paths[member.key]; visible = national;
       } else if (member.level === "District" && byKey[member.key]) {
         path = byKey[member.key].d;
@@ -2126,13 +2128,13 @@ PAGE_TEMPLATE = r"""<!doctype html>
     return { scenario: D.scenario_labels[parts[0]] || parts[0],
              period: D.period_labels[parts[1]] || parts[1] };
   }
-  function cmpRankText(member, facts, baseFacts, futures) {
+  function cmpRankText(member, facts, baseFacts, compareToBase) {
     if (member.level === "Block") return "Blocks are not ranked at any scope";
     if (facts.rank === null || facts.rank === undefined) return "Rank not available";
     var scope = member.level === "State/UT"
       ? facts.rank + " of " + facts.total + " in India"
       : facts.rank + " of " + facts.total + " in " + member.parent;
-    if (!futures || !baseFacts || baseFacts.rank === null || baseFacts.rank === undefined) {
+    if (!compareToBase || !baseFacts || baseFacts.rank === null || baseFacts.rank === undefined) {
       return scope;
     }
     var move = facts.rank - baseFacts.rank;
@@ -2205,10 +2207,13 @@ PAGE_TEMPLATE = r"""<!doctype html>
       "<p><b>Active bundle:</b> " + esc(S.bundle) + " · " +
         (futures
           ? "Futures mode fixes " + esc(S.cmp.subject.name) + " (" +
-            esc(S.cmp.subject.level) + ") while scenario and period vary."
+            esc(S.cmp.subject.level) + "). Each column keeps its named scenario-period slice; " +
+            "the page header selectors update the rest of Overview without rewriting this tray."
           : "Places mode fixes " + esc(D.scenario_labels[S.scenario]) + " · " +
             esc(D.period_labels[S.period]) + " while locations vary.") +
         " Members are retained when the bundle changes; every figure is replaced by the active bundle." +
+        " Map outlines appear only for tray members inside the current geography; off-view members " +
+        "remain listed here." +
       "</p></div>" + modeControls + "</div>";
 
     var nvalid = facts.map(function (f) { return f.nvalid; })
@@ -2216,9 +2221,11 @@ PAGE_TEMPLATE = r"""<!doctype html>
     var nvalidKinds = {};
     nvalid.forEach(function (n) { nvalidKinds[n] = 1; });
     if (futures && Object.keys(nvalidKinds).length > 1) {
+      var coverageUnit = S.cmp.subject.level === "State/UT"
+        ? "districts in the State/UT mean" : "members in the rank cohort";
       html += "<p class='cmp-alert'><b>Coverage warning:</b> <code>n_valid</code> differs across " +
-        "slices (" + nvalid.join(", ") + "). Rank movement is shown with this denominator " +
-        "difference exposed; do not read it as clean movement.</p>";
+        "slices (" + nvalid.join(", ") + " " + coverageUnit + "). Rank movement is shown with " +
+        "this denominator difference exposed; do not read it as clean movement.</p>";
     }
 
     if (!slots.length) {
@@ -2251,6 +2258,9 @@ PAGE_TEMPLATE = r"""<!doctype html>
           fmt(f.score) + "</strong> " + (f.score === null ? "" : bandPill(f.score)) + "</span>";
       });
       html += row("", function (slot, f, i) {
+        if (i === 0) {
+          return "<span class='lab'>Δ vs column 1</span><span class='val'>Baseline</span>";
+        }
         var delta = facts[0].score === null || f.score === null ? null : f.score - facts[0].score;
         var deltaText = delta === null ? "—" : (Math.abs(delta) < 0.0000001 ? "0.0" :
           (delta > 0 ? "+" : "") + delta.toFixed(1)) + " scale points";
@@ -2258,11 +2268,14 @@ PAGE_TEMPLATE = r"""<!doctype html>
           "<span class='cmp-note'>A difference in national percentile position, never a physical " +
           "difference, percentage, or multiple.</span>";
       });
-      html += row("", function (slot, f) {
+      html += row("", function (slot, f, i) {
+        var coverage = f.nvalid === null || f.nvalid === undefined ? ""
+          : slot.member.level === "State/UT"
+            ? f.nvalid + " districts in the mean"
+            : "cohort n_valid " + f.nvalid;
         return "<span class='lab'>Rank · scoped cohort</span><span class='val'>" +
-          esc(cmpRankText(slot.member, f, facts[0], futures)) + "</span>" +
-          (f.nvalid === null || f.nvalid === undefined ? "" :
-            "<span class='cmp-note'>n_valid " + f.nvalid + "</span>");
+          esc(cmpRankText(slot.member, f, facts[0], futures && i > 0)) + "</span>" +
+          (coverage ? "<span class='cmp-note'>" + esc(coverage) + "</span>" : "");
       });
       html += row("", function (slot, f) {
         return "<span class='lab'>Blocks · range + count</span><span class='val'>" +
@@ -2758,9 +2771,11 @@ filtered subset.</p>
 <h3>Compare locations</h3>
 <p>The comparison tray uses the same frozen national ruler and varies one axis at a time. Places
 mode fixes the header scenario and period while locations vary; futures mode fixes one place while
-scenario-period slices vary. The tray holds at most four columns and survives geography, view,
-selector and bundle changes. Its face always names the active bundle, because scores from different
-bundles are never compared.</p>
+independently pinned scenario-period slices vary. In futures mode the page header selectors continue
+to update the rest of Overview but do not rewrite those pinned columns. The tray holds at most four
+columns and survives geography, view, selector and bundle changes. Its face always names the active
+bundle, because scores from different bundles are never compared. Map outlines appear only for tray
+members inside the current geography; off-view members remain in the tray without an outline.</p>
 <p>Ranks remain scoped to their real cohort. Places mode shows each rank only as a scoped string,
 never as an orderable cross-State number. Futures mode may show movement for the fixed cohort and
 exposes any change in <code>n_valid</code>. Blocks are never ranked. Every score difference is in
