@@ -524,7 +524,7 @@ HYDRO_NUM_FIELDS: tuple[tuple[str, str], ...] = (
 #: reader never has to guess what a number is or when it was measured.
 CONTEXT_PROVENANCE: dict[str, str] = {
     "population": "Population: WorldPop-derived admin master, 2025 snapshot",
-    "facilities": "Rural facilities: Mission Antyodaya, 2019–2021 snapshot",
+    "facilities": "Rural facilities: Mission Antyodaya, 2019–2021 snapshot. The per-100k rate divides RURAL facilities by TOTAL population, so units with large urban populations read low by construction — compare it across rural geographies, never city against countryside.",
     "built_up": "Built-up area: LULC-derived admin master, current snapshot",
     "lulc": "Agricultural LULC: LULC-derived admin master, current snapshot",
     "hydro": "Basins and rivers: IRT hydrology crosswalk over the admin roster",
@@ -2636,7 +2636,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (rf !== null) {
       html += "<div class='ctx-grid' style='margin-top:10px'>" +
         cxCell("Rural facilities", rf) +
-        cxCell("Per 100k people", cxRate(row.rf_per100k)) +
+        cxCell("Per 100k population (rural facilities)", cxRate(row.rf_per100k)) +
         "</div>" +
         "<div class='ctx-grid four' style='margin-top:8px'>" +
         cxCell("Agro", cxCount(row.rf_agro)) +
