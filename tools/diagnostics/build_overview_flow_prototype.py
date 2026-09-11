@@ -825,6 +825,8 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .blk { stroke: var(--fine); stroke-opacity: .45; stroke-width: .4px; cursor: pointer; }
   .stroke-coarse { fill: none; stroke: var(--coarse); stroke-opacity: .95; stroke-width: 1.9px;
                    pointer-events: none; }
+  .cmp-stroke { fill: none; stroke: #7b3fa0; stroke-opacity: .95; stroke-width: 2.2px;
+                pointer-events: none; }
   .sel-stroke { fill: none; stroke: var(--accent); stroke-opacity: 1; stroke-width: 2.6px;
                 pointer-events: none; }
   .maphead { display: flex; align-items: baseline; gap: 10px; padding: 4px 6px 10px; flex-wrap: wrap; }
@@ -882,6 +884,8 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .btn { font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 7px;
          border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
   .btn.ghost { background: #fff; color: var(--accent); }
+  .btn:disabled { border-color: #b7c0ca; background: #eef1f4; color: var(--ink-3);
+                  cursor: not-allowed; }
   .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .btn-row { display: flex; gap: 9px; margin-top: 14px; flex-wrap: wrap; }
 
@@ -923,6 +927,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .rk { color: var(--ink-3); font-variant-numeric: tabular-nums; width: 34px; }
   .sc { font-variant-numeric: tabular-nums; font-weight: 600; }
   .bandcell { font-size: 11px; color: var(--ink-3); }
+  .cmp-cell { width: 1%; white-space: nowrap; text-align: right; }
+  .cmp-mini { min-width: 27px; padding: 3px 7px; border: 1px solid #7b3fa0;
+              border-radius: 5px; background: #fff; color: #7b3fa0; font: inherit;
+              font-size: 11px; font-weight: 650; cursor: pointer; }
+  .cmp-mini:disabled { border-color: #b7c0ca; background: #eef1f4; color: var(--ink-3);
+                       cursor: not-allowed; }
 
   /* ---- inspection ---- */
   .insp { border-left: 3px solid var(--accent); }
@@ -935,6 +945,44 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .stub { background: #f7f9fb; border: 1px dashed #c6cfd8; border-radius: 8px;
           padding: 12px 14px; font-size: 12.5px; color: var(--ink-2); }
   .stub h3 { margin: 0 0 8px; font-size: 13px; }
+
+  /* ---- Compare locations (CHG-0412..0416) ---- */
+  .compare { border-top: 3px solid #7b3fa0; margin-top: 2px; }
+  .cmp-head { display: flex; align-items: flex-start; justify-content: space-between;
+              gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .cmp-head h2 { margin: 0 0 3px; font-size: 15px; }
+  .cmp-head p { margin: 0; font-size: 12px; color: var(--ink-3); }
+  .cmp-mode { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cmp-mode label { display: flex; flex-direction: column; gap: 2px; font-size: 10px;
+                    text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); }
+  .cmp-mode select { font: inherit; font-size: 12px; padding: 5px 7px; border: 1px solid var(--rule);
+                     border-radius: 6px; background: #fff; color: var(--ink); }
+  .cmp-scroll { overflow-x: auto; padding-bottom: 3px; }
+  .cmp-table { width: 100%; }
+  .cmp-row { display: grid; grid-template-columns: repeat(var(--cmp-cols), minmax(0, 1fr)); }
+  .cmp-row + .cmp-row { border-top: 1px solid var(--rule); }
+  .cmp-row.cmp-headers { background: #f8f5fa; border: 1px solid #e1d4e8;
+                         border-radius: 8px 8px 0 0; }
+  .cmp-row.cmp-headers + .cmp-row { border-top: 0; }
+  .cmp-slot { min-width: 0; padding: 10px 12px; border-left: 1px solid var(--rule); }
+  .cmp-slot:first-child { border-left: 0; }
+  .cmp-slot .lab { display: block; margin-bottom: 3px; font-size: 10px; font-weight: 650;
+                   text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+  .cmp-slot .val { font-size: 13px; color: var(--ink); }
+  .cmp-slot .val strong { font-size: 20px; letter-spacing: -.01em; }
+  .cmp-place { display: block; font-weight: 650; font-size: 15px; }
+  .cmp-parent { display: block; color: var(--ink-3); font-size: 11.5px; }
+  .cmp-note { display: block; margin-top: 3px; color: var(--ink-3); font-size: 11px;
+              line-height: 1.4; }
+  .cmp-alert { margin: 0 0 10px; padding: 7px 10px; border-radius: 6px;
+               border: 1px solid var(--warn-line); background: var(--warn-bg);
+               color: var(--warn-ink); font-size: 11.5px; }
+  .cmp-driver { display: inline-block; margin: 2px 5px 2px 0; padding: 3px 7px;
+                border: 1px solid var(--rule); border-radius: 999px; font-size: 11.5px; }
+  .cmp-driver.shared { border-color: #7b3fa0; background: #f4edf8; color: #663481;
+                       font-weight: 650; }
+  .cmp-driver.unique { background: #fff; color: var(--ink-2); }
+  .cmp-actions { display: flex; gap: 7px; flex-wrap: wrap; }
 
 
   /* ---- Context and Evidence (CHG-0401) ---- */
@@ -1077,6 +1125,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
       </div>
     </div>
   </div>
+  <div id="compare"></div>
 </div>
 
 <div id="tip" aria-hidden="true"></div>
@@ -1103,6 +1152,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     showAll: false,
     local: false,          /* the local-contrast view; opt-in, never the landing state */
     ctxOpen: false,        /* Context and Evidence is collapsed on arrival, by contract */
+    cmp: { mode: "places", members: [], subject: null, slices: [] },
     da: null
   };
 
@@ -1177,6 +1227,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
   }
   function esc(s) { return String(s).replace(/[&<>]/g, function (c) {
     return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
+  function escAttr(s) { return esc(s).replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function metricLabel(slug) { return D.metric_labels[slug] || slug; }
 
   /* ---------- competition ranks over the current cohort ---------- */
@@ -1193,8 +1244,8 @@ PAGE_TEMPLATE = r"""<!doctype html>
     return null;
   }
 
-  function rankedDistricts(state) {
-    var sc = dScores();
+  function rankedDistrictsIn(state, sid) {
+    var sc = D.district_scores[sid] || {};
     var rows = (statesOf[state] || []).map(function (d) {
       return { key: d.k, name: d.n, state: d.s, score: sc[d.k] };
     }).filter(function (r) { return r.score !== undefined; });
@@ -1206,6 +1257,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     });
     return rows;
   }
+  function rankedDistricts(state) { return rankedDistrictsIn(state, sliceId()); }
   function rankedStates() {
     var st = sStats();
     var rows = Object.keys(st).map(function (name) {
@@ -1223,6 +1275,124 @@ PAGE_TEMPLATE = r"""<!doctype html>
      and binning its parent State/UT's districts. */
   function cohort() {
     return S.view === "india" ? rankedStates() : rankedDistricts(S.state);
+  }
+
+  /* ---------- persistent comparison tray ---------- */
+  function cmpIdentity(member) { return member.level + ":" + member.key; }
+  function cmpMemberIndex(member) {
+    var id = cmpIdentity(member);
+    for (var i = 0; i < S.cmp.members.length; i++) {
+      if (cmpIdentity(S.cmp.members[i]) === id) return i;
+    }
+    return -1;
+  }
+  function makeCmpMember(level, key) {
+    if (level === "State/UT") {
+      return D.state_paths[key] === undefined ? null
+        : { level: level, key: key, name: key, parent: "India" };
+    }
+    if (level === "District") {
+      var d = byKey[key];
+      return d ? { level: level, key: d.k, name: d.n, parent: d.s } : null;
+    }
+    if (level === "Block") {
+      var b = blockByKey[key], p = b ? byKey[b.dk] : null;
+      return b ? { level: level, key: b.k, name: b.n,
+                   parent: (p ? p.n + " · " : "") + b.s } : null;
+    }
+    return null;
+  }
+  function cmpControl(member, compact) {
+    var present = cmpMemberIndex(member) >= 0;
+    var disabled = false, label, title;
+    if (S.cmp.mode === "futures") {
+      disabled = true;
+      label = compact ? "Fixed" : "Place fixed";
+      title = "Add-to-compare controls are disabled in futures mode because the place is fixed.";
+    } else if (!present && S.cmp.members.length >= 4) {
+      disabled = true;
+      label = "Tray full (4)";
+      title = "The comparison tray holds at most four places.";
+    } else {
+      label = present ? (compact ? "−" : "Remove") : (compact ? "+" : "Add");
+      title = (present ? "Remove " : "Add ") + member.name +
+        (present ? " from" : " to") + " the comparison tray";
+    }
+    return "<button type='button' class='" + (compact ? "cmp-mini" : "btn ghost") +
+      " cmp-toggle' data-cmp-level='" + escAttr(member.level) + "' data-cmp-key='" +
+      escAttr(member.key) + "' title='" + escAttr(title) + "' aria-label='" +
+      escAttr(title) + "'" +
+      (disabled ? " disabled" : "") + ">" + esc(label) + "</button>";
+  }
+  function wireCmpControls(host) {
+    var buttons = host.querySelectorAll(".cmp-toggle");
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        var member = makeCmpMember(ev.currentTarget.dataset.cmpLevel,
+                                   ev.currentTarget.dataset.cmpKey);
+        if (!member || S.cmp.mode !== "places") return;
+        var at = cmpMemberIndex(member);
+        if (at >= 0) S.cmp.members.splice(at, 1);
+        else if (S.cmp.members.length < 4) S.cmp.members.push(member);
+        render();
+      });
+    }
+  }
+  function enterFutures(member) {
+    S.cmp.mode = "futures";
+    S.cmp.subject = member;
+    S.cmp.members = [member];
+    S.cmp.slices = Object.keys(D.period_labels).map(function (period) {
+      return S.scenario + "|" + period;
+    }).slice(0, 4);
+    render();
+  }
+  function leaveFutures() {
+    S.cmp.mode = "places";
+    S.cmp.members = S.cmp.subject ? [S.cmp.subject] : [];
+    S.cmp.subject = null;
+    S.cmp.slices = [];
+    render();
+  }
+  function cmpRange(blocks, scores) {
+    var vals = [];
+    blocks.forEach(function (b) {
+      var v = scores[b.k];
+      if (v !== undefined && v !== null && !isNaN(v)) vals.push(v);
+    });
+    vals.sort(function (a, b) { return a - b; });
+    return { lo: vals.length ? vals[0] : null,
+             hi: vals.length ? vals[vals.length - 1] : null,
+             n: vals.length };
+  }
+  function cmpFacts(member, sid) {
+    var score = null, drivers = [], rank = null, total = null, nvalid = null;
+    var range = { lo: null, hi: null, n: null };
+    if (member.level === "State/UT") {
+      var st = (D.state_stats[sid] || {})[member.key];
+      if (st) {
+        score = st.mean; drivers = st.drivers || []; rank = st.rank;
+        nvalid = st.n_valid; total = Object.keys(D.state_stats[sid] || {}).length;
+      }
+      range = cmpRange(D.blocks.filter(function (b) { return b.s === member.key; }),
+                       D.block_scores[sid] || {});
+    } else if (member.level === "District") {
+      score = (D.district_scores[sid] || {})[member.key];
+      drivers = (D.drivers[sid] || {})[member.key] || [];
+      var d = byKey[member.key];
+      var rows = rankedDistrictsIn(d ? d.s : member.parent, sid);
+      total = rows.length; nvalid = rows.length;
+      rows.forEach(function (r) { if (r.key === member.key) rank = r.rank; });
+      range = cmpRange(blocksOfDistrict[member.key] || [], D.block_scores[sid] || {});
+    } else if (member.level === "Block") {
+      score = (D.block_scores[sid] || {})[member.key];
+      drivers = (D.block_drivers[sid] || {})[member.key] || [];
+    }
+    var valid = score !== undefined && score !== null && !isNaN(score);
+    return { score: valid ? score : null, band: valid ? band(score) : null,
+             drivers: drivers, rank: rank, total: total, nvalid: nvalid,
+             blockLo: range.lo, blockHi: range.hi, blockN: range.n };
   }
 
   function binIndex(v) { var i = Math.floor(v / 10); return i > 9 ? 9 : (i < 0 ? 0 : i); }
@@ -1282,6 +1452,13 @@ PAGE_TEMPLATE = r"""<!doctype html>
       gs.appendChild(p);
     });
     svg.appendChild(gs);
+
+    /* Comparison sits above all administrative strokes but below selection.
+       Its purple 2.2px outline is intentionally neither another grey boundary
+       weight nor strong enough to compete with the 2.6px blue selection. */
+    var gc = document.createElementNS(ns, "g");
+    gc.setAttribute("id", "g-cmp");
+    svg.appendChild(gc);
 
     var sel = document.createElementNS(ns, "path");
     sel.setAttribute("id", "g-sel");
@@ -1385,6 +1562,33 @@ PAGE_TEMPLATE = r"""<!doctype html>
     for (var j = 0; j < distLines.length; j++) {
       distLines[j].style.display = national ? "none" : "";
     }
+
+    /* ---- persistent comparison emphasis ---- */
+    var cmp = document.getElementById("g-cmp");
+    cmp.replaceChildren();
+    var selectedId = S.block ? "Block:" + S.block
+      : S.view === "district" ? "District:" + S.district
+      : S.view === "state" ? "State/UT:" + S.state : null;
+    S.cmp.members.forEach(function (member) {
+      if (cmpIdentity(member) === selectedId) return;
+      var path = null, visible = false;
+      if (member.level === "State/UT") {
+        path = D.state_paths[member.key]; visible = national;
+      } else if (member.level === "District" && byKey[member.key]) {
+        path = byKey[member.key].d;
+        visible = national || (byKey[member.key].s === S.state &&
+          (S.view === "state" || byKey[member.key].k === S.district));
+      } else if (member.level === "Block" && blockByKey[member.key]) {
+        var cb = blockByKey[member.key];
+        path = cb.d; visible = !national && cb.s === S.state &&
+          (S.view === "state" || cb.dk === S.district);
+      }
+      if (!path || !visible) return;
+      var cp = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      cp.setAttribute("class", "cmp-stroke");
+      cp.setAttribute("d", path);
+      cmp.appendChild(cp);
+    });
 
     /* ---- selection stroke ---- */
     var selPath = document.getElementById("g-sel");
@@ -1748,10 +1952,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (S.view === "state") {
       var st = sStats()[S.state];
       var drv = (st && st.drivers) || [];
+      var stateMember = makeCmpMember("State/UT", S.state);
       host.innerHTML =
         "<h2>State/UT headline</h2>" +
         "<div class='hl-top'><span class='hl-name'>" + esc(S.state) + "</span>" +
           (st ? bandPill(st.mean) : "") +
+          cmpControl(stateMember, false) +
           "<span class='bigscore'>" + fmt(st ? st.mean : NaN) + "</span></div>" +
         "<p class='hl-meta'>Area-weighted mean district score · rank <b>" +
           (st ? st.rank : "—") + "</b> of " + total + " State/UTs · <b>" +
@@ -1762,11 +1968,13 @@ PAGE_TEMPLATE = r"""<!doctype html>
           "resilience.</p>" +
         driverList(drv, "State/UT", S.state);
       wireDrivers(host);
+      wireCmpControls(host);
       return;
     }
 
     /* District view */
     var d = byKey[S.district];
+    var districtMember = makeCmpMember("District", S.district);
     var me = null;
     rows.forEach(function (r) { if (r.key === S.district) me = r; });
     var blocks = blocksOfDistrict[S.district] || [];
@@ -1779,6 +1987,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
       "<h2>District headline</h2>" +
       "<div class='hl-top'><span class='hl-name'>" + esc(d.n) + "</span>" +
         (me ? bandPill(me.score) : "") +
+        cmpControl(districtMember, false) +
         "<span class='bigscore'>" + fmt(me ? me.score : NaN) + "</span></div>" +
       "<p class='hl-parent'>" + esc(S.state) + "</p>" +
       "<p class='hl-meta'>Composite score · rank <b>" + (me ? me.rank : "—") +
@@ -1789,6 +1998,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
         "district's score is not their average.</p>" +
       driverList(dDrivers()[S.district] || [], "District", d.n + ", " + S.state);
     wireDrivers(host);
+    wireCmpControls(host);
   }
 
   /* ================= ranking ================= */
@@ -1813,16 +2023,19 @@ PAGE_TEMPLATE = r"""<!doctype html>
       "</p>" +
       "<table class='rank'><thead><tr><th class='rk'>#</th><th>" +
         (isIndia ? "State / UT" : "District") +
-        "</th><th class='num'>Score</th><th>Band</th></tr></thead><tbody>";
+        "</th><th class='num'>Score</th><th>Band</th><th class='cmp-cell'>Compare</th>" +
+        "</tr></thead><tbody>";
     var tied = {};
     shown.forEach(function (r) { tied[r.rank] = (tied[r.rank] || 0) + 1; });
     shown.forEach(function (r) {
       var selected = isIndia ? false : (r.key === S.district);
+      var member = makeCmpMember(isIndia ? "State/UT" : "District", r.key);
       html += "<tr data-key='" + esc(r.key) + "'" + (selected ? " class='selected'" : "") + ">" +
         "<td class='rk'>" + r.rank + (tied[r.rank] > 1 ? "=" : "") + "</td>" +
         "<td>" + esc(r.name) + "</td>" +
         "<td class='num sc'>" + shownScore[r.key] + "</td>" +
-        "<td class='bandcell'>" + band(r.score) + "</td></tr>";
+        "<td class='bandcell'>" + band(r.score) + "</td>" +
+        "<td class='cmp-cell'>" + cmpControl(member, true) + "</td></tr>";
     });
     html += "</tbody></table>";
     if (rows.length > 10) {
@@ -1831,9 +2044,11 @@ PAGE_TEMPLATE = r"""<!doctype html>
     }
     if (!rows.length) html += "<p class='sub'>No units in this filter.</p>";
     host.innerHTML = html;
+    wireCmpControls(host);
 
     var t = host.querySelector("tbody");
     if (t) t.addEventListener("click", function (ev) {
+      if (ev.target.closest(".cmp-toggle")) return;
       var tr = ev.target.closest("tr");
       if (!tr) return;
       if (isIndia) selectState(tr.dataset.key); else openDistrict(tr.dataset.key);
@@ -1851,6 +2066,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
       var b = blockByKey[S.block];
       var v = bScores()[b.k];
       var parent = byKey[b.dk];
+      var blockMember = makeCmpMember("Block", b.k);
       html +=
         "<div class='card insp'>" +
         "<button class='close' id='close-insp' aria-label='Clear block selection'>×</button>" +
@@ -1859,6 +2075,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
           " · " + esc(b.s) + "</small></div>" +
         "<div class='scoreline'><span class='bigscore'>" + fmt(v) + "</span>" +
           (v === undefined ? "" : bandPill(v)) + "</div>" +
+        "<div class='btn-row'>" + cmpControl(blockMember, false) + "</div>" +
         "<dl class='kv'>" +
           "<dt>Rank</dt><dd>Blocks are not ranked at any scope — subdivision density " +
             "reflects State administration rather than geography</dd>" +
@@ -1880,6 +2097,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
           "<dt>Period</dt><dd>" + esc(D.period_labels[S.period]) + "</dd>" +
           "<dt>Level</dt><dd>" + esc(S.da.level) + "</dd>" +
           "<dt>Unit</dt><dd>" + esc(S.da.unit) + "</dd>" +
+          "<dt>Comparison context</dt><dd>" + esc(cmpContextText()) + "</dd>" +
           "<dt>Opens on</dt><dd>" +
             (S.da.driver
               ? "the metric <b>" + esc(metricLabel(S.da.driver)) + "</b>, the driver that was " +
@@ -1895,10 +2113,237 @@ PAGE_TEMPLATE = r"""<!doctype html>
 
     host.innerHTML = html;
     wireDrivers(host);
+    wireCmpControls(host);
     var c = document.getElementById("close-insp");
     if (c) c.addEventListener("click", function () { S.block = null; S.da = null; render(); });
     var bo = document.getElementById("back-ov");
     if (bo) bo.addEventListener("click", function () { S.da = null; render(); });
+  }
+
+  /* ================= Compare locations ================= */
+  function cmpSliceLabel(sid) {
+    var parts = sid.split("|");
+    return { scenario: D.scenario_labels[parts[0]] || parts[0],
+             period: D.period_labels[parts[1]] || parts[1] };
+  }
+  function cmpRankText(member, facts, baseFacts, futures) {
+    if (member.level === "Block") return "Blocks are not ranked at any scope";
+    if (facts.rank === null || facts.rank === undefined) return "Rank not available";
+    var scope = member.level === "State/UT"
+      ? facts.rank + " of " + facts.total + " in India"
+      : facts.rank + " of " + facts.total + " in " + member.parent;
+    if (!futures || !baseFacts || baseFacts.rank === null || baseFacts.rank === undefined) {
+      return scope;
+    }
+    var move = facts.rank - baseFacts.rank;
+    return scope + (move < 0 ? " · up " + Math.abs(move)
+      : move > 0 ? " · down " + move : " · unchanged from column 1");
+  }
+  function cmpBlocksText(member, facts) {
+    if (member.level === "Block") return "Not applicable for a Block";
+    if (!facts.blockN) return "No scored blocks in this prototype · 0 valid";
+    return fmt(facts.blockLo) + "–" + fmt(facts.blockHi) +
+      " on the frozen scale · " + facts.blockN + " valid blocks";
+  }
+  function cmpContextText() {
+    if (S.cmp.mode === "futures" && S.cmp.subject) {
+      var labels = S.cmp.slices.map(function (sid) {
+        var x = cmpSliceLabel(sid); return x.scenario + " " + x.period;
+      });
+      return "Futures for " + S.cmp.subject.name + " (" + S.cmp.subject.level + "): " +
+        (labels.length ? labels.join("; ") : "no slices selected");
+    }
+    if (S.cmp.members.length) {
+      return "Places at " + D.scenario_labels[S.scenario] + " " + D.period_labels[S.period] +
+        ": " + S.cmp.members.map(function (m) {
+          return m.name + " (" + m.level + ")";
+        }).join("; ");
+    }
+    return "No active comparison tray";
+  }
+  function renderCompare() {
+    var host = document.getElementById("compare");
+    if (S.cmp.mode === "places" && !S.cmp.members.length) {
+      host.innerHTML = "";
+      return;
+    }
+
+    var futures = S.cmp.mode === "futures";
+    var slots = futures
+      ? S.cmp.slices.map(function (sid) { return { member: S.cmp.subject, sid: sid }; })
+      : S.cmp.members.map(function (member) { return { member: member, sid: sliceId() }; });
+    var facts = slots.map(function (slot) { return cmpFacts(slot.member, slot.sid); });
+    var driverCounts = {};
+    facts.forEach(function (f) {
+      var seen = {};
+      f.drivers.forEach(function (slug) {
+        if (!seen[slug]) driverCounts[slug] = (driverCounts[slug] || 0) + 1;
+        seen[slug] = 1;
+      });
+    });
+
+    var modeControls = "";
+    if (futures) {
+      var scenarioOptions = Object.keys(D.scenario_labels).map(function (key) {
+        return "<option value='" + escAttr(key) + "'>" + esc(D.scenario_labels[key]) + "</option>";
+      }).join("");
+      var periodOptions = Object.keys(D.period_labels).map(function (key) {
+        return "<option value='" + escAttr(key) + "'>" + esc(D.period_labels[key]) + "</option>";
+      }).join("");
+      modeControls =
+        "<div class='cmp-mode'>" +
+          "<label>Scenario<select id='cmp-add-scenario'>" + scenarioOptions + "</select></label>" +
+          "<label>Period<select id='cmp-add-period'>" + periodOptions + "</select></label>" +
+          "<button type='button' class='btn ghost' id='cmp-add-slice'>Add future</button>" +
+          "<button type='button' class='btn ghost' id='cmp-back-places'>Compare places</button>" +
+        "</div>";
+    }
+
+    var html =
+      "<section class='card compare' aria-label='Compare locations'>" +
+      "<div class='cmp-head'><div><h2>Compare locations · " + esc(S.bundle) + "</h2>" +
+      "<p><b>Active bundle:</b> " + esc(S.bundle) + " · " +
+        (futures
+          ? "Futures mode fixes " + esc(S.cmp.subject.name) + " (" +
+            esc(S.cmp.subject.level) + ") while scenario and period vary."
+          : "Places mode fixes " + esc(D.scenario_labels[S.scenario]) + " · " +
+            esc(D.period_labels[S.period]) + " while locations vary.") +
+        " Members are retained when the bundle changes; every figure is replaced by the active bundle." +
+      "</p></div>" + modeControls + "</div>";
+
+    var nvalid = facts.map(function (f) { return f.nvalid; })
+      .filter(function (n) { return n !== null && n !== undefined; });
+    var nvalidKinds = {};
+    nvalid.forEach(function (n) { nvalidKinds[n] = 1; });
+    if (futures && Object.keys(nvalidKinds).length > 1) {
+      html += "<p class='cmp-alert'><b>Coverage warning:</b> <code>n_valid</code> differs across " +
+        "slices (" + nvalid.join(", ") + "). Rank movement is shown with this denominator " +
+        "difference exposed; do not read it as clean movement.</p>";
+    }
+
+    if (!slots.length) {
+      html += "<p class='sub'>No future slices are in the tray. Add a scenario and period above.</p>" +
+        "</section>";
+      host.innerHTML = html;
+    } else {
+      function row(className, renderCell) {
+        return "<div class='cmp-row " + className + "'>" +
+          slots.map(function (slot, i) {
+            return "<div class='cmp-slot'>" + renderCell(slot, facts[i], i) + "</div>";
+          }).join("") + "</div>";
+      }
+      html += "<div class='cmp-scroll'><div class='cmp-table' style='--cmp-cols:" +
+        slots.length + ";min-width:" + (slots.length * 220) + "px'>";
+      html += row("cmp-headers", function (slot, f, i) {
+        if (futures) {
+          var label = cmpSliceLabel(slot.sid);
+          return "<span class='lab'>Column " + (i + 1) + "</span><span class='cmp-place'>" +
+            esc(label.scenario) + "</span><span class='cmp-parent'>" + esc(label.period) + "</span>";
+        }
+        return "<span class='lab'>Column " + (i + 1) + "</span><span class='cmp-place'>" +
+          esc(slot.member.name) + "</span><span class='cmp-parent'>" + esc(slot.member.parent) + "</span>";
+      });
+      html += row("", function (slot) {
+        return "<span class='lab'>Level</span><span class='val'>" + esc(slot.member.level) + "</span>";
+      });
+      html += row("", function (slot, f) {
+        return "<span class='lab'>Score + band</span><span class='val'><strong>" +
+          fmt(f.score) + "</strong> " + (f.score === null ? "" : bandPill(f.score)) + "</span>";
+      });
+      html += row("", function (slot, f, i) {
+        var delta = facts[0].score === null || f.score === null ? null : f.score - facts[0].score;
+        var deltaText = delta === null ? "—" : (Math.abs(delta) < 0.0000001 ? "0.0" :
+          (delta > 0 ? "+" : "") + delta.toFixed(1)) + " scale points";
+        return "<span class='lab'>Δ vs column 1</span><span class='val'>" + deltaText + "</span>" +
+          "<span class='cmp-note'>A difference in national percentile position, never a physical " +
+          "difference, percentage, or multiple.</span>";
+      });
+      html += row("", function (slot, f) {
+        return "<span class='lab'>Rank · scoped cohort</span><span class='val'>" +
+          esc(cmpRankText(slot.member, f, facts[0], futures)) + "</span>" +
+          (f.nvalid === null || f.nvalid === undefined ? "" :
+            "<span class='cmp-note'>n_valid " + f.nvalid + "</span>");
+      });
+      html += row("", function (slot, f) {
+        return "<span class='lab'>Blocks · range + count</span><span class='val'>" +
+          esc(cmpBlocksText(slot.member, f)) + "</span>";
+      });
+      html += row("", function (slot, f) {
+        var chips = f.drivers.length ? f.drivers.map(function (slug) {
+          var kind = driverCounts[slug] > 1 ? "shared" : "unique";
+          return "<span class='cmp-driver " + kind + "'>" + esc(metricLabel(slug)) +
+            " · " + kind + "</span>";
+        }).join("") : "<span class='cmp-note'>Driver information not available.</span>";
+        return "<span class='lab'>Drivers · shared vs unique</span><span class='val'>" + chips + "</span>";
+      });
+      html += row("", function (slot) {
+        if (futures) {
+          return "<span class='lab'>Actions</span><span class='cmp-actions'>" +
+            "<button type='button' class='btn ghost cmp-remove-slice' data-cmp-slice='" +
+            escAttr(slot.sid) + "'>Remove</button></span>";
+        }
+        return "<span class='lab'>Actions</span><span class='cmp-actions'>" +
+          "<button type='button' class='btn ghost cmp-remove-member' data-cmp-id='" +
+          escAttr(cmpIdentity(slot.member)) + "'>Remove</button>" +
+          "<button type='button' class='btn ghost cmp-futures' data-cmp-id='" +
+          escAttr(cmpIdentity(slot.member)) + "'>Compare futures &rsaquo;</button></span>";
+      });
+      html += "</div></div></section>";
+      host.innerHTML = html;
+    }
+
+    var removeMembers = host.querySelectorAll(".cmp-remove-member");
+    for (var i = 0; i < removeMembers.length; i++) {
+      removeMembers[i].addEventListener("click", function (ev) {
+        var id = ev.currentTarget.dataset.cmpId;
+        S.cmp.members = S.cmp.members.filter(function (m) { return cmpIdentity(m) !== id; });
+        render();
+      });
+    }
+    var futuresButtons = host.querySelectorAll(".cmp-futures");
+    for (var j = 0; j < futuresButtons.length; j++) {
+      futuresButtons[j].addEventListener("click", function (ev) {
+        var id = ev.currentTarget.dataset.cmpId, member = null;
+        S.cmp.members.forEach(function (m) { if (cmpIdentity(m) === id) member = m; });
+        if (member) enterFutures(member);
+      });
+    }
+    var removeSlices = host.querySelectorAll(".cmp-remove-slice");
+    for (var k = 0; k < removeSlices.length; k++) {
+      removeSlices[k].addEventListener("click", function (ev) {
+        var sid = ev.currentTarget.dataset.cmpSlice;
+        S.cmp.slices = S.cmp.slices.filter(function (x) { return x !== sid; });
+        render();
+      });
+    }
+    var back = document.getElementById("cmp-back-places");
+    if (back) back.addEventListener("click", leaveFutures);
+    var add = document.getElementById("cmp-add-slice");
+    var addScenario = document.getElementById("cmp-add-scenario");
+    var addPeriod = document.getElementById("cmp-add-period");
+    function updateFutureAdd() {
+      if (!add) return;
+      var sid = addScenario.value + "|" + addPeriod.value;
+      var full = S.cmp.slices.length >= 4;
+      var present = S.cmp.slices.indexOf(sid) >= 0;
+      add.disabled = full || present;
+      add.textContent = full ? "Tray full (4)" : present ? "Already added" : "Add future";
+      add.title = full ? "The comparison tray holds at most four futures."
+        : present ? "That scenario and period are already in the tray." : "Add this future.";
+    }
+    if (add) {
+      addScenario.value = S.scenario;
+      addPeriod.value = S.period;
+      addScenario.addEventListener("change", updateFutureAdd);
+      addPeriod.addEventListener("change", updateFutureAdd);
+      add.addEventListener("click", function () {
+        var sid = addScenario.value + "|" + addPeriod.value;
+        if (S.cmp.slices.length < 4 && S.cmp.slices.indexOf(sid) < 0) {
+          S.cmp.slices.push(sid); render();
+        }
+      });
+      updateFutureAdd();
+    }
   }
 
   /* ================= Context and Evidence ================= */
@@ -2142,6 +2587,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     renderRanking();
     renderInspection();
     renderContext();
+    renderCompare();
   }
 
   /* ---------- selectors ---------- */
@@ -2157,6 +2603,15 @@ PAGE_TEMPLATE = r"""<!doctype html>
       g.appendChild(o);
     });
     b.value = D.default_bundle;
+    b.addEventListener("change", function () {
+      S.bundle = b.value;
+      /* Locations and futures are the durable shortlist. A bundle change only
+         clears transient UI state and recomputes every visible figure. */
+      S.pinned = null; S.showAll = false; S.da = null; S.block = null;
+      hideTip();
+      renderDefaultsNote();
+      render();
+    });
 
     var sc = document.getElementById("sel-scenario");
     Object.keys(D.scenario_labels).forEach(function (k) {
@@ -2300,6 +2755,17 @@ cohort-size minimum, so a State/UT with three valid districts ranks against one 
 Filtering by a histogram bin retains each unit's original rank and never recomputes rank inside the
 filtered subset.</p>
 
+<h3>Compare locations</h3>
+<p>The comparison tray uses the same frozen national ruler and varies one axis at a time. Places
+mode fixes the header scenario and period while locations vary; futures mode fixes one place while
+scenario-period slices vary. The tray holds at most four columns and survives geography, view,
+selector and bundle changes. Its face always names the active bundle, because scores from different
+bundles are never compared.</p>
+<p>Ranks remain scoped to their real cohort. Places mode shows each rank only as a scoped string,
+never as an orderable cross-State number. Futures mode may show movement for the fixed cohort and
+exposes any change in <code>n_valid</code>. Blocks are never ranked. Every score difference is in
+scale points: a difference in national percentile position, not a physical or percentage change.</p>
+
 <h3>Context and Evidence</h3>
 <p>Collapsed by default and available from the State view onward, describing the most local unit
 selected: the block if one is selected, otherwise the district, otherwise the State/UT. It is
@@ -2323,7 +2789,7 @@ from the controls rather than shown disabled.</p>
       Telangana opens below the national view. Every other State/UT hovers normally.</li>
   <li><b>Detailed Analysis.</b> The transition and its carried state are real; the destination is a
       stub.</li>
-  <li><b>Twelve of the thirteen eligible bundles</b>, coordinate entry, exports, comparison,
+  <li><b>Twelve of the thirteen eligible bundles</b>, coordinate entry, exports,
       map overlays, State/UT-level basin context, and the provenance quartet.</li>
 </ul>
 <p>Scores come from the Heat Risk national pilot and predate the production frozen-scale change.
