@@ -641,10 +641,10 @@ Verification of the published bundle:
 
 | check | result |
 |---|---|
-| Published district scores vs `docs/diagnostics/heat_risk_pilot/district_scores.csv` (`ruler == cdf`, `composite_absolute_threshold`) | max abs diff **0.0** over 4,704 rows |
-| Districts / blocks published | 784 / 7,137, **zero nulls** across all 6 published slices |
+| Published district scores vs `docs/diagnostics/heat_risk_pilot/district_scores.csv` (`ruler == cdf`, `composite_absolute_threshold`) | max abs diff **0.0 at 12 decimal places** over 5,488 rows (raw parser-level maximum `1.42e-14`) |
+| Districts / blocks published | 784 / 7,137, **zero nulls** across all 7 published slices |
 | Score dtype in the published master | **float64** (CHG-0385a; was float32) |
-| Jensen guard, area-weighted block rollup vs district's own score | max **4.76**, mean 0.23, none above 10 |
+| Jensen guard, area-weighted block rollup vs district's own score at SSP5-8.5 / 2040-2060 | max **4.76**, mean **0.23**, none above 10 (all 7 slices: max **7.10**, mean **0.24**) |
 | Ladakh canary (20 blocks, SSP5-8.5 2040-2060) | span **1.79** points |
 | Delhi canary (12 blocks) | span **2.56** points |
 | `parity_report.json` issue count | **0** |
@@ -654,13 +654,14 @@ The State headline is now nationally comparable: at SSP5-8.5 2040-2060 the area-
 run Telangana 83.4 / Gujarat 76.6 / Rajasthan 76.1 at the top and Ladakh 0.9 / Sikkim 1.6 /
 Himachal 6.9 at the bottom. Under per-state min-max the same file made West Bengal rank first.
 
-The observed artifact-version 4 grid is **6 slices, not 7**: that published bundle predates
-CHG-0389. The production source now uses the frozen ruler's own ordered slice grid and requires all
-seven inputs, including `historical/1990-2010`; it no longer relies on the legacy future-only
-`SUPPORTED_SCENARIOS` discovery loop. A missing declared slice fails composite construction, and the
-optimized parity audit fails if a frozen master or State-value table omits one. Republish without
-refitting `cdf_v1` to activate artifact version 5 and make P-03's baseline presentation question
-observable in the runtime data. Glance remains intentionally limited to the six future pairs.
+The artifact-version 5 grid is **7 slices**: `historical/1990-2010` plus the six future pairs.
+CHG-0389 made production use the frozen ruler's own ordered slice grid and require all seven inputs;
+it no longer relies on the legacy future-only `SUPPORTED_SCENARIOS` discovery loop. A missing
+declared slice fails composite construction and names the component master(s) responsible, while the
+optimized parity audit fails if a frozen master or State-value table omits one. The manifest derives
+`published_slices` from the score columns present in every written admin master, independently of
+the ruler's `fitted_slices`. Artifact version 4 remains the prior six-slice contract; version 5 is
+the completed seven-slice publication. Glance remains intentionally limited to the six future pairs.
 
 ---
 

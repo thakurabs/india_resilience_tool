@@ -1331,7 +1331,39 @@ def _bundle_inventory_summaries(*, data_dir: Path) -> list[dict[str, object]]:
     return summaries
 
 
-def _frozen_ruler_manifest_payload() -> dict[str, dict[str, object]]:
+def _published_composite_slices(
+    *, data_dir: Path, composite_slug: str
+) -> list[tuple[str, str]]:
+    """Return score slices present in every written admin master for a composite."""
+    import pyarrow.parquet as pq
+
+    masters_root = resolve_optimized_metric_root(
+        composite_slug, data_dir=data_dir
+    ) / "masters" / "admin"
+    master_paths = sorted(masters_root.glob("*/*.parquet"))
+    if not master_paths:
+        return []
+
+    prefix = f"{composite_slug}__"
+    suffix = "__mean"
+    common_pairs: Optional[set[tuple[str, str]]] = None
+    for path in master_paths:
+        pairs: set[tuple[str, str]] = set()
+        for column in pq.read_schema(path).names:
+            if not column.startswith(prefix) or not column.endswith(suffix):
+                continue
+            scenario_period = column[len(prefix) : -len(suffix)]
+            scenario, separator, period = scenario_period.partition("__")
+            if separator and scenario and period:
+                pairs.add((scenario, period))
+        common_pairs = pairs if common_pairs is None else common_pairs & pairs
+
+    return sorted(common_pairs or set())
+
+
+def _frozen_ruler_manifest_payload(
+    *, data_dir: Path
+) -> dict[str, dict[str, object]]:
     """Per composite slug, which frozen ruler its published scores were produced with.
 
     Without this a consumer cannot tell a correctly-rendered new score from a
@@ -1353,7 +1385,22 @@ def _frozen_ruler_manifest_payload() -> dict[str, dict[str, object]]:
         except (FileNotFoundError, ValueError) as exc:  # pragma: no cover - build guard
             payload[spec.composite_slug] = {"error": str(exc), "frozen_ruler_version": version}
             continue
-        slices = [list(pair) for pair in ruler_set.slices]
+        fitted_pairs = tuple(ruler_set.slices)
+        published_pairs = _published_composite_slices(
+            data_dir=data_dir,
+            composite_slug=spec.composite_slug,
+        )
+        published_pair_set = set(published_pairs)
+        fitted_pair_set = set(fitted_pairs)
+        fitted_slices = [list(pair) for pair in fitted_pairs]
+        published_slices = [
+            list(pair)
+            for pair in fitted_pairs
+            if pair in published_pair_set
+        ]
+        published_slices.extend(
+            list(pair) for pair in published_pairs if pair not in fitted_pair_set
+        )
         payload[spec.composite_slug] = {
             "ruler_id": ruler_set.ruler_id,
             "ruler_sha256": ruler_set.ruler_sha256,
@@ -1365,10 +1412,11 @@ def _frozen_ruler_manifest_payload() -> dict[str, dict[str, object]]:
             "configured_weight": ruler_set.configured_weight,
             # ``slices`` remains as a compatibility alias for artifact-version 4
             # readers. Version 5 distinguishes the fit and publication grids;
-            # they are deliberately identical for a frozen ruler.
-            "slices": slices,
-            "fitted_slices": slices,
-            "published_slices": slices,
+            # a healthy frozen publication makes them identical, while deriving
+            # them independently exposes an incomplete written master grid.
+            "slices": fitted_slices,
+            "fitted_slices": fitted_slices,
+            "published_slices": published_slices,
         }
     return payload
 
@@ -1399,7 +1447,7 @@ def _write_manifest(
         },
         "summaries": _bundle_inventory_summaries(data_dir=data_dir),
         "glance_view_model": glance_manifest_payload(data_dir=data_dir),
-        "frozen_rulers": _frozen_ruler_manifest_payload(),
+        "frozen_rulers": _frozen_ruler_manifest_payload(data_dir=data_dir),
     }
     path = bundle_manifest_path(data_dir=data_dir)
 

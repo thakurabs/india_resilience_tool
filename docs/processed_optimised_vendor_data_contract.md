@@ -20,36 +20,37 @@ Observed bundle facts:
 | Item | Observed value |
 |---|---:|
 | `parity_report.json` issue count | 0 |
-| Metric directories under `metrics/` | 123 |
+| Metric directories under `metrics/` | 99 |
 | Glance bundles in `bundle_manifest.json` | 15 |
-| Admin block index rows | 6,300 |
-| Exposure summary rows | 7,091 |
-| Hydrology context rows | 7,090 |
-| `artifact_version` | 4 |
+| Admin block index rows | 7,137 |
+| Exposure summary rows | 7,917 |
+| Hydrology context rows | 7,917 |
+| `artifact_version` | 5 |
 | Composites on a frozen national ruler | 1 (`composite_heat_risk`) |
 
-This observed local snapshot predates the CHG-0389 republish. The next valid
-Heat Risk handover has `artifact_version: 5` and publishes the seventh,
-`historical/1990-2010`, slice. Do not treat source-code availability as evidence
-that the local runtime bundle has already been republished.
+This observed local snapshot includes the CHG-0389 republish. The Heat Risk
+handover has `artifact_version: 5` and publishes the seventh,
+`historical/1990-2010`, slice.
 
 Treat `bundle_manifest.json` and `parity_report.json` as the first files to
 read. A clean handover must have `parity_report.json` with `issue_count: 0`.
 
 ## Read This First: `composite_heat_risk` Changed Meaning (artifact versions 4 and 5)
 
-`bundle_manifest.json` now carries `"artifact_version": 4`. If you have cached a
+`bundle_manifest.json` now carries `"artifact_version": 5`. If you have cached a
 bundle at version 3, **the `composite_heat_risk` score columns are not
-comparable to what you have** — the column names are byte-identical while the
-number behind them changed twice:
+comparable to what you have**; if you cached version 4, the values remain
+comparable but the published slice grid grew. The column names of the six future
+scores are byte-identical across versions while the surrounding contract changed:
 
-| | Version 3 | Version 4 |
-|---|---|---|
-| Metrics in the composite | 14 | 9 (the absolute-threshold half, weights renormalized 0.6333 -> 1.0) |
-| Normalization | per-`(state, level, scenario, period)` min-max | one frozen national CDF ruler |
-| Comparable across states? | **No** — every state contained a 0 and a 100 | Yes |
-| Comparable across scenarios/periods? | **No** | Yes |
-| Score dtype | float32 | float64 |
+| | Version 3 | Version 4 | Version 5 |
+|---|---|---|---|
+| Metrics in the composite | 14 | 9 (the absolute-threshold half, weights renormalized 0.6333 -> 1.0) | Same as version 4 |
+| Normalization | per-`(state, level, scenario, period)` min-max | one frozen national CDF ruler | Same ruler as version 4 |
+| Comparable across states? | **No** — every state contained a 0 and a 100 | Yes | Yes |
+| Comparable across scenarios/periods? | **No** | Yes | Yes |
+| Published score slices | 6 future pairs | 6 future pairs | 7: historical baseline plus 6 future pairs |
+| Score dtype | float32 | float64 | float64 |
 
 Artifact version 5 preserves the version 4 ruler, weights, normalization, and
 float64 values, but expands the published master and State-value grid from the
@@ -59,6 +60,10 @@ column is:
 ```text
 composite_heat_risk__historical__1990-2010__mean
 ```
+
+**A consumer that hardcoded six composite score columns will break on artifact
+version 5.** Discover the grid from `frozen_rulers.composite_heat_risk.published_slices`
+or from the master schema; do not enforce a six-column count.
 
 Glance intentionally remains future-only; the historical row is available to
 baseline-aware and detailed consumers, not as a new Glance selector.

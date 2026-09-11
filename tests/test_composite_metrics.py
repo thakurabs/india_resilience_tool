@@ -524,7 +524,12 @@ def test_frozen_ruler_composite_rejects_a_missing_declared_slice(tmp_path) -> No
             df=df,
         )
 
-    with pytest.raises(ValueError, match="missing declared slice.*historical/1990-2010"):
+    with pytest.raises(
+        ValueError,
+        match=(
+            rf"missing declared slice.*historical/1990-2010.*{incomplete_slug}"
+        ),
+    ):
         compute_composite_master_frame(
             spec,
             level="district",

@@ -282,10 +282,51 @@ def test_committed_heat_risk_ruler_matches_its_recorded_hash_and_config() -> Non
     assert all(r.kind == CDF_KIND for r in ruler_set.rulers.values())
 
 
-def test_manifest_payload_reports_the_frozen_ruler() -> None:
+def test_manifest_payload_reports_fitted_and_written_frozen_ruler_slices(
+    tmp_path,
+) -> None:
     from tools.optimized.build_processed_optimised import _frozen_ruler_manifest_payload
 
-    payload = _frozen_ruler_manifest_payload()
+    master_path = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "composite_heat_risk"
+        / "masters"
+        / "admin"
+        / "district"
+        / "state=Test.parquet"
+    )
+    master_path.parent.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "state": ["Test"],
+            "district": ["Example"],
+            "composite_heat_risk__historical__1990-2010__mean": [50.0],
+            "composite_heat_risk__ssp245__2020-2040__mean": [60.0],
+        }
+    ).to_parquet(master_path, index=False)
+    block_path = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "composite_heat_risk"
+        / "masters"
+        / "admin"
+        / "block"
+        / "state=Test.parquet"
+    )
+    block_path.parent.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "state": ["Test"],
+            "district": ["Example"],
+            "block": ["Example Block"],
+            "composite_heat_risk__historical__1990-2010__mean": [50.0],
+        }
+    ).to_parquet(block_path, index=False)
+
+    payload = _frozen_ruler_manifest_payload(data_dir=tmp_path)
     assert "composite_heat_risk" in payload
     entry = payload["composite_heat_risk"]
     if "error" in entry:
@@ -295,7 +336,7 @@ def test_manifest_payload_reports_the_frozen_ruler() -> None:
     assert entry["ruler_sha256"]
     assert len(entry["slices"]) == 7
     assert entry["fitted_slices"] == entry["slices"]
-    assert entry["published_slices"] == entry["slices"]
+    assert entry["published_slices"] == [["historical", "1990-2010"]]
 
 
 def test_heat_risk_glance_remains_future_only_when_master_includes_historical(

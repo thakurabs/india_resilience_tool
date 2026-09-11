@@ -606,7 +606,24 @@ def compute_composite_master_frame(
         # though it contributed to the ruler fit (CHG-0389).
         missing_pairs = [pair for pair in ruler_set.slices if pair not in set(available_pairs)]
         if missing_pairs:
-            rendered = ", ".join(f"{scenario}/{period}" for scenario, period in missing_pairs)
+            availability_by_metric = {
+                metric_slug: _available_pairs_for_frame(
+                    frame,
+                    metric_slug=metric_slug,
+                    candidate_pairs=ruler_set.slices,
+                )
+                for metric_slug, frame in component_frames.items()
+            }
+            rendered = ", ".join(
+                f"{scenario}/{period} (missing from: "
+                + ", ".join(
+                    metric_slug
+                    for metric_slug, pairs in availability_by_metric.items()
+                    if (scenario, period) not in pairs
+                )
+                + ")"
+                for scenario, period in missing_pairs
+            )
             raise ValueError(
                 f"Frozen composite {spec.composite_slug!r} cannot publish an incomplete "
                 f"ruler grid for state={state_name!r}, level={level_norm!r}; missing "
