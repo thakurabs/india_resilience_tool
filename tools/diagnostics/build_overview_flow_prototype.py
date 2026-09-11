@@ -526,7 +526,7 @@ CONTEXT_PROVENANCE: dict[str, str] = {
     "population": "Population: WorldPop-derived admin master, 2025 snapshot",
     "facilities": "Rural facilities: Mission Antyodaya, 2019–2021 snapshot. The per-100k rate divides RURAL facilities by TOTAL population, so units with large urban populations read low by construction — compare it across rural geographies, never city against countryside.",
     "built_up": "Built-up area: LULC-derived admin master, current snapshot",
-    "lulc": "Agricultural LULC: LULC-derived admin master, current snapshot",
+    "lulc": "Agricultural LULC: LULC-derived admin master, current snapshot — PROVISIONAL. The source raster has no recoverable upstream provenance (BACKLOG BL-0027); the encoding is settled, the numbers are not, and they must not be quoted outward until the source is replaced.",
     "hydro": "Basins and rivers: IRT hydrology crosswalk over the admin roster",
     "density": "Population density: WorldPop-derived admin master, 2025 snapshot — people per km² of total unit area, including uninhabitable land.",
 }
@@ -908,6 +908,15 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .ctx-dot.ctx-dna { fill: none; stroke: #1b2545; stroke-opacity: .6;
                      stroke-dasharray: 2 2; }
   .ctx-dot.ctx-muted { fill-opacity: .10; stroke-opacity: .15; }
+  /* Cropland stipple. Texture is a visual channel independent of the
+     choropleth's hue and value, so the score colour is never evicted and the
+     two read as one gestalt: "red and dense" rather than "red, then look up
+     what the circle means". Dots rather than diagonal hatching, because
+     hatching conventionally means excluded or disputed and its direction reads
+     as a category rather than as an amount. */
+  #g-tex { pointer-events: none; }
+  .tex { stroke: none; }
+  .tex.muted { opacity: .26; }
   #g-ctx { pointer-events: none; }
   .cmp-stroke { fill: none; stroke: #7b3fa0; stroke-opacity: .95; stroke-width: 2.2px;
                 pointer-events: none; }
@@ -1182,6 +1191,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
               <select id="ctx-layer">
                 <option value="">None</option>
                 <option value="pop">Population density</option>
+                <option value="crop">Cropland share</option>
               </select>
             </label>
             <span class="ctx-key" id="ctx-key" hidden></span>
@@ -1321,6 +1331,49 @@ PAGE_TEMPLATE = r"""<!doctype html>
     });
     return n;
   }
+
+  /* ---- cropland stipple ----
+     Three levels is the honest ceiling for a texture: a reader ranks three
+     grains reliably and cannot read a value off any of them. The lowest level
+     paints nothing, which makes "not agricultural" read as absence rather than
+     as yet another shade to decode. The distribution is bimodal -- 207 of 783
+     districts sit below 35% and 313 above 75% -- so three levels lose very
+     little. Breaks are CONSTANTS: the ruler never moves with a data refresh. */
+  var CROP_BREAKS = [35, 75];
+  var CROP_LABELS = ["Little (<35%)", "Mixed (35–75%)", "Mostly (75%+)"];
+
+  var CROP_ANY = (function () {
+    for (var k in CTX_EXPOSURE) {
+      var v = CTX_EXPOSURE[k].ag_pct;
+      if (typeof v === "number" && !isNaN(v)) return true;
+    }
+    return false;
+  }());
+
+  /* -1 means "no figure"; 0 means "measured, and low". Both render bare, but
+     they are different claims, so the note counts the -1s explicitly. */
+  function cropLevel(v) {
+    if (typeof v !== "number" || isNaN(v)) return -1;
+    for (var i = 0; i < CROP_BREAKS.length; i++) {
+      if (v < CROP_BREAKS[i]) return i;
+    }
+    return CROP_BREAKS.length;
+  }
+
+  function cropMissing() {
+    var n = 0;
+    ctxUnits().forEach(function (u) {
+      if (cropLevel((CTX_EXPOSURE[u.k] || {}).ag_pct) < 0) n++;
+    });
+    return n;
+  }
+
+  /* Grain geometry in SCREEN pixels. A <pattern> tiles in USER space, so every
+     one of these must be divided by the viewBox zoom on each render or the dots
+     swell into blobs when the map drills into a district -- the same correction
+     CTX_RMIN_PX already applies to the circle floor. */
+  var CROP_TILE_PX = [8.0, 4.2];   /* level 1, level 2 */
+  var CROP_DOT_PX = 1.0;
 
   /* The units this view paints, which are the units it overlays. */
   function ctxUnits() {
@@ -1595,6 +1648,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
   var svg = document.getElementById("map");
   var built = false;
   var nodes = {};
+  var texNodes = {};
 
   function buildMap() {
     var ns = "http://www.w3.org/2000/svg";
@@ -1622,6 +1676,59 @@ PAGE_TEMPLATE = r"""<!doctype html>
       nodes["B:" + b.k] = p;
     });
     svg.appendChild(gb);
+
+    /* ---- cropland stipple ----
+       Two map patterns (level 0 paints nothing) plus two fixed-size twins for
+       the legend, which must NOT follow the map zoom. The path layer re-uses
+       the geometry strings already in memory, so the whole overlay costs DOM
+       nodes and zero payload bytes. */
+    var defs = document.createElementNS(ns, "defs");
+    defs.setAttribute("id", "tex-defs");
+    function stipplePattern(id, tile, radius) {
+      var pat = document.createElementNS(ns, "pattern");
+      pat.setAttribute("id", id);
+      pat.setAttribute("patternUnits", "userSpaceOnUse");
+      if (tile) {
+        pat.setAttribute("width", tile.toFixed(2));
+        pat.setAttribute("height", tile.toFixed(2));
+      }
+      var dot = document.createElementNS(ns, "circle");
+      if (tile) {
+        dot.setAttribute("cx", (tile / 2).toFixed(2));
+        dot.setAttribute("cy", (tile / 2).toFixed(2));
+        dot.setAttribute("r", radius.toFixed(2));
+      }
+      dot.setAttribute("fill", "#1b2024");
+      dot.setAttribute("fill-opacity", ".55");
+      pat.appendChild(dot);
+      defs.appendChild(pat);
+    }
+    /* map patterns: sized per render, so left unsized here */
+    stipplePattern("crop-p1", 0, 0);
+    stipplePattern("crop-p2", 0, 0);
+    /* legend patterns: fixed forever */
+    stipplePattern("crop-k1", CROP_TILE_PX[0], CROP_DOT_PX);
+    stipplePattern("crop-k2", CROP_TILE_PX[1], CROP_DOT_PX);
+    svg.appendChild(defs);
+
+    var gt = document.createElementNS(ns, "g");
+    gt.setAttribute("id", "g-tex");
+    gt.style.display = "none";
+    D.districts.forEach(function (d) {
+      var p = document.createElementNS(ns, "path");
+      p.setAttribute("d", d.d);
+      p.setAttribute("class", "tex");
+      gt.appendChild(p);
+      texNodes[d.k] = p;
+    });
+    D.blocks.forEach(function (b) {
+      var p = document.createElementNS(ns, "path");
+      p.setAttribute("d", b.d);
+      p.setAttribute("class", "tex");
+      gt.appendChild(p);
+      texNodes["B:" + b.k] = p;
+    });
+    svg.appendChild(gt);
 
     /* the live State/UT's district outlines, drawn as the coarse stroke once
        blocks are the painted unit */
@@ -1800,6 +1907,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     else selPath.setAttribute("d", "");
 
     paintContextLayer(emphDistricts);
+    paintTextureLayer(emphDistricts);
   }
 
   /* Population circles: area proportional to population, so radius scales as
@@ -1809,21 +1917,27 @@ PAGE_TEMPLATE = r"""<!doctype html>
      district scale in every view: circles magnify with the viewBox zoom, which
      keeps people-per-map-area honest, and only the legibility floor is divided
      back out so it stays one screen pixel rather than swelling with the zoom. */
+  function mapAriaLabel() {
+    var base = "Choropleth of " + (S.view === "india" ? "district" : "block") +
+               " bundle scores";
+    if (S.ctxLayer === "pop") {
+      return base + ", with circles sized by population and shaded by population density";
+    }
+    if (S.ctxLayer === "crop") {
+      return base + ", with a dot stipple whose density rises with the share of each unit under cropland";
+    }
+    return base;
+  }
+
   function paintContextLayer(emphDistricts) {
     var g = document.getElementById("g-ctx");
     if (!g) return;
     g.replaceChildren();
+    svg.setAttribute("aria-label", mapAriaLabel());
     var national = S.view === "india";
     if (S.ctxLayer !== "pop") {
-      svg.setAttribute("aria-label", national
-        ? "Choropleth of district bundle scores"
-        : "Choropleth of block bundle scores");
       return;
     }
-
-    svg.setAttribute("aria-label",
-      "Choropleth of " + (national ? "district" : "block") +
-      " bundle scores, with circles sized by population and shaded by population density");
 
     var ns = "http://www.w3.org/2000/svg";
     var zoom = ctxZoom();
@@ -1842,6 +1956,52 @@ PAGE_TEMPLATE = r"""<!doctype html>
         (emphDistricts !== null && !emphDistricts[ek] ? " ctx-muted" : ""));
       g.appendChild(c);
     });
+  }
+
+  /* The stipple follows the painted unit exactly as the circles do: districts
+     nationally, blocks once a State/UT is open, that district's blocks once one
+     is. In the State view the surrounding districts are a flat grey backdrop
+     carrying no score, so they carry no stipple either. */
+  function paintTextureLayer(emphDistricts) {
+    var g = document.getElementById("g-tex");
+    if (!g) return;
+    var on = S.ctxLayer === "crop";
+    g.style.display = on ? "" : "none";
+    if (!on) return;
+
+    /* hold the grain constant in SCREEN space at every zoom level */
+    var zoom = ctxZoom();
+    [1, 2].forEach(function (lvl) {
+      var pat = document.getElementById("crop-p" + lvl);
+      if (!pat) return;
+      var tile = CROP_TILE_PX[lvl - 1] / zoom;
+      var r = CROP_DOT_PX / zoom;
+      pat.setAttribute("width", tile.toFixed(4));
+      pat.setAttribute("height", tile.toFixed(4));
+      var dot = pat.firstChild;
+      dot.setAttribute("cx", (tile / 2).toFixed(4));
+      dot.setAttribute("cy", (tile / 2).toFixed(4));
+      dot.setAttribute("r", r.toFixed(4));
+    });
+
+    var painted = {};
+    ctxUnits().forEach(function (u) { painted[u.k] = 1; });
+
+    function apply(key, node, emphKey) {
+      if (!node) return;
+      if (!painted[key]) { node.style.display = "none"; return; }
+      var lvl = cropLevel((CTX_EXPOSURE[key] || {}).ag_pct);
+      if (lvl < 1) { node.style.display = "none"; return; }
+      node.style.display = "";
+      node.setAttribute("fill", "url(#crop-p" + lvl + ")");
+      /* muting mirrors the choropleth: the pinned bin emphasises districts, and
+         a block inherits its parent district's emphasis */
+      node.classList.toggle("muted",
+        emphDistricts !== null && !emphDistricts[emphKey]);
+    }
+
+    D.districts.forEach(function (d) { apply(d.k, texNodes[d.k], d.k); });
+    D.blocks.forEach(function (b) { apply(b.k, texNodes["B:" + b.k], b.dk); });
   }
 
   /* ---------- hover ---------- */
@@ -2152,20 +2312,26 @@ PAGE_TEMPLATE = r"""<!doctype html>
     /* Section 5: omit an unavailable overlay rather than showing it disabled.
        Population is carried for districts AND blocks, so it is available in
        every view; only a payload with no population at all removes the row. */
-    var available = POP_MAX > 0;
+    var available = POP_MAX > 0 || CROP_ANY;
     row.hidden = !available;
     if (!available) return;
 
-    document.getElementById("ctx-layer").value = S.ctxLayer || "";
-
+    /* Section 5: omit an unavailable overlay rather than showing it disabled. */
+    var popOpt = document.querySelector("#ctx-layer option[value='pop']");
+    var cropOpt = document.querySelector("#ctx-layer option[value='crop']");
+    if (popOpt && !(POP_MAX > 0)) { popOpt.remove(); popOpt = null; }
+    if (cropOpt && !CROP_ANY) { cropOpt.remove(); cropOpt = null; }
     /* If no unit carries a density figure the layer is still a valid population
        overlay, so label it for what it actually shows rather than what it was
        meant to show. */
-    var opt = document.querySelector("#ctx-layer option[value='pop']");
-    if (opt) opt.textContent = DENS_ANY ? "Population density" : "Population";
+    if (popOpt) popOpt.textContent = DENS_ANY ? "Population density" : "Population";
+
+    document.getElementById("ctx-layer").value = S.ctxLayer || "";
 
     var key = document.getElementById("ctx-key");
     var note = document.getElementById("ctx-note");
+
+    if (S.ctxLayer === "crop") { renderCropKey(key, note); return; }
     if (S.ctxLayer !== "pop") {
       key.hidden = true; key.innerHTML = ""; note.textContent = "";
       return;
@@ -2222,6 +2388,29 @@ PAGE_TEMPLATE = r"""<!doctype html>
                  " drawn hollow — no density figure.");
     }
     note.textContent = parts.join(" ");
+  }
+
+  /* The legend uses the fixed-size twin patterns, never the map's, so a swatch
+     means the same thing whatever the map is zoomed to. */
+  function renderCropKey(key, note) {
+    key.hidden = false;
+    key.innerHTML = "<span class='ctx-key-lab'>Stipple = cropland share</span>" +
+      CROP_LABELS.map(function (lab, i) {
+        var fill = i === 0 ? "#ffffff" : "url(#crop-k" + i + ")";
+        return "<span class='ctx-key-step'>" +
+               "<svg width='24' height='14' viewBox='0 0 24 14'>" +
+               "<rect x='.5' y='.5' width='23' height='13' fill='" + fill +
+               "' stroke='#b6bcc4'></rect></svg>" +
+               "<span>" + lab + "</span></span>";
+      }).join("");
+
+    var miss = cropMissing(), unit = S.view === "india" ? "district" : "block";
+    note.textContent =
+      "Cropland extent only — not cropping intensity, season, or irrigation. " +
+      "Provisional source, pending BL-0027." +
+      (miss ? " " + miss + " " + unit + (miss === 1 ? " carries" : "s carry") +
+              " no cropland figure and is drawn bare — that is missing data, " +
+              "not absent cropland." : "");
   }
 
   /* ================= answer card ================= */

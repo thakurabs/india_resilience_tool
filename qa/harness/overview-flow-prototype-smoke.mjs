@@ -52,6 +52,22 @@ await p.selectOption('#ctx-layer', '');
 await p.waitForTimeout(300);
 console.log('ctx circles off:', await p.locator('#g-ctx circle').count());
 
+// cropland stipple: superimposed on the choropleth, never replacing it
+const cropFillBefore = await p.locator('#g-dist path').nth(300).getAttribute('fill');
+await p.selectOption('#ctx-layer', 'crop');
+await p.waitForTimeout(400);
+console.log('crop tex l1/l2 :',
+  await p.locator('#g-tex path[fill="url(#crop-p1)"]').count(), '/',
+  await p.locator('#g-tex path[fill="url(#crop-p2)"]').count());
+console.log('crop circles(0):', await p.locator('#g-ctx circle').count());
+console.log('crop risk kept :',
+  (await p.locator('#g-dist path').nth(300).getAttribute('fill')) === cropFillBefore);
+console.log('crop key       :', line(await p.locator('#ctx-key').innerText()));
+console.log('crop note      :', line(await p.locator('#ctx-note').innerText()));
+await p.screenshot({ path: out + '/01c-ctx-crop.png', fullPage: true });
+await p.selectOption('#ctx-layer', '');
+await p.waitForTimeout(300);
+
 // drill to the live State from the ranking
 await p.locator('#ranking tbody tr').first().click();
 await p.waitForTimeout(800);
