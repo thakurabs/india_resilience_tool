@@ -36,6 +36,19 @@ await p.locator('#g-dist path').nth(400).click({ force: true });
 await p.waitForTimeout(300);
 console.log('after locked click, crumbs:', line(await p.locator('#crumbs').innerText()));
 
+// Context layer: additive over the risk choropleth, never a replacement for it
+const fillBefore = await p.locator('#g-dist path').nth(300).getAttribute('fill');
+console.log('ctxl row in India:', !(await p.locator('#ctxl-row').isHidden()));
+await p.selectOption('#ctx-layer', 'pop');
+await p.waitForTimeout(400);
+console.log('ctx circles    :', await p.locator('#g-ctx circle').count());
+console.log('risk fill kept :', (await p.locator('#g-dist path').nth(300).getAttribute('fill')) === fillBefore);
+console.log('ctx key        :', line(await p.locator('#ctx-key').innerText()));
+await p.screenshot({ path: out + '/01b-ctx-pop.png', fullPage: true });
+await p.selectOption('#ctx-layer', '');
+await p.waitForTimeout(300);
+console.log('ctx circles off:', await p.locator('#g-ctx circle').count());
+
 // drill to the live State from the ranking
 await p.locator('#ranking tbody tr').first().click();
 await p.waitForTimeout(800);
@@ -43,6 +56,7 @@ console.log('state crumbs   :', line(await p.locator('#crumbs').innerText()));
 console.log('state headline :', line(await p.locator('#headline').innerText()).slice(0, 160));
 console.log('state painted  :', await p.locator('#painted').innerText());
 await p.screenshot({ path: out + '/02-state.png', fullPage: true });
+console.log('ctxl row in State (must be true):', await p.locator('#ctxl-row').isHidden());
 
 // State-view hover must report the parent DISTRICT and highlight all its blocks,
 // mirroring the national view's State/UT hover over painted districts

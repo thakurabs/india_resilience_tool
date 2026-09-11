@@ -33,10 +33,11 @@ Three honest departures from the target spec, all surfaced in the page itself:
 - **Only Telangana opens below the national view.** Its 588 blocks are the only
   blocks scored on the frozen ruler, so every other State/UT hovers normally but
   is not selectable. One worked State/UT demonstrates the whole flow.
-- **Context and Evidence carries no map overlays**, and no basin context at
-  State/UT scope: a State/UT basin share needs a State-to-basin geometry
-  intersection, and counting districts' dominant basins would be a different
-  quantity under the same label.
+- **Context and Evidence carries no basin or river map overlay**, and no basin
+  context at State/UT scope: a State/UT basin share needs a State-to-basin
+  geometry intersection, and counting districts' dominant basins would be a
+  different quantity under the same label. A population overlay (proportional
+  circles, national view only) is implemented.
 - **Detailed Analysis is a stub.** The transition and the state it carries are
   real, including the selected driver metric; the destination is a panel that
   displays that state and nothing more.
@@ -400,6 +401,8 @@ def build_shapes(
         minx, miny, maxx, maxy = (float(v) for v in row.geometry.bounds)
         x0, y1, _ = _project(np.array([minx]), np.array([miny]), bounds)
         x1, y0, _ = _project(np.array([maxx]), np.array([maxy]), bounds)
+        rep = row.geometry.representative_point()
+        cx, cy, _ = _project(np.array([rep.x]), np.array([rep.y]), bounds)
         districts.append(
             {
                 "k": str(getattr(row, "district_key", "")),
@@ -412,6 +415,7 @@ def build_shapes(
                     round(float(x1[0]), 2),
                     round(float(y1[0]), 2),
                 ],
+                "c": [round(float(cx[0]), 2), round(float(cy[0]), 2)],
             }
         )
 
@@ -794,6 +798,17 @@ PAGE_TEMPLATE = r"""<!doctype html>
                background: var(--warn-bg); border: 1px solid var(--warn-line);
                border-radius: 6px; padding: 7px 10px; line-height: 1.45; }
 
+  /* ---- Context layers (off by default, national view only) ---- */
+  .ctxl-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+              margin: 8px 0 0; font-size: 11.5px; color: var(--ink-3); }
+  .ctxl { display: inline-flex; align-items: center; gap: 6px; }
+  .ctxl select { font: inherit; padding: 1px 4px; }
+  .ctx-key { display: inline-flex; align-items: center; gap: 10px; }
+  .ctx-key-lab { color: var(--ink-2); }
+  .ctx-key-step { display: inline-flex; align-items: center; gap: 4px; }
+  .ctx-key-step svg { overflow: visible; }
+  .ctx-note { color: var(--warn-ink); }
+
   .banner { display: flex; gap: 10px; align-items: flex-start; background: var(--warn-bg);
             border: 1px solid var(--warn-line); color: var(--warn-ink);
             border-radius: 8px; padding: 10px 13px; font-size: 12.5px; margin: 0 0 16px; }
@@ -825,6 +840,10 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .blk { stroke: var(--fine); stroke-opacity: .45; stroke-width: .4px; cursor: pointer; }
   .stroke-coarse { fill: none; stroke: var(--coarse); stroke-opacity: .95; stroke-width: 1.9px;
                    pointer-events: none; }
+  .ctx-dot { fill: #2b3a67; fill-opacity: .30; stroke: #1b2545; stroke-opacity: .55;
+             stroke-width: .6px; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .ctx-dot.ctx-muted { fill-opacity: .07; stroke-opacity: .12; }
+  #g-ctx { pointer-events: none; }
   .cmp-stroke { fill: none; stroke: #7b3fa0; stroke-opacity: .95; stroke-width: 2.2px;
                 pointer-events: none; }
   .sel-stroke { fill: none; stroke: var(--accent); stroke-opacity: 1; stroke-width: 2.6px;
@@ -1062,8 +1081,9 @@ PAGE_TEMPLATE = r"""<!doctype html>
       has been scored. One worked State/UT demonstrates the workflow.
       <br><b>2. Detailed Analysis is a stub.</b> The action and the state it carries are real,
       including which driver metric was selected; the destination only displays that state.
-      <br>Context and Evidence carries no map overlays and no basin context at State/UT scope; the
-      card and the method note say why.
+      <br>Context and Evidence carries no basin or river map overlay and no basin context at
+      State/UT scope; the card and the method note say why. A population overlay (proportional
+      circles, national view only) is available.
       </p>
     </div>
   </div>
@@ -1091,6 +1111,16 @@ PAGE_TEMPLATE = r"""<!doctype html>
             <label class="lc" id="lc-label" for="lc-toggle">
               <input type="checkbox" id="lc-toggle"> Local contrast
             </label>
+          </div>
+          <div class="ctxl-row" id="ctxl-row" hidden>
+            <label class="ctxl" for="ctx-layer">Context layer
+              <select id="ctx-layer">
+                <option value="">None</option>
+                <option value="pop">Population</option>
+              </select>
+            </label>
+            <span class="ctx-key" id="ctx-key" hidden></span>
+            <span class="ctx-note" id="ctx-note"></span>
           </div>
           <p class="cbar-warn" id="cbar-warn" hidden></p>
         </div>
@@ -1152,6 +1182,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     showAll: false,
     local: false,          /* the local-contrast view; opt-in, never the landing state */
     ctxOpen: false,        /* Context and Evidence is collapsed on arrival, by contract */
+    ctxLayer: null,        /* the active Context layer id, or null; off by default */
     cmp: { mode: "places", members: [], subject: null, slices: [] },
     da: null
   };
@@ -1167,6 +1198,46 @@ PAGE_TEMPLATE = r"""<!doctype html>
     blockByKey[b.k] = b;
     (blocksOfDistrict[b.dk] = blocksOfDistrict[b.dk] || []).push(b);
   });
+
+  /* ---- Context layers -------------------------------------------------
+     Every field here is already in the payload for the Context and Evidence
+     card; an overlay costs no extra bytes. Population is a COUNT, so it is
+     drawn as proportional circles rather than a fill: a fill would imply the
+     value is spread evenly across the district, and would also have to evict
+     the risk colour. */
+  var CTX_LAYERS = {
+    pop: { label: "Population", unit: "people",
+           prov: "WorldPop-derived admin master, 2025 snapshot" }
+  };
+
+  var CTX_EXPOSURE = (D.context && D.context.exposure) || {};
+  var POP_MAX = 0, POP_MISSING = 0;
+  D.districts.forEach(function (d) {
+    var v = (CTX_EXPOSURE[d.k] || {}).pop;
+    if (typeof v === "number" && v > 0) { if (v > POP_MAX) POP_MAX = v; }
+    else POP_MISSING++;
+  });
+
+  var CTX_RMAX = 16;      /* SVG user units at the national viewBox (width 1000) */
+  var CTX_RMIN = 1.0;     /* below this a real district reads as missing data */
+
+  function popRadius(pop) {
+    if (typeof pop !== "number" || !(pop > 0) || !POP_MAX) return 0;
+    return Math.max(CTX_RMIN, CTX_RMAX * Math.sqrt(pop / POP_MAX));
+  }
+
+  /* Three round steps derived from the data, so the key survives a data
+     refresh rather than hard-coding today's maximum. */
+  function popKeySteps() {
+    var mag = Math.pow(10, Math.floor(Math.log(POP_MAX) / Math.LN10));
+    var top = Math.floor(POP_MAX / mag) * mag;
+    return [top, top / 3, top / 10];
+  }
+  function popLabel(v) {
+    if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + "M";
+    if (v >= 1e3) return Math.round(v / 1e3) + "k";
+    return String(Math.round(v));
+  }
 
   function sliceId() { return S.scenario + "|" + S.period; }
   function dScores() { return D.district_scores[sliceId()] || {}; }
@@ -1453,6 +1524,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
     });
     svg.appendChild(gs);
 
+    /* Context overlay: above the administrative strokes so the circles read,
+       below compare and selection so neither outline is ever buried. */
+    var gx = document.createElementNS(ns, "g");
+    gx.setAttribute("id", "g-ctx");
+    svg.appendChild(gx);
+
     /* Comparison sits above all administrative strokes but below selection.
        Its purple 2.2px outline is intentionally neither another grey boundary
        weight nor strong enough to compete with the 2.6px blue selection. */
@@ -1598,6 +1675,38 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (selKey && blockByKey[S.block]) selPath.setAttribute("d", blockByKey[S.block].d);
     else if (S.view === "district" && byKey[S.district]) selPath.setAttribute("d", byKey[S.district].d);
     else selPath.setAttribute("d", "");
+
+    paintContextLayer(emphDistricts);
+  }
+
+  /* Population circles: area proportional to population, so radius scales as
+     the square root. National view only -- the State view paints blocks, and
+     district-level circles over a block choropleth would mix two units. */
+  function paintContextLayer(emphDistricts) {
+    var g = document.getElementById("g-ctx");
+    if (!g) return;
+    g.replaceChildren();
+    if (S.ctxLayer !== "pop" || S.view !== "india") {
+      svg.setAttribute("aria-label", "Choropleth of district bundle scores");
+      return;
+    }
+
+    svg.setAttribute("aria-label",
+      "Choropleth of district bundle scores, with population shown as proportional circles");
+
+    var ns = "http://www.w3.org/2000/svg";
+    D.districts.forEach(function (d) {
+      if (!d.c) return;
+      var r = popRadius((CTX_EXPOSURE[d.k] || {}).pop);
+      if (r <= 0) return;
+      var c = document.createElementNS(ns, "circle");
+      c.setAttribute("cx", d.c[0]);
+      c.setAttribute("cy", d.c[1]);
+      c.setAttribute("r", r.toFixed(2));
+      c.setAttribute("class", "ctx-dot" +
+        (emphDistricts !== null && !emphDistricts[d.k] ? " ctx-muted" : ""));
+      g.appendChild(c);
+    });
   }
 
   /* ---------- hover ---------- */
@@ -1901,6 +2010,39 @@ PAGE_TEMPLATE = r"""<!doctype html>
     }
     document.getElementById("cbar-title").textContent =
       S.bundle + " score" + (LX.on ? " — local contrast (not comparable)" : "");
+  }
+
+  function renderContextLayer() {
+    var row = document.getElementById("ctxl-row");
+    /* Section 5: omit an unavailable overlay rather than showing it disabled.
+       District circles are national-view only, so outside that view the whole
+       control disappears rather than greying out. */
+    var available = S.view === "india" && POP_MAX > 0;
+    row.hidden = !available;
+    if (!available) return;
+
+    document.getElementById("ctx-layer").value = S.ctxLayer || "";
+
+    var key = document.getElementById("ctx-key");
+    var note = document.getElementById("ctx-note");
+    if (S.ctxLayer !== "pop") {
+      key.hidden = true; key.innerHTML = ""; note.textContent = "";
+      return;
+    }
+    key.hidden = false;
+    key.innerHTML = "<span class='ctx-key-lab'>Circle area = population</span>" +
+      popKeySteps().map(function (v) {
+        return "<span class='ctx-key-step'>" +
+               "<svg width='" + (CTX_RMAX * 2 + 2) + "' height='" + (CTX_RMAX * 2 + 2) +
+               "' viewBox='0 0 " + (CTX_RMAX * 2 + 2) + " " + (CTX_RMAX * 2 + 2) +
+               "'><circle class='ctx-dot' cx='" + (CTX_RMAX + 1) + "' cy='" + (CTX_RMAX + 1) +
+               "' r='" + popRadius(v).toFixed(2) + "'></circle></svg>" +
+               "<span>" + popLabel(v) + "</span></span>";
+      }).join("");
+    note.textContent = POP_MISSING
+      ? POP_MISSING + (POP_MISSING === 1 ? " district carries" : " districts carry") +
+        " no circle — no population figure, or zero."
+      : "";
   }
 
   /* ================= answer card ================= */
@@ -2523,9 +2665,11 @@ PAGE_TEMPLATE = r"""<!doctype html>
         ctxExposureHtml(scope, cx) +
         ctxHydroHtml(scope, cx) +
         "<p class='ctx-prov'>Contextual only — it does not enter the bundle score, " +
-        "which stays hazard-only. " + lines.map(esc).join(" · ") + ". Map overlays " +
-        "(basin boundaries, river network) are not implemented in this prototype and are " +
-        "omitted from the controls rather than shown disabled.</p>" +
+        "which stays hazard-only. " + lines.map(esc).join(" · ") + ". Population is " +
+        "available as a map overlay in the national view (WorldPop-derived admin " +
+        "master, 2025 snapshot); basin boundaries and the river network are not " +
+        "implemented in this prototype and are omitted from the controls rather than " +
+        "shown disabled.</p>" +
       "</div></details>";
 
     var det = host.querySelector("details.ctx");
@@ -2594,6 +2738,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     renderCrumbs();
     renderMapHead();
     paintMap();
+    renderContextLayer();
     renderHistogram(pv);
     renderColourbar(pv.vals);
     renderHeadline();
@@ -2671,6 +2816,11 @@ PAGE_TEMPLATE = r"""<!doctype html>
 
   document.getElementById("lc-toggle").addEventListener("change", function (ev) {
     S.local = ev.target.checked; render();
+  });
+
+  document.getElementById("ctx-layer").addEventListener("change", function (ev) {
+    S.ctxLayer = ev.target.value || null;
+    render();
   });
 
   buildSelectors();
@@ -2797,6 +2947,13 @@ is the same rule that governs every other field here: an unavailable field is dr
 unavailable subsection says so plainly, and nothing is inferred from another geography level.</p>
 <p>Map overlays — basin boundaries and the river network — are not implemented, so they are omitted
 from the controls rather than shown disabled.</p>
+<p><b>A population overlay is implemented</b> as a Context layer: proportional circles, one per
+district, centred on each district's representative point (not its bounding-box or geometric
+centroid, which can fall outside a crescent-shaped or coastal district). Circle <b>area</b> is
+proportional to population — radius scales as the square root — so it reads honestly at a glance
+rather than overstating large districts by the square of a linear radius. It is district-level and
+national-view only, off by default, and contextual: it does not enter the bundle score, which stays
+hazard-only, and it never touches the risk colour ramp beneath it.</p>
 
 <h3>Not implemented here</h3>
 <ul>
@@ -2805,7 +2962,7 @@ from the controls rather than shown disabled.</p>
   <li><b>Detailed Analysis.</b> The transition and its carried state are real; the destination is a
       stub.</li>
   <li><b>Twelve of the thirteen eligible bundles</b>, coordinate entry, exports,
-      map overlays, State/UT-level basin context, and the provenance quartet.</li>
+      basin and river map overlays, State/UT-level basin context, and the provenance quartet.</li>
 </ul>
 <p>Scores come from the Heat Risk national pilot and predate the production frozen-scale change.
 They are indicative of shape, not a release baseline.</p>
