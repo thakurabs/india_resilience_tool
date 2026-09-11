@@ -37,7 +37,8 @@ Three honest departures from the target spec, all surfaced in the page itself:
   context at State/UT scope: a State/UT basin share needs a State-to-basin
   geometry intersection, and counting districts' dominant basins would be a
   different quantity under the same label. A population overlay (proportional
-  circles, national view only) is implemented.
+  circles) is implemented: it follows the unit the map paints, districts
+  nationally and blocks once a State/UT is open, on one frozen national scale.
 - **Detailed Analysis is a stub.** The transition and the state it carries are
   real, including the selected driver metric; the destination is a panel that
   displays that state and nothing more.
@@ -468,6 +469,8 @@ def _build_block_shapes(
         # is the first two segments of the block key, which is the canonical
         # district key by construction -- safer than re-deriving it from a name.
         parent = "|".join(block_key.split("|")[:2])
+        rep = row.geometry.representative_point()
+        cx, cy, _ = _project(np.array([rep.x]), np.array([rep.y]), bounds)
         out.append(
             {
                 "k": block_key,
@@ -475,6 +478,7 @@ def _build_block_shapes(
                 "dk": parent,
                 "s": str(getattr(row, "state_name", "")),
                 "d": svg_path,
+                "c": [round(float(cx[0]), 2), round(float(cy[0]), 2)],
             }
         )
     return out
@@ -798,7 +802,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
                background: var(--warn-bg); border: 1px solid var(--warn-line);
                border-radius: 6px; padding: 7px 10px; line-height: 1.45; }
 
-  /* ---- Context layers (off by default, national view only) ---- */
+  /* ---- Context layers (off by default, follows the painted unit) ---- */
   .ctxl-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
               margin: 8px 0 0; font-size: 11.5px; color: var(--ink-3); }
   .ctxl { display: inline-flex; align-items: center; gap: 6px; }
@@ -1083,7 +1087,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
       including which driver metric was selected; the destination only displays that state.
       <br>Context and Evidence carries no basin or river map overlay and no basin context at
       State/UT scope; the card and the method note say why. A population overlay (proportional
-      circles, national view only) is available.
+      circles, off by default) is available.
       </p>
     </div>
   </div>
@@ -1211,26 +1215,50 @@ PAGE_TEMPLATE = r"""<!doctype html>
   };
 
   var CTX_EXPOSURE = (D.context && D.context.exposure) || {};
-  var POP_MAX = 0, POP_MISSING = 0;
+  var POP_MAX = 0;
   D.districts.forEach(function (d) {
     var v = (CTX_EXPOSURE[d.k] || {}).pop;
-    if (typeof v === "number" && v > 0) { if (v > POP_MAX) POP_MAX = v; }
-    else POP_MISSING++;
+    if (typeof v === "number" && v > 0 && v > POP_MAX) POP_MAX = v;
   });
 
+  /* The circle scale is frozen to the national district maximum and is never
+     renormalised per view, so one circle size means one population in every
+     view -- the same contract the score ruler keeps. */
   var CTX_RMAX = 16;      /* SVG user units at the national viewBox (width 1000) */
-  var CTX_RMIN = 1.0;     /* below this a real district reads as missing data */
+  var CTX_RMIN_PX = 1.0;  /* SCREEN px: a legibility floor, so it must not zoom */
 
-  function popRadius(pop) {
-    if (typeof pop !== "number" || !(pop > 0) || !POP_MAX) return 0;
-    return Math.max(CTX_RMIN, CTX_RMAX * Math.sqrt(pop / POP_MAX));
+  /* The units this view paints, which are the units it overlays. */
+  function ctxUnits() {
+    if (S.view === "india") return D.districts;
+    if (S.view === "district") return blocksOfDistrict[S.district] || [];
+    return (D.blocks || []).filter(function (b) { return b.s === S.state; });
   }
 
-  /* Three round steps derived from the data, so the key survives a data
-     refresh rather than hard-coding today's maximum. */
-  function popKeySteps() {
-    var mag = Math.pow(10, Math.floor(Math.log(POP_MAX) / Math.LN10));
-    var top = Math.floor(POP_MAX / mag) * mag;
+  function ctxZoom() {
+    var vb = viewBox();
+    return vb[2] > 0 ? D.width / vb[2] : 1;
+  }
+
+  function popRadius(pop, zoom) {
+    if (typeof pop !== "number" || !(pop > 0) || !POP_MAX) return 0;
+    return Math.max(CTX_RMIN_PX / (zoom || 1), CTX_RMAX * Math.sqrt(pop / POP_MAX));
+  }
+
+  function popMissing() {
+    var n = 0;
+    ctxUnits().forEach(function (u) {
+      var v = (CTX_EXPOSURE[u.k] || {}).pop;
+      if (!(typeof v === "number" && v > 0) || !u.c) n++;
+    });
+    return n;
+  }
+
+  /* Three round steps derived from the maximum it should describe, so the key
+     survives a data refresh rather than hard-coding today's maximum. */
+  function popKeySteps(max) {
+    var m = max > 0 ? max : POP_MAX;
+    var mag = Math.pow(10, Math.floor(Math.log(m) / Math.LN10));
+    var top = Math.floor(m / mag) * mag;
     return [top, top / 3, top / 10];
   }
   function popLabel(v) {
@@ -1680,31 +1708,43 @@ PAGE_TEMPLATE = r"""<!doctype html>
   }
 
   /* Population circles: area proportional to population, so radius scales as
-     the square root. National view only -- the State view paints blocks, and
-     district-level circles over a block choropleth would mix two units. */
+     the square root. The overlay follows the unit the map paints -- districts
+     nationally, blocks once a State/UT is open -- so the symbol layer and the
+     choropleth always describe the same geography. The scale is the national
+     district scale in every view: circles magnify with the viewBox zoom, which
+     keeps people-per-map-area honest, and only the legibility floor is divided
+     back out so it stays one screen pixel rather than swelling with the zoom. */
   function paintContextLayer(emphDistricts) {
     var g = document.getElementById("g-ctx");
     if (!g) return;
     g.replaceChildren();
-    if (S.ctxLayer !== "pop" || S.view !== "india") {
-      svg.setAttribute("aria-label", "Choropleth of district bundle scores");
+    var national = S.view === "india";
+    if (S.ctxLayer !== "pop") {
+      svg.setAttribute("aria-label", national
+        ? "Choropleth of district bundle scores"
+        : "Choropleth of block bundle scores");
       return;
     }
 
     svg.setAttribute("aria-label",
-      "Choropleth of district bundle scores, with population shown as proportional circles");
+      "Choropleth of " + (national ? "district" : "block") +
+      " bundle scores, with population shown as proportional circles");
 
     var ns = "http://www.w3.org/2000/svg";
-    D.districts.forEach(function (d) {
-      if (!d.c) return;
-      var r = popRadius((CTX_EXPOSURE[d.k] || {}).pop);
+    var zoom = ctxZoom();
+    ctxUnits().forEach(function (u) {
+      if (!u.c) return;
+      var r = popRadius((CTX_EXPOSURE[u.k] || {}).pop, zoom);
       if (r <= 0) return;
+      /* muting mirrors the choropleth exactly: the pinned bin emphasises
+         districts, and a block inherits its parent district's emphasis */
+      var ek = national ? u.k : u.dk;
       var c = document.createElementNS(ns, "circle");
-      c.setAttribute("cx", d.c[0]);
-      c.setAttribute("cy", d.c[1]);
-      c.setAttribute("r", r.toFixed(2));
+      c.setAttribute("cx", u.c[0]);
+      c.setAttribute("cy", u.c[1]);
+      c.setAttribute("r", r.toFixed(3));
       c.setAttribute("class", "ctx-dot" +
-        (emphDistricts !== null && !emphDistricts[d.k] ? " ctx-muted" : ""));
+        (emphDistricts !== null && !emphDistricts[ek] ? " ctx-muted" : ""));
       g.appendChild(c);
     });
   }
@@ -2015,9 +2055,9 @@ PAGE_TEMPLATE = r"""<!doctype html>
   function renderContextLayer() {
     var row = document.getElementById("ctxl-row");
     /* Section 5: omit an unavailable overlay rather than showing it disabled.
-       District circles are national-view only, so outside that view the whole
-       control disappears rather than greying out. */
-    var available = S.view === "india" && POP_MAX > 0;
+       Population is carried for districts AND blocks, so it is available in
+       every view; only a payload with no population at all removes the row. */
+    var available = POP_MAX > 0;
     row.hidden = !available;
     if (!available) return;
 
@@ -2029,18 +2069,37 @@ PAGE_TEMPLATE = r"""<!doctype html>
       key.hidden = true; key.innerHTML = ""; note.textContent = "";
       return;
     }
+
+    /* The scale is frozen nationally, but the KEY labels sizes that actually
+       occur in this view -- a 10M swatch is useless over blocks. The key is a
+       reading aid; it never changes what a circle means. */
+    var zoom = ctxZoom();
+    var inView = 0;
+    ctxUnits().forEach(function (u) {
+      var v = (CTX_EXPOSURE[u.k] || {}).pop;
+      if (typeof v === "number" && v > inView) inView = v;
+    });
+    var steps = popKeySteps(inView);
+    /* popRadius returns USER units and the map magnifies them by the viewBox
+       zoom, so the swatch must do the same -- otherwise the key understates
+       every circle it labels in every view except the national one. */
+    var swatch = steps.map(function (v) { return popRadius(v, zoom) * zoom; });
+    var box = Math.ceil(swatch[0] * 2) + 2;
+
     key.hidden = false;
     key.innerHTML = "<span class='ctx-key-lab'>Circle area = population</span>" +
-      popKeySteps().map(function (v) {
+      steps.map(function (v, i) {
         return "<span class='ctx-key-step'>" +
-               "<svg width='" + (CTX_RMAX * 2 + 2) + "' height='" + (CTX_RMAX * 2 + 2) +
-               "' viewBox='0 0 " + (CTX_RMAX * 2 + 2) + " " + (CTX_RMAX * 2 + 2) +
-               "'><circle class='ctx-dot' cx='" + (CTX_RMAX + 1) + "' cy='" + (CTX_RMAX + 1) +
-               "' r='" + popRadius(v).toFixed(2) + "'></circle></svg>" +
+               "<svg width='" + box + "' height='" + box +
+               "' viewBox='0 0 " + box + " " + box +
+               "'><circle class='ctx-dot' cx='" + (box / 2) + "' cy='" + (box / 2) +
+               "' r='" + swatch[i].toFixed(2) + "'></circle></svg>" +
                "<span>" + popLabel(v) + "</span></span>";
       }).join("");
-    note.textContent = POP_MISSING
-      ? POP_MISSING + (POP_MISSING === 1 ? " district carries" : " districts carry") +
+
+    var miss = popMissing(), unit = S.view === "india" ? "district" : "block";
+    note.textContent = miss
+      ? miss + " " + unit + (miss === 1 ? " carries" : "s carry") +
         " no circle — no population figure, or zero."
       : "";
   }
@@ -2666,7 +2725,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
         ctxHydroHtml(scope, cx) +
         "<p class='ctx-prov'>Contextual only — it does not enter the bundle score, " +
         "which stays hazard-only. " + lines.map(esc).join(" · ") + ". Population is " +
-        "available as a map overlay in the national view (WorldPop-derived admin " +
+        "available as a map overlay (WorldPop-derived admin " +
         "master, 2025 snapshot); basin boundaries and the river network are not " +
         "implemented in this prototype and are omitted from the controls rather than " +
         "shown disabled.</p>" +
@@ -2948,11 +3007,13 @@ unavailable subsection says so plainly, and nothing is inferred from another geo
 <p>Map overlays — basin boundaries and the river network — are not implemented, so they are omitted
 from the controls rather than shown disabled.</p>
 <p><b>A population overlay is implemented</b> as a Context layer: proportional circles, one per
-district, centred on each district's representative point (not its bounding-box or geometric
+painted unit, centred on each unit's representative point (not its bounding-box or geometric
 centroid, which can fall outside a crescent-shaped or coastal district). Circle <b>area</b> is
 proportional to population — radius scales as the square root — so it reads honestly at a glance
-rather than overstating large districts by the square of a linear radius. It is district-level and
-national-view only, off by default, and contextual: it does not enter the bundle score, which stays
+rather than overstating large districts by the square of a linear radius. The overlay follows the
+unit the map paints — districts nationally, blocks once a State/UT is open — and the circle scale
+is frozen to the national district maximum in every view, so circle sizes stay comparable across
+views. It is off by default and contextual: it does not enter the bundle score, which stays
 hazard-only, and it never touches the risk colour ramp beneath it.</p>
 
 <h3>Not implemented here</h3>

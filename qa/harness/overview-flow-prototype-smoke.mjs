@@ -56,7 +56,16 @@ console.log('state crumbs   :', line(await p.locator('#crumbs').innerText()));
 console.log('state headline :', line(await p.locator('#headline').innerText()).slice(0, 160));
 console.log('state painted  :', await p.locator('#painted').innerText());
 await p.screenshot({ path: out + '/02-state.png', fullPage: true });
-console.log('ctxl row in State (must be true):', await p.locator('#ctxl-row').isHidden());
+console.log('ctxl row in State (must be false):', await p.locator('#ctxl-row').isHidden());
+
+// the overlay follows the painted unit: districts nationally, blocks here
+await p.selectOption('#ctx-layer', 'pop');
+await p.waitForTimeout(400);
+console.log('state ctx circles:', await p.locator('#g-ctx circle').count());
+console.log('state ctx key    :', line(await p.locator('#ctx-key').innerText()));
+await p.screenshot({ path: out + '/02d-ctx-blocks.png', fullPage: true });
+await p.selectOption('#ctx-layer', '');
+await p.waitForTimeout(300);
 
 // State-view hover must report the parent DISTRICT and highlight all its blocks,
 // mirroring the national view's State/UT hover over painted districts
@@ -90,6 +99,11 @@ console.log('back to frozen  :', await tick0(), await fill0());
 await p.locator('#ranking tbody tr').first().click();
 await p.waitForTimeout(700);
 console.log('district crumbs:', line(await p.locator('#crumbs').innerText()));
+await p.selectOption('#ctx-layer', 'pop');
+await p.waitForTimeout(400);
+console.log('dist ctx circles :', await p.locator('#g-ctx circle').count());
+await p.selectOption('#ctx-layer', '');
+await p.waitForTimeout(300);
 console.log('dist headline  :', line(await p.locator('#headline').innerText()).slice(0, 200));
 console.log('dist painted   :', await p.locator('#painted').innerText());
 await p.screenshot({ path: out + '/03-district.png', fullPage: true });
