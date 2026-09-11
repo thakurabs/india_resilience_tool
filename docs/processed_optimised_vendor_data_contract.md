@@ -83,6 +83,16 @@ The manifest records exactly which ruler produced the numbers:
     "slices": [["historical", "1990-2010"], ["ssp245", "2020-2040"], "..."],
     "fitted_slices": [["historical", "1990-2010"], ["ssp245", "2020-2040"], "..."],
     "published_slices": [["historical", "1990-2010"], ["ssp245", "2020-2040"], "..."]
+  },
+  "composite_flood_jrc_depth": {
+    "ruler_id": "composite_flood_jrc_depth_cdf_v1",
+    "ruler_sha256": "cdd2b7073cf354ac1bdd2f55bfdde92e1d37be68341b499b8fd005d8339e13a3",
+    "headline_metric_count": 1,
+    "coverage_gate": 1.0,
+    "configured_weight": 1.0,
+    "slices": [["snapshot", "Current"]],
+    "fitted_slices": [["snapshot", "Current"]],
+    "published_slices": [["snapshot", "Current"]]
   }
 }
 ```
@@ -112,8 +122,9 @@ weights. Consequences you should build for rather than around:
   scale has been rescaled somewhere in your stack. `golden_canaries.csv`, beside
   the ruler artifact in the repository, pins 236 named unit x slice rows with
   their expected score and expected hex so you can assert this in your own build.
-- **A row can be null.** A unit backed by less than 70% of the configured
-  headline weight is published as null rather than as a full-looking score.
+- **A row can be null.** Heat Risk requires 70% of configured headline weight;
+  Riverine Flood requires its sole scored metric, so its gate is 100%. A row
+  below its ruler's recorded gate is published as null rather than as a full-looking score.
   Render it as "no data", never as 0.
 
 ### Colour scale: `colour_scale.json`
@@ -132,12 +143,13 @@ min and max of whatever subset is on screen — one state, one scenario, the
 filtered rows — re-introduces exactly the incomparability the frozen ruler was
 built to remove, and it does so invisibly: the map still looks plausible.
 
-### The other composites
+### Composites without frozen rulers
 
-The remaining 14 composite slugs are **still on per-state min-max** in this same
-bundle, under the same word "score". They are comparable within a state and
-within a slice only. `frozen_rulers` in the manifest lists precisely which slugs
-carry a national ruler; treat every slug absent from it as state-relative.
+Heat Risk and Riverine Flood carry frozen national rulers. Water Risk is a fixed
+pre-scaled ordinal. The remaining thematic and sector composite slugs retain
+their existing relative methods. `frozen_rulers` in the manifest lists precisely
+which slugs carry a national ruler; do not infer scale semantics from the shared
+word "score".
 
 ## Directory Contract
 

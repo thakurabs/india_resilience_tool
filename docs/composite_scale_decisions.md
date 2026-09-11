@@ -678,7 +678,7 @@ the completed seven-slice publication. Glance remains intentionally limited to t
 | P-11 | A frozen CDF must carry the full 5,488-value support per metric, or accept the 21-knot grid's up-to-4.2-point error. | **Closed 2026-09-10** — full support. The runtime ships only scores, so support size costs the vendor nothing; the committed artifact is 538 KB (`cdf_support.parquet`, 49,363 knots over 9 metrics). |
 | P-16 | Freezing bakes in the 1990–2010 vs 1981–2010 code-baseline gap and the `hwa_heatwave_amplitude` hybrid. | Known, accepted for now. |
 | — | `admin_roster_version` has not been assigned. Counts alone are not a version. | Blocks release. |
-| — | The 12 non-Heat-Risk bundles are unmeasured. Sector bundles need a second ruler for the change lens. | Out of pilot scope. |
+| — | Riverine Flood is now frozen on its one-metric national `snapshot/Current` CDF. The remaining unported bundles are still unmeasured; sector bundles need a second ruler for the change lens. | Riverine closed in CHG-0419; remaining bundles out of scope. |
 
 ---
 
@@ -687,7 +687,7 @@ the completed seven-slice publication. Glance remains intentionally limited to t
 | tool | produces |
 |---|---|
 | `tools/diagnostics/heat_risk_national_ruler_pilot.py` | the national run, the frozen support, all evidence tables |
-| `tools/pipeline/fit_frozen_ruler.py` | the **published** frozen ruler artifact (`config/frozen_rulers/composite_heat_risk/cdf_v1/`) and `colour_scale.json` |
+| `tools/pipeline/fit_frozen_ruler.py` | the **published** Heat Risk and Riverine Flood ruler artifacts under `config/frozen_rulers/`, their deterministic `golden_canaries.csv` files, and `colour_scale.json` |
 | `india_resilience_tool/analysis/frozen_rulers.py` | the production ruler core: exact mid-rank fit, apply/clamp, save/load |
 | `tools/diagnostics/build_heat_risk_frozen_map.py` | national district map, frozen settings |
 | `tools/diagnostics/build_resolution_comparison.py` | district-fill vs block-fill, UP / Kerala / Goa |

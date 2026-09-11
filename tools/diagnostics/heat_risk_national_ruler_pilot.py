@@ -356,7 +356,11 @@ def load_district_roster(
 
 
 def expand_to_roster(
-    long_frame: pd.DataFrame, roster: pd.DataFrame, metric_slugs: Sequence[str]
+    long_frame: pd.DataFrame,
+    roster: pd.DataFrame,
+    metric_slugs: Sequence[str],
+    *,
+    slices: Sequence[tuple[str, str]] = SLICES,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Reindex the assembled frame onto the full roster x slice grid (P-09).
 
@@ -368,8 +372,10 @@ def expand_to_roster(
 
     Returns ``(expanded_frame, reconciliation)``.
     """
-    slices = pd.DataFrame(list(SLICES), columns=["scenario", "period"])
-    grid = roster.loc[:, ["district_key", "state", "district"]].merge(slices, how="cross")
+    slice_frame = pd.DataFrame(list(slices), columns=["scenario", "period"])
+    grid = roster.loc[:, ["district_key", "state", "district"]].merge(
+        slice_frame, how="cross"
+    )
 
     value_columns = [slug for slug in metric_slugs if slug in long_frame.columns]
     payload = long_frame.loc[:, ["district_key", "scenario", "period"] + value_columns]
@@ -448,6 +454,7 @@ def load_national_long_frame(
     level: str,
     states: Sequence[str],
     data_dir: Path,
+    slices: Sequence[tuple[str, str]] = SLICES,
     verbose: bool = True,
 ) -> pd.DataFrame:
     """Assemble one national long frame: id columns + scenario/period + one column per metric.
@@ -468,7 +475,7 @@ def load_national_long_frame(
             if verbose:
                 print(f"  [skip] {state_name}: no component masters", file=sys.stderr)
             continue
-        for scenario, period in SLICES:
+        for scenario, period in slices:
             wide = _build_wide_component_frame(
                 component_frames, level=level, scenario=scenario, period=period
             )

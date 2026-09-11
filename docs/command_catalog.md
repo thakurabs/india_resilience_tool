@@ -419,21 +419,26 @@ Notes:
 - `--state` is admin-only for `build_master_metrics`
 - hydro levels auto-use `processed/{metric}/hydro/`
 
-### Frozen national ruler (composite_heat_risk)
+### Frozen national rulers (Heat Risk and Riverine Flood)
 
 `composite_heat_risk` is not normalized per state. It is scored against a frozen national CDF
 ruler committed in the repository at
 `india_resilience_tool/config/frozen_rulers/composite_heat_risk/cdf_v1/`.
+`composite_flood_jrc_depth` likewise uses its snapshot-only ruler at
+`india_resilience_tool/config/frozen_rulers/composite_flood_jrc_depth/cdf_v1/`.
 
 ```bash
 # Fit and report only; writes nothing
 python -m tools.pipeline.fit_frozen_ruler --bundle "Heat Risk" --out-version v1 --dry-run
+python -m tools.pipeline.fit_frozen_ruler --bundle "Riverine Flood" --out-version v1 --dry-run
 
 # Fit and commit a NEW version directory (refuses to overwrite an existing one)
 python -m tools.pipeline.fit_frozen_ruler --bundle "Heat Risk" --out-version v1
+python -m tools.pipeline.fit_frozen_ruler --bundle "Riverine Flood" --out-version v1
 ```
 
-Writes `cdf_support.parquet`, `ruler_spec.parquet` and `ruler.json` into the version directory,
+Writes `cdf_support.parquet`, `ruler_spec.parquet`, `ruler.json`, and
+`golden_canaries.csv` into the version directory,
 plus `IRT_DATA_DIR/processed_optimised/colour_scale.json`.
 
 Republishing the scores after a fit — run in this order, and back up

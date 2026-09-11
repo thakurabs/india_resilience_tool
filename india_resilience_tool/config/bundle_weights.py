@@ -31,6 +31,7 @@ class BundleWeightEntry:
 #: a frozen national ruler are pinned; the rest have no headline split.
 EXPECTED_HEADLINE_WEIGHT_TOTALS: dict[str, float] = {
     "Heat Risk": 0.2 / 3.0 * 3 + 0.25 / 3.0 * 2 + 0.2 / 3.0 * 3 + 0.2 / 3.0,
+    "Riverine Flood": 1.0,
 }
 
 
