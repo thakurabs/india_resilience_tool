@@ -528,6 +528,7 @@ CONTEXT_PROVENANCE: dict[str, str] = {
     "built_up": "Built-up area: LULC-derived admin master, current snapshot",
     "lulc": "Agricultural LULC: LULC-derived admin master, current snapshot",
     "hydro": "Basins and rivers: IRT hydrology crosswalk over the admin roster",
+    "density": "Population density: WorldPop-derived admin master, 2025 snapshot — people per km² of total unit area, including uninhabitable land.",
 }
 
 
@@ -629,6 +630,47 @@ def _state_exposure_rows(
     return out
 
 
+#: Population density is not carried in ``admin_exposure_summary``; it is
+#: published as its own metric bundle at both admin levels, nationally. Reading
+#: it here keeps the overlay's two encodings — size from population, shade from
+#: density — sourced from the same WorldPop admin master family.
+DENSITY_COLUMN = "population_density__snapshot__2025__mean"
+DENSITY_ROOT = ("processed_optimised", "metrics", "population_density",
+                "masters", "admin")
+
+
+def _load_density(data_dir: Path, wanted: set[str]) -> dict[str, float]:
+    """People per km² for every requested unit, keyed by admin key.
+
+    A missing directory or unreadable file yields an empty mapping rather than
+    an exception: circles must still paint at their population size when the
+    density master is absent, exactly as ``load_context`` degrades elsewhere.
+    """
+    root = Path(data_dir).joinpath(*DENSITY_ROOT)
+    out: dict[str, float] = {}
+    for level, key_column in (("district", "district_key"), ("block", "block_key")):
+        directory = root / level
+        if not directory.is_dir():
+            print(f"context   : population_density/{level} absent — those "
+                  f"circles will carry no density shade", file=sys.stderr)
+            continue
+        for path in sorted(directory.glob("*.parquet")):
+            try:
+                frame = pd.read_parquet(path, columns=[key_column, DENSITY_COLUMN])
+            except Exception as exc:  # pragma: no cover - depends on local bundle
+                print(f"context   : {path.name} unreadable ({exc}) — skipped",
+                      file=sys.stderr)
+                continue
+            for key, value in zip(frame[key_column], frame[DENSITY_COLUMN]):
+                admin_key = str(key)
+                if admin_key not in wanted:
+                    continue
+                number = _clean_number(value, 0)
+                if number is not None and number > 0:
+                    out[admin_key] = number
+    return out
+
+
 def load_context(
     data_dir: Path,
     district_keys: set[str],
@@ -706,6 +748,11 @@ def load_context(
     if unmatched:
         print(f"context   : {len(unmatched)} districts carry no context row, "
               f"e.g. {unmatched[:3]} — they will read 'Not available'", file=sys.stderr)
+    density = _load_density(data_dir, wanted)
+    for admin_key, value in density.items():
+        exposure.setdefault(admin_key, {})["dens"] = value
+    print(f"context   : density {len(district_keys & set(density))}/{len(district_keys)} "
+          f"districts, {len(block_keys & set(density))}/{len(block_keys)} blocks")
     matched_hydro = len(district_keys & set(hydro)) if hydro else 0
     print(f"context   : hydrology {matched_hydro}/{len(district_keys)} districts, "
           f"{len(block_keys & set(hydro))}/{len(block_keys)} blocks")
@@ -844,9 +891,23 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .blk { stroke: var(--fine); stroke-opacity: .45; stroke-width: .4px; cursor: pointer; }
   .stroke-coarse { fill: none; stroke: var(--coarse); stroke-opacity: .95; stroke-width: 1.9px;
                    pointer-events: none; }
-  .ctx-dot { fill: #2b3a67; fill-opacity: .30; stroke: #1b2545; stroke-opacity: .55;
-             stroke-width: .6px; vector-effect: non-scaling-stroke; pointer-events: none; }
-  .ctx-dot.ctx-muted { fill-opacity: .07; stroke-opacity: .12; }
+  /* Size carries population; fill carries density. The fill is near-opaque with
+     a white halo because a translucent shade over a red or green choropleth
+     reads as a blend of both, which would make the density unrecoverable. The
+     circles are small against their units, so the score fill stays legible
+     around them. Five navy steps, deliberately outside the score ramp's hues. */
+  .ctx-dot { fill: #6f8cc0; fill-opacity: .85; stroke: #ffffff; stroke-opacity: .85;
+             stroke-width: .8px; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .ctx-dot.ctx-d0 { fill: #dbe3f0; }
+  .ctx-dot.ctx-d1 { fill: #a9bbdc; }
+  .ctx-dot.ctx-d2 { fill: #6f8cc0; }
+  .ctx-dot.ctx-d3 { fill: #3f5d9c; }
+  .ctx-dot.ctx-d4 { fill: #1d2f63; }
+  /* no density figure: hollow and dashed, never a pale fill — absence must not
+     be readable as "sparsely populated" */
+  .ctx-dot.ctx-dna { fill: none; stroke: #1b2545; stroke-opacity: .6;
+                     stroke-dasharray: 2 2; }
+  .ctx-dot.ctx-muted { fill-opacity: .10; stroke-opacity: .15; }
   #g-ctx { pointer-events: none; }
   .cmp-stroke { fill: none; stroke: #7b3fa0; stroke-opacity: .95; stroke-width: 2.2px;
                 pointer-events: none; }
@@ -1120,7 +1181,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
             <label class="ctxl" for="ctx-layer">Context layer
               <select id="ctx-layer">
                 <option value="">None</option>
-                <option value="pop">Population</option>
+                <option value="pop">Population density</option>
               </select>
             </label>
             <span class="ctx-key" id="ctx-key" hidden></span>
@@ -1210,7 +1271,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
      value is spread evenly across the district, and would also have to evict
      the risk colour. */
   var CTX_LAYERS = {
-    pop: { label: "Population", unit: "people",
+    pop: { label: "Population density", unit: "people/km²",
            prov: "WorldPop-derived admin master, 2025 snapshot" }
   };
 
@@ -1226,6 +1287,40 @@ PAGE_TEMPLATE = r"""<!doctype html>
      view -- the same contract the score ruler keeps. */
   var CTX_RMAX = 16;      /* SVG user units at the national viewBox (width 1000) */
   var CTX_RMIN_PX = 1.0;  /* SCREEN px: a legibility floor, so it must not zoom */
+
+  /* Density shades a circle; it never sizes one. These breaks are CONSTANTS,
+     not derived from the data, so the fill ruler is frozen harder than the size
+     ruler: a data refresh moves no boundary. Chosen on a roughly log spacing
+     because density spans 0 to ~34,000 with a median near 430 — linear breaks
+     would collapse most of India into one bin. */
+  var CTX_DENS_BREAKS = [100, 400, 1000, 4000];
+  var CTX_DENS_LABELS = ["<100", "<400", "<1k", "<4k", "4k+"];
+
+  var DENS_ANY = (function () {
+    for (var k in CTX_EXPOSURE) {
+      var v = CTX_EXPOSURE[k].dens;
+      if (typeof v === "number" && v > 0) return true;
+    }
+    return false;
+  }());
+
+  function densClass(v) {
+    if (typeof v !== "number" || !(v > 0)) return "ctx-dna";
+    for (var i = 0; i < CTX_DENS_BREAKS.length; i++) {
+      if (v < CTX_DENS_BREAKS[i]) return "ctx-d" + i;
+    }
+    return "ctx-d4";
+  }
+
+  function densMissing() {
+    var n = 0;
+    ctxUnits().forEach(function (u) {
+      var e = CTX_EXPOSURE[u.k] || {};
+      if (!u.c || !(typeof e.pop === "number" && e.pop > 0)) return;
+      if (!(typeof e.dens === "number" && e.dens > 0)) n++;
+    });
+    return n;
+  }
 
   /* The units this view paints, which are the units it overlays. */
   function ctxUnits() {
@@ -1728,7 +1823,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
 
     svg.setAttribute("aria-label",
       "Choropleth of " + (national ? "district" : "block") +
-      " bundle scores, with population shown as proportional circles");
+      " bundle scores, with circles sized by population and shaded by population density");
 
     var ns = "http://www.w3.org/2000/svg";
     var zoom = ctxZoom();
@@ -1743,7 +1838,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
       c.setAttribute("cx", u.c[0]);
       c.setAttribute("cy", u.c[1]);
       c.setAttribute("r", r.toFixed(3));
-      c.setAttribute("class", "ctx-dot" +
+      c.setAttribute("class", "ctx-dot " + densClass((CTX_EXPOSURE[u.k] || {}).dens) +
         (emphDistricts !== null && !emphDistricts[ek] ? " ctx-muted" : ""));
       g.appendChild(c);
     });
@@ -2063,6 +2158,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
 
     document.getElementById("ctx-layer").value = S.ctxLayer || "";
 
+    /* If no unit carries a density figure the layer is still a valid population
+       overlay, so label it for what it actually shows rather than what it was
+       meant to show. */
+    var opt = document.querySelector("#ctx-layer option[value='pop']");
+    if (opt) opt.textContent = DENS_ANY ? "Population density" : "Population";
+
     var key = document.getElementById("ctx-key");
     var note = document.getElementById("ctx-note");
     if (S.ctxLayer !== "pop") {
@@ -2087,21 +2188,40 @@ PAGE_TEMPLATE = r"""<!doctype html>
     var box = Math.ceil(swatch[0] * 2) + 2;
 
     key.hidden = false;
-    key.innerHTML = "<span class='ctx-key-lab'>Circle area = population</span>" +
+    /* Size swatches are drawn in one fixed mid shade: they describe size only,
+       and shading them by anything would imply a density they do not carry. */
+    var sizeKey = "<span class='ctx-key-lab'>Circle area = population</span>" +
       steps.map(function (v, i) {
         return "<span class='ctx-key-step'>" +
                "<svg width='" + box + "' height='" + box +
                "' viewBox='0 0 " + box + " " + box +
-               "'><circle class='ctx-dot' cx='" + (box / 2) + "' cy='" + (box / 2) +
+               "'><circle class='ctx-dot ctx-d2' cx='" + (box / 2) + "' cy='" + (box / 2) +
                "' r='" + swatch[i].toFixed(2) + "'></circle></svg>" +
                "<span>" + popLabel(v) + "</span></span>";
       }).join("");
-
-    var miss = popMissing(), unit = S.view === "india" ? "district" : "block";
-    note.textContent = miss
-      ? miss + " " + unit + (miss === 1 ? " carries" : "s carry") +
-        " no circle — no population figure, or zero."
+    var fillKey = DENS_ANY
+      ? "<span class='ctx-key-lab'>Fill = people/km²</span>" +
+        CTX_DENS_LABELS.map(function (lab, i) {
+          return "<span class='ctx-key-step'>" +
+                 "<svg width='14' height='14' viewBox='0 0 14 14'>" +
+                 "<circle class='ctx-dot ctx-d" + i + "' cx='7' cy='7' r='5'></circle>" +
+                 "</svg><span>" + lab + "</span></span>";
+        }).join("")
       : "";
+    key.innerHTML = sizeKey + fillKey;
+
+    var miss = popMissing(), dmiss = DENS_ANY ? densMissing() : 0,
+        unit = S.view === "india" ? "district" : "block";
+    var parts = [];
+    if (miss) {
+      parts.push(miss + " " + unit + (miss === 1 ? " carries" : "s carry") +
+                 " no circle — no population figure, or zero.");
+    }
+    if (dmiss) {
+      parts.push(dmiss + " " + unit + (dmiss === 1 ? " is" : "s are") +
+                 " drawn hollow — no density figure.");
+    }
+    note.textContent = parts.join(" ");
   }
 
   /* ================= answer card ================= */
@@ -2627,6 +2747,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (pop !== null) {
       html += "<div class='ctx-grid'>" +
         cxCell("Population", pop) +
+        cxCell("People per km²", cxCount(row.dens)) +
         cxCell("Share of " + (scope.level === "state" ? "India" : (row.plevel || "parent")),
                cxPct(row.pshare, false)) +
         "</div>";

@@ -42,6 +42,9 @@ console.log('ctxl row in India:', !(await p.locator('#ctxl-row').isHidden()));
 await p.selectOption('#ctx-layer', 'pop');
 await p.waitForTimeout(400);
 console.log('ctx circles    :', await p.locator('#g-ctx circle').count());
+console.log('ctx shades     :', (await Promise.all([0,1,2,3,4].map(i =>
+  p.locator('#g-ctx circle.ctx-d' + i).count()))).join('/'),
+  '| hollow:', await p.locator('#g-ctx circle.ctx-dna').count());
 console.log('risk fill kept :', (await p.locator('#g-dist path').nth(300).getAttribute('fill')) === fillBefore);
 console.log('ctx key        :', line(await p.locator('#ctx-key').innerText()));
 await p.screenshot({ path: out + '/01b-ctx-pop.png', fullPage: true });
