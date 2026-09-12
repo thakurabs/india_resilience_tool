@@ -54,6 +54,7 @@ from india_resilience_tool.compute.composite_metrics import (
     _compute_frozen_ruler_score_frame,
     _load_component_master,
     _required_id_columns,
+    _resolve_component_metric_column,
     _resolve_state_paths,
 )
 from india_resilience_tool.config.bundle_weights import (
@@ -103,19 +104,23 @@ def coverage_gate_for_bundle(bundle_domain: str) -> float:
 def _ordered_metric_slices(
     frame: pd.DataFrame, metric_slug: str
 ) -> tuple[tuple[str, str], ...]:
-    """Discover exact four-token mean slices from one component-master schema."""
+    """Discover resolvable four-token mean slices from one component master."""
     pairs: list[tuple[str, str]] = []
     for column in frame.columns:
         parts = str(column).split("__")
         if (
             len(parts) == 4
-            and parts[0] == metric_slug
             and parts[1]
             and parts[2]
             and parts[3] == "mean"
         ):
             pair = (parts[1], parts[2])
-            if pair not in pairs:
+            if pair not in pairs and _resolve_component_metric_column(
+                frame,
+                metric_slug=metric_slug,
+                scenario=pair[0],
+                period=pair[1],
+            ):
                 pairs.append(pair)
     return tuple(pairs)
 

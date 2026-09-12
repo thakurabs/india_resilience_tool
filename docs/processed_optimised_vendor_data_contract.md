@@ -127,6 +127,19 @@ weights. Consequences you should build for rather than around:
   below its ruler's recorded gate is published as null rather than as a full-looking score.
   Render it as "no data", never as 0.
 
+The Riverine Flood **block** layer intentionally carries only **5 distinct score
+values nationally**: `0.574` and four others up to `92.666`. This is not a
+rendering bug or a five-colour palette. The source
+`jrc_flood_depth_index_rp100` is a discrete 1–5 severity class at block level,
+so 47% of blocks share one score. The district source value is instead an
+area-weighted mean of those block classes; its published layer has 574 distinct
+values across 784 districts and is unaffected. Do not manufacture decimal block
+values or convert scores to make the layers resemble one another. The durable
+fix is upstream re-aggregation from the JRC raster at block resolution; the
+district value is already the aggregate of the block classes, and 190 of 784
+districts equal their block mean exactly, so there is no decimal equivalent to
+map onto the block classes.
+
 ### Colour scale: `colour_scale.json`
 
 `processed_optimised/colour_scale.json` ships the exact ramp the score is meant

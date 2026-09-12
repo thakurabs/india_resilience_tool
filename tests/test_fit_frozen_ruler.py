@@ -14,9 +14,24 @@ from india_resilience_tool.analysis.frozen_rulers import (
     load_ruler_set,
     sha256_file,
 )
-from india_resilience_tool.config.bundle_weights import get_bundle_headline_weight_total
+from india_resilience_tool.config.bundle_weights import (
+    get_bundle_headline_weight_total,
+    get_bundle_headline_weights,
+)
 from india_resilience_tool.config.composite_metrics import COMPOSITES_BY_SLUG
+from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG
 from tools.pipeline import fit_frozen_ruler as fitter
+
+
+HEAT_RISK_SLICES = (
+    ("historical", "1990-2010"),
+    ("ssp245", "2020-2040"),
+    ("ssp245", "2040-2060"),
+    ("ssp245", "2060-2080"),
+    ("ssp585", "2020-2040"),
+    ("ssp585", "2040-2060"),
+    ("ssp585", "2060-2080"),
+)
 
 
 def _riverine_master(values: list[float] | None = None) -> pd.DataFrame:
@@ -45,6 +60,40 @@ def test_snapshot_only_slice_discovery_uses_component_master_schema(
     )
 
     assert observed == (("snapshot", "Current"),)
+
+
+def test_heat_risk_slice_discovery_uses_registered_component_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metric_slugs = [
+        entry.metric_slug for entry in get_bundle_headline_weights("Heat Risk")
+    ]
+
+    def load_master(metric_slug: str, **_kwargs: object) -> pd.DataFrame:
+        metric_spec = METRICS_BY_SLUG[metric_slug]
+        column_base = metric_spec.periods_metric_col or metric_spec.value_col
+        assert column_base
+        return pd.DataFrame(
+            {
+                "state": ["Example"],
+                "district": ["District 0"],
+                "district_key": ["example|district 0"],
+                **{
+                    f"{column_base}__{scenario}__{period}__mean": [float(index)]
+                    for index, (scenario, period) in enumerate(HEAT_RISK_SLICES)
+                },
+            }
+        )
+
+    monkeypatch.setattr(fitter, "_load_component_master", load_master)
+
+    observed = fitter.discover_fitted_slices(
+        metric_slugs,
+        states=["Example"],
+        data_dir=Path("unused"),
+    )
+
+    assert observed == HEAT_RISK_SLICES
 
 
 def test_slice_discovery_rejects_present_master_with_missing_slice(
