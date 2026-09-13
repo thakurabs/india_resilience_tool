@@ -33,6 +33,7 @@ EXPECTED_HEADLINE_WEIGHT_TOTALS: dict[str, float] = {
     "Heat Risk": 0.2 / 3.0 * 3 + 0.25 / 3.0 * 2 + 0.2 / 3.0 * 3 + 0.2 / 3.0,
     "Heat Stress": 0.70,
     "Riverine Flood": 1.0,
+    "Extreme Rainfall | Flash Flood Risk": 0.75,
 }
 
 
@@ -411,6 +412,10 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Very Wet Contribution",
+            # R95p counts rainfall above the *unit's own* baseline 95th
+            # percentile of wet-day precipitation, so an arid district and a
+            # coastal one are measured against different millimetre thresholds.
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Extreme Rainfall | Flash Flood Risk",
@@ -418,6 +423,10 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Very Wet Contribution",
+            # R95pTOT shares R95p's unit-specific percentile threshold and is in
+            # addition a *share* of that unit's own wet-day total, so it is
+            # doubly relative to the unit rather than to an absolute depth.
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Extreme Rainfall | Flash Flood Risk",

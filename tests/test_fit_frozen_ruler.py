@@ -230,6 +230,33 @@ def test_committed_riverine_ruler_and_canaries_match_config() -> None:
     assert len(canaries) == 24
 
 
+def test_committed_extreme_rainfall_ruler_and_canaries_match_config() -> None:
+    spec = COMPOSITES_BY_SLUG["composite_flood_extreme_rainfall_risk"]
+    ruler_dir = frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version)
+    ruler_set = load_ruler_set(ruler_dir)
+    canaries = pd.read_csv(ruler_dir / "golden_canaries.csv")
+
+    assert spec.normalization == "frozen_national_cdf"
+    assert spec.frozen_ruler_version == "cdf_v1"
+    # R95p and R95pTOT are measured against each unit's own baseline 95th
+    # percentile, so they are the lens half and must not carry the headline.
+    assert spec.headline_metric_slugs == (
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "r20mm_very_heavy_precip_days",
+        "cwd_consecutive_wet_days",
+    )
+    assert ruler_set.ruler_id == "composite_flood_extreme_rainfall_risk_cdf_v1"
+    assert ruler_set.slices == HEAT_RISK_SLICES
+    assert ruler_set.coverage_gate == 1.0
+    assert ruler_set.configured_weight == get_bundle_headline_weight_total(
+        "Extreme Rainfall | Flash Flood Risk"
+    )
+    assert ruler_set.ruler_sha256 == sha256_file(ruler_dir / "cdf_support.parquet")
+    assert set(canaries["level"]) == {"district", "block"}
+    assert len(canaries) == 168
+
+
 def test_committed_heat_stress_ruler_and_canaries_match_config() -> None:
     spec = COMPOSITES_BY_SLUG["composite_heat_stress"]
     ruler_dir = frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version)

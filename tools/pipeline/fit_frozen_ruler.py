@@ -78,11 +78,14 @@ from tools.diagnostics.heat_risk_national_ruler_pilot import (
 #: measured 0.00% of rows below 0.70. Heat Stress measured complete coverage
 #: across all 784 districts x 7 slices for its six headline metrics, so its gate
 #: refuses partial rows. Riverine Flood has one effective metric, so coverage is
-#: binary; all 784 fitted districts measured 1.0 coverage.
+#: binary; all 784 fitted districts measured 1.0 coverage. Extreme Rainfall |
+#: Flash Flood Risk measured 5,488 of 5,488 district-slices finite on all four
+#: headline metrics, so it too refuses partial rows.
 BUNDLE_COVERAGE_GATES: dict[str, float] = {
     "Heat Risk": 0.70,
     "Heat Stress": 1.0,
     "Riverine Flood": 1.0,
+    "Extreme Rainfall | Flash Flood Risk": 1.0,
 }
 
 LEVEL = "district"

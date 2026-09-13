@@ -61,6 +61,8 @@ DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
         composite_label="Composite Flash Flood Risk",
         supported_levels=("district", "block"),
         show_in_landing=True,
+        composite_normalization="frozen_national_cdf",
+        frozen_ruler_version="cdf_v1",
     ),
     DashboardBundleSpec(
         group_key="thematic",

@@ -80,6 +80,43 @@ def test_heat_stress_bundle_weights_are_stable_and_sum_to_one() -> None:
     assert EXPECTED_HEADLINE_WEIGHT_TOTALS["Heat Stress"] == pytest.approx(0.70)
 
 
+def test_extreme_rainfall_headline_excludes_the_percentile_referenced_metrics() -> None:
+    entries = get_bundle_weights("Extreme Rainfall | Flash Flood Risk")
+
+    assert [entry.metric_slug for entry in entries] == [
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "r20mm_very_heavy_precip_days",
+        "r95p_very_wet_precip",
+        "r95ptot_contribution_pct",
+        "cwd_consecutive_wet_days",
+    ]
+    assert math.isclose(
+        sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9
+    )
+    assert [
+        entry.metric_slug
+        for entry in get_bundle_headline_weights("Extreme Rainfall | Flash Flood Risk")
+    ] == [
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "r20mm_very_heavy_precip_days",
+        "cwd_consecutive_wet_days",
+    ]
+    assert get_bundle_baseline_referenced_slugs(
+        "Extreme Rainfall | Flash Flood Risk"
+    ) == (
+        "r95p_very_wet_precip",
+        "r95ptot_contribution_pct",
+    )
+    assert get_bundle_headline_weight_total(
+        "Extreme Rainfall | Flash Flood Risk"
+    ) == pytest.approx(0.75)
+    assert EXPECTED_HEADLINE_WEIGHT_TOTALS[
+        "Extreme Rainfall | Flash Flood Risk"
+    ] == pytest.approx(0.75)
+
+
 def test_bundle_weight_validation_rejects_cross_bundle_baseline_flag_divergence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

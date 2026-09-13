@@ -669,6 +669,46 @@ the completed seven-slice publication. Glance remains intentionally limited to t
 
 ---
 
+## Part D3 — Extreme Rainfall | Flash Flood Risk, frozen 2026-09-13 (CHG-0451..0454)
+
+`composite_flood_extreme_rainfall_risk` is published against
+`composite_flood_extreme_rainfall_risk_cdf_v1`, fitted over 784 districts x the same 7-slice grid.
+
+The lens split turns on what a millimetre means. `pr_max_1day_precip`, `pr_max_5day_precip`,
+`r20mm_very_heavy_precip_days` and `cwd_consecutive_wet_days` are absolute depths and fixed
+thresholds (20 mm, the 1 mm wet-day convention) and carry the headline at configured weight
+**0.75**, renormalized to 1.0. `r95p_very_wet_precip` and `r95ptot_contribution_pct` count rainfall
+above *each unit's own* baseline 95th percentile of wet-day precipitation, so Jaisalmer and
+Cherrapunji are held to different millimetre thresholds; R95pTOT is in addition a share of that
+unit's own wet-day total. Both are retained as lenses and excluded from the headline.
+
+| check | result |
+|---|---|
+| Headline coverage at fit | 5,488 / 5,488 district-slices finite on all four metrics -> **gate 1.0**, 0 rows gated |
+| Districts / blocks published | 784 / 7,137; **zero new nulls** (the single NaN block, Kiltan in Lakshadweep, was already NaN in every pre-migration slice — the known F2.5 atoll gap) |
+| Score dtype | **float64** |
+| Key parity vs `geometry/` | district 784/784, block 7,137/7,137, 0 missing in either direction |
+| Block-vs-district same quantity | both continuous; blocks carry 49,356 distinct values over 49,959 rows (contrast Riverine Flood's 5 integer severity classes) |
+| Jensen guard, area-weighted block rollup vs district's own score | historical max **7.19**, mean **0.26**, none above 10; SSP5-8.5 2060-2080 max **10.82**, mean **0.33**, **3** district-slices above 10 |
+| Same guard on the pre-migration per-state min-max file (SSP5-8.5 2060-2080) | max **31.07**, mean **3.17**, **36** districts above 10 |
+| `parity_report.json` issue count | **0** |
+| Roster reconciliation at fit | clean — 784 `roster_and_master`, no orphans, no alignment warnings |
+
+The three districts above the Heat Risk-calibrated gap threshold of 10 are Chikkamagaluru, Hassan
+and Mysuru, all straddling the Western Ghats crest, where windward and leeward blocks of one
+district sit at opposite ends of the national rainfall distribution. That is Jensen's inequality
+behaving as B4 describes, not a defect: the district score is computed from district-mean
+components and the rollup from block scores, and they answer different questions. The migration
+*reduced* the divergence about tenfold on the same slice. The threshold of 10 was calibrated on
+temperature, whose within-district gradients are far gentler than orographic rainfall's.
+
+Physical read at historical/1990-2010: Meghalaya 95.4 / Goa 94.1 / Mizoram 93.2 / Tripura 92.0 lead,
+Ladakh 0.2 / J&K 9.2 / Rajasthan 12.7 trail, and the district-level correlation with Heat Risk is
+**-0.394** — negative, as it must be when the wet northeast is not the hot dry interior. National
+mean rises 40.4 (historical) -> 53.2 (SSP2-4.5 2060-2080) -> 58.6 (SSP5-8.5 2060-2080).
+
+---
+
 ## Part E — Open
 
 | ref | item | why it matters |
