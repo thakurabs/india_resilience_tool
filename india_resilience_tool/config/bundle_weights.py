@@ -34,6 +34,7 @@ EXPECTED_HEADLINE_WEIGHT_TOTALS: dict[str, float] = {
     "Heat Stress": 0.70,
     "Riverine Flood": 1.0,
     "Extreme Rainfall | Flash Flood Risk": 0.75,
+    "Cold Risk": 0.75,
 }
 
 
@@ -260,6 +261,9 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.15 / 2.0,
             source_note="Bundles_comp_Score.xlsx / Coldrisk",
             workbook_group="Relative Cold",
+            # TX10p counts days below the unit's own 1990-2010 10th-percentile
+            # daily maximum, so the trigger temperature differs by district.
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Cold Risk",
@@ -267,6 +271,8 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.15 / 2.0,
             source_note="Bundles_comp_Score.xlsx / Coldrisk",
             workbook_group="Relative Cold",
+            # TN10p shares TX10p's unit-specific percentile threshold.
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Cold Risk",
@@ -274,6 +280,9 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.20 / 2.0,
             source_note="Bundles_comp_Score.xlsx / Coldrisk",
             workbook_group="Cold Spell Characteristics",
+            # CSDI counts days in spells below the unit's own 10th-percentile
+            # daily minimum, the cold-side twin of WSDI in Heat Risk.
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Cold Risk",

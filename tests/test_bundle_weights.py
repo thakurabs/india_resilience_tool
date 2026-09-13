@@ -142,6 +142,28 @@ def test_bundle_weight_validation_rejects_cross_bundle_baseline_flag_divergence(
     )
 
 
+def test_cold_risk_headline_excludes_the_percentile_referenced_metrics() -> None:
+    assert [
+        entry.metric_slug for entry in get_bundle_headline_weights("Cold Risk")
+    ] == [
+        "tas_winter_mean",
+        "tasmin_winter_mean",
+        "tnn_annual_min",
+        "tasmin_winter_min",
+        "tnle10_cold_nights",
+        "tnle5_severe_cold_nights",
+        "txle15_cold_days",
+        "tnle10_consecutive_cold_nights",
+    ]
+    assert get_bundle_baseline_referenced_slugs("Cold Risk") == (
+        "tx10p_cool_days_pct",
+        "tn10p_cool_nights_pct",
+        "csdi_cold_spell_days",
+    )
+    assert get_bundle_headline_weight_total("Cold Risk") == pytest.approx(0.75)
+    assert EXPECTED_HEADLINE_WEIGHT_TOTALS["Cold Risk"] == pytest.approx(0.75)
+
+
 def test_cold_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
     entries = get_bundle_weights("Cold Risk")
 

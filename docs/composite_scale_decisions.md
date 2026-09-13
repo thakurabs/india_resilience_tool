@@ -709,6 +709,51 @@ mean rises 40.4 (historical) -> 53.2 (SSP2-4.5 2060-2080) -> 58.6 (SSP5-8.5 2060
 
 ---
 
+## Part D4 — Cold Risk, frozen 2026-09-13 (CHG-0455..0458)
+
+`composite_cold_risk` is published against `composite_cold_risk_cdf_v1` over the same 7-slice grid.
+
+The lens split needed no new judgement: TX10p, TN10p and CSDI are all defined against each unit's
+own 1990-2010 10th-percentile threshold, exactly as WSDI is in Heat Risk, so they are lenses. That
+leaves eight absolute metrics at configured weight **0.75** - four winter/annual temperatures in
+degrees C and four fixed-threshold day counts (TN<=10C, TN<=5C, TX<=15C, consecutive TN<=10C).
+An earlier note in this programme estimated the split at 0.85/0.15 by counting CSDI as absolute;
+that was wrong and is corrected here.
+
+**Cold Risk is the first bundle to publish `rank_higher_is_worse=False` metrics through the frozen
+ruler.** The four temperature metrics invert (`100 - score`) while the four day counts do not, in
+one composite. This failure mode is invisible in every summary statistic - distribution, range and
+knot count are identical whichever way the orientation runs - so it is pinned by direction tests
+and by the physical read rather than by a coverage number. Orientation is persisted only in
+`ruler_spec.parquet`; a lossy save/load would silently reverse the map.
+
+| check | result |
+|---|---|
+| Coverage at fit | 5,488 / 5,488 district-slices finite on all eight metrics -> **gate 1.0**, 0 gated |
+| Published | 784 districts / 7,137 blocks, float64, **zero nulls** |
+| Key parity vs `geometry/` | 784/784 and 7,137/7,137, 0 missing either direction |
+| Coldest | Ladakh **99.9**, Sikkim 97.2, J&K 96.8, Himachal 95.6, Uttarakhand 93.4, Arunachal 92.5 |
+| Warmest | Lakshadweep **2.9**, Andaman 3.4, Puducherry 4.8, Goa 6.4, Kerala 6.7, Tamil Nadu 7.5 |
+| Direction under warming | national mean **falls** 57.36 -> 38.41 at SSP5-8.5 2060-2080 |
+| Jensen guard | historical max **8.49**, mean 0.24, none above 10; SSP5-8.5 2060-2080 max **15.82**, mean 0.30, **1** above 10 |
+| Same guard pre-migration (SSP5-8.5 2060-2080) | max **41.03**, mean **4.46**, **87** districts above 10 |
+| `parity_report.json` issue count | **0** |
+
+The one district above 10 is **Darjeeling**, which climbs from the Terai at roughly 100 m to
+Sandakphu at roughly 3,600 m inside about 60 km. The next four - Papum Pare, Changlang, Nainital,
+Lower Dibang Valley - are the same Himalayan foothill-to-high-range shape. This is the Extreme
+Rainfall finding repeating in a different variable: the districts that break the district/block
+agreement are the ones containing a real topographic discontinuity, and the `< 10` threshold was
+calibrated on lowland temperature spreads. Zero-inflation is also visible and expected - TX<=15C
+has 12.9% of the pool at exactly zero (peninsular India never reaches it), handled by the tie
+collapsing of P-05.
+
+Some notable metrics are now inert at historical and only meaningful under warming (TX10p is
+near-tautologically 10% on its own baseline); that is a presentation question tracked as P-03, not
+a scoring one, and those metrics are lenses in any case.
+
+---
+
 ## Part E — Open
 
 | ref | item | why it matters |

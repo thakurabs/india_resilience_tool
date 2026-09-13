@@ -230,6 +230,72 @@ def test_committed_riverine_ruler_and_canaries_match_config() -> None:
     assert len(canaries) == 24
 
 
+def test_cdf_ruler_inverts_scores_for_a_lower_is_worse_metric() -> None:
+    """Cold Risk is the first bundle to score metrics where lower is worse.
+
+    Four of its eight headline metrics are winter temperatures in degrees C, so
+    the coldest district must score 100, not 0. A direction bug here is silent
+    in every summary statistic -- the distribution, the range and the knot count
+    are identical either way -- and only shows up as a map that says the Thar is
+    the coldest place in India.
+    """
+    pool = np.array([-10.0, 0.0, 10.0, 20.0])
+
+    worse_high = build_cdf_ruler("t", pool, higher_is_worse=True)
+    worse_low = build_cdf_ruler("t", pool, higher_is_worse=False)
+    assert worse_high is not None and worse_low is not None
+
+    values = pd.Series(pool)
+    high_scores = worse_high.apply(values)
+    low_scores = worse_low.apply(values)
+
+    assert high_scores.is_monotonic_increasing
+    assert low_scores.is_monotonic_decreasing
+    # The coldest value carries the highest cold-risk score.
+    assert low_scores.iloc[0] == pytest.approx(high_scores.iloc[-1])
+    assert (high_scores + low_scores).tolist() == pytest.approx([100.0] * len(pool))
+
+
+def test_committed_cold_risk_ruler_and_canaries_match_config() -> None:
+    spec = COMPOSITES_BY_SLUG["composite_cold_risk"]
+    ruler_dir = frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version)
+    ruler_set = load_ruler_set(ruler_dir)
+    canaries = pd.read_csv(ruler_dir / "golden_canaries.csv")
+
+    assert spec.normalization == "frozen_national_cdf"
+    assert spec.frozen_ruler_version == "cdf_v1"
+    # TX10p, TN10p and CSDI are measured against each unit's own 10th-percentile
+    # baseline, so they are the lens half and must not carry the headline.
+    assert spec.headline_metric_slugs == (
+        "tas_winter_mean",
+        "tasmin_winter_mean",
+        "tnn_annual_min",
+        "tasmin_winter_min",
+        "tnle10_cold_nights",
+        "tnle5_severe_cold_nights",
+        "txle15_cold_days",
+        "tnle10_consecutive_cold_nights",
+    )
+    assert ruler_set.ruler_id == "composite_cold_risk_cdf_v1"
+    assert ruler_set.slices == HEAT_RISK_SLICES
+    assert ruler_set.coverage_gate == 1.0
+    assert ruler_set.configured_weight == get_bundle_headline_weight_total("Cold Risk")
+    assert ruler_set.ruler_sha256 == sha256_file(ruler_dir / "cdf_support.parquet")
+
+    # The four temperature metrics must have been frozen with their inverted
+    # orientation; orientation lives only in ruler_spec.parquet, so a lossy
+    # save/load would silently reverse the published map.
+    assert {
+        slug for slug, ruler in ruler_set.rulers.items() if not ruler.higher_is_worse
+    } == {
+        "tas_winter_mean",
+        "tasmin_winter_mean",
+        "tnn_annual_min",
+        "tasmin_winter_min",
+    }
+    assert set(canaries["level"]) == {"district", "block"}
+
+
 def test_committed_extreme_rainfall_ruler_and_canaries_match_config() -> None:
     spec = COMPOSITES_BY_SLUG["composite_flood_extreme_rainfall_risk"]
     ruler_dir = frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version)
