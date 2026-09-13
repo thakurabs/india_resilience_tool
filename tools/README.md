@@ -180,6 +180,8 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for the onboarded Aqueduct hydro metrics under `processed/{metric_slug}/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
 | `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) and the display-only population overlay PNG/metadata from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
 | `tools/geodata/build_lulc_admin_masters.py` | Build district and block agricultural LULC exposure masters (`lulc_agri_area_km2`, `lulc_agri_share_pct`) and the display-only binary agricultural LULC overlay PNG/metadata from `LULC_2_Agri.tif` | `python -m tools.geodata.build_lulc_admin_masters --help` |
+| `tools/geodata/build_worldpop_agesex_admin_masters.py` | Build district and block age-structure masters (`population_age_65plus_count`/`_share_pct`, `population_age_under5_count`/`_share_pct`) by summing the WorldPop 2025 age-sex bands. Shares are State/UT-level proportions by construction (see notes) | `python -m tools.geodata.build_worldpop_agesex_admin_masters --help` |
+| `tools/geodata/build_lgrip_admin_masters.py` | Build district and block cropland masters (`lgrip_cropland_*`, `lgrip_irrigated_*`, `lgrip_rainfed_*`) from LGRIP30 V001 via a generated no-resample VRT over the 12 India tiles | `python -m tools.geodata.build_lgrip_admin_masters --help` |
 | `tools/geodata/build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook with district-alias QA outputs | `python -m tools.geodata.build_groundwater_district_masters --help` |
 | `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build per-state (`--state`, default Telangana) district/block JRC flood-depth masters. Strict RP-100 mode uses `--source-manifest <source_manifest.json> --rp100-only` with explicit aligned 3-arc-second depth/coverage rasters, publishes depth/extent/severity only for RP-100, treats covered `-9999` as dry support, and emits full/partial/none source-coverage QA. Legacy four-return-period builds require `--source-dir ... --allow-unversioned-source --assume-units m` and retain unresolved RP-10/50/500 provenance semantics. | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
 | `tools/geodata/build_water_availability_district_masters.py` | Build district per-capita water-scarcity masters from the NITI Aayog ICED *Per Capita Water Availability 2025 & 2050* workbook. Encodes the 4 ordinal classes to integer codes 1..4 (higher worse), reconciles source `(state, district)` onto the canonical district layer via curated state/district aliases + worst-class collision aggregation, left-joins the full canonical roster (NaN where no source), computes a 2050−2025 deterioration delta, and writes masters for `water_scarcity_percapita`, `water_scarcity_percapita_2050`, `water_scarcity_deterioration_2050`. Fail-fast on unmatched/invalid/duplicate/2050-improves (`--allow-unmatched` opt-in); reports `source_rows_resolved` and `canonical_rows_with_source` separately. `--dry-run`/`--overwrite`. Usually driven by the `prepare_dashboard water-availability` subcommand. | `python -m tools.geodata.build_water_availability_district_masters --help` |
@@ -364,6 +366,41 @@ Windows tip: if HDF5 writes get flaky under parallelism, fall back to `--workers
 - useful commands:
   - `python -m tools.geodata.build_built_up_area_admin_masters --help`
   - `python -m tools.runs.prepare_dashboard built-up-area --built-up-raster "<path>" --plan-only`
+
+`tools/geodata/build_worldpop_agesex_admin_masters.py` notes:
+
+- Inputs: `<IRT_DATA_DIR>/worldpop_agesex/bands/*.tif` (12 bands: sexes m/f x age groups
+  00, 01, 65, 70, 75, 80) and the 2025 population raster used as the share denominator.
+- Sums the bands into `worldpop_agesex/derived/ind_age65plus_*.tif` and
+  `ind_ageunder5_*.tif`, then zonal-sums those with the same helper the population
+  master uses, so a unit's age share is exactly its age count over its own population.
+- **The shares carry no sub-state variation.** WorldPop applies one State/UT age
+  proportion to every grid cell: 99.8% of district-level variance and 99.9% of
+  block-level variance is explained by State/UT alone, and inside Kerala the per-cell
+  65+ ratio is constant to 1e-6. They are published as Context and Evidence card text
+  and must never drive a district or block map fill.
+- Guardrails: an age count may not exceed a unit's population, and the national shares
+  must land inside plausibility bounds (a wrong denominator or a dropped band shows up
+  here first). Override with `--allow-count-outlier` / `--allow-share-outlier`.
+
+`tools/geodata/build_lgrip_admin_masters.py` notes:
+
+- Inputs: `<IRT_DATA_DIR>/irrigation/LGRIP30_2015_*.tif` (12 tiles covering India).
+  Classes: 0 water, 1 non-cropland, 2 irrigated, 3 rainfed.
+- Builds `lgrip30_india.vrt` itself. Every tile is verified to share one resolution and
+  to sit at an integer cell offset from a common origin, so the mosaic involves no
+  resampling; anything else is refused rather than silently warped.
+- Shares divide by full canonical polygon area in EPSG:6933, never by cropland area,
+  matching `build_lulc_admin_masters` so `lgrip_cropland_share_pct` is directly
+  comparable with `lulc_agri_share_pct` (BL-0027).
+- **Tile coverage is a guardrail, not an afterthought.** A VRT returns 0 for uncovered
+  area and 0 is LGRIP's water class, so a missing tile publishes as zero cropland and no
+  nodata or class check can see it. `tile_coverage_pct` tests admin polygons against the
+  union of tile footprints and fails the build below 99.9%.
+- **The irrigated/rainfed split is not wired into the runtime.** It reads monsoon paddy
+  as irrigated across eastern India (Assam measures 78.8% irrigated against a Census
+  figure near 12%; mean bias +26.7pp, rank correlation 0.667). Masters are written so
+  the data is ready, but only `lgrip_cropland_*` is registered and published.
 
 `tools/geodata/build_lulc_admin_masters.py` notes:
 - source raster:

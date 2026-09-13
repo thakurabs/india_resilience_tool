@@ -40,6 +40,26 @@ _LULC_METRICS = {
     "lulc_agri_area_km2": "lulc_agri_area_km2__snapshot__Current__mean",
     "lulc_agri_share_pct": "lulc_agri_share_pct__snapshot__Current__mean",
 }
+# LGRIP30 cropland extent (classes 2+3). Attributable replacement candidate for the
+# unprovenanced LULC_2_Agri raster behind BL-0027; both are carried so the dashboard
+# can switch source without a rebuild. The irrigated/rainfed split from the same
+# product is deliberately NOT carried: it misreads monsoon paddy as irrigated across
+# eastern India (Assam measures 78.8% irrigated against a Census figure near 12%),
+# so it is held out of the runtime until validated against Agricultural Census data.
+_LGRIP_METRICS = {
+    "lgrip_cropland_area_km2": "lgrip_cropland_area_km2__snapshot__Current__mean",
+    "lgrip_cropland_share_pct": "lgrip_cropland_share_pct__snapshot__Current__mean",
+}
+# WorldPop 2025 age structure. These are State-level proportions applied to the
+# gridded population, so they carry no sub-state variation (99.8% of district-level
+# variance is explained by State alone). They are published as context-card text and
+# must never drive a district or block map fill.
+_AGE_METRICS = {
+    "population_age_65plus_count": "population_age_65plus_count__snapshot__2025__mean",
+    "population_age_65plus_share_pct": "population_age_65plus_share_pct__snapshot__2025__mean",
+    "population_age_under5_count": "population_age_under5_count__snapshot__2025__mean",
+    "population_age_under5_share_pct": "population_age_under5_share_pct__snapshot__2025__mean",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +165,7 @@ def _load_built_up_metric(data_dir: Path, *, slug: str, source_col: str, level: 
     return out.drop_duplicates(["admin_level", "admin_key"], keep="first")
 
 
-def _load_lulc_metric(data_dir: Path, *, slug: str, source_col: str, level: str) -> pd.DataFrame:
+def _load_admin_metric(data_dir: Path, *, slug: str, source_col: str, level: str) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
     for path in _iter_metric_master_paths(data_dir, slug=slug, level=level):
         df = _read_state_master(path)
@@ -259,11 +279,18 @@ def _merge_built_up_area(data_dir: Path, rows: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _merge_lulc_area(data_dir: Path, rows: pd.DataFrame) -> pd.DataFrame:
+def _merge_metric_group(
+    data_dir: Path, rows: pd.DataFrame, metrics: dict[str, str]
+) -> pd.DataFrame:
+    """Merge one family of admin metric masters onto the exposure rows.
+
+    Every family is optional: a metric whose masters are absent is skipped rather
+    than raised on, so a partial data directory still yields a usable summary.
+    """
     metric_frames: list[pd.DataFrame] = []
-    for slug, source_col in _LULC_METRICS.items():
+    for slug, source_col in metrics.items():
         frames = [
-            _load_lulc_metric(data_dir, slug=slug, source_col=source_col, level=level)
+            _load_admin_metric(data_dir, slug=slug, source_col=source_col, level=level)
             for level in ("district", "block")
         ]
         non_empty = [frame for frame in frames if not frame.empty]
@@ -282,7 +309,7 @@ def _merge_lulc_area(data_dir: Path, rows: pd.DataFrame) -> pd.DataFrame:
             on=["admin_key", "admin_level", "state_name", "district_name", "block_name"],
             how="outer",
         )
-    for col in _LULC_METRICS:
+    for col in metrics:
         if col in lulc_rows.columns:
             lulc_rows[col] = pd.to_numeric(lulc_rows[col], errors="coerce")
 
@@ -299,7 +326,7 @@ def _merge_lulc_area(data_dir: Path, rows: pd.DataFrame) -> pd.DataFrame:
         return out
 
     identity = ["admin_key", "admin_level", "state_name", "district_name", "block_name"]
-    metric_cols = [col for col in _LULC_METRICS if col in lulc_rows.columns]
+    metric_cols = [col for col in metrics if col in lulc_rows.columns]
     out = rows.merge(
         lulc_rows[identity + metric_cols],
         on=identity,
@@ -424,7 +451,9 @@ def build(data_dir: Path) -> Path:
     all_rows = pd.concat(base_frames, ignore_index=True) if base_frames else pd.DataFrame()
     all_rows = _merge_rural_facilities(data_dir, all_rows)
     all_rows = _merge_built_up_area(data_dir, all_rows)
-    all_rows = _merge_lulc_area(data_dir, all_rows)
+    all_rows = _merge_metric_group(data_dir, all_rows, _LULC_METRICS)
+    all_rows = _merge_metric_group(data_dir, all_rows, _LGRIP_METRICS)
+    all_rows = _merge_metric_group(data_dir, all_rows, _AGE_METRICS)
 
     if all_rows.empty:
         raise ValueError(

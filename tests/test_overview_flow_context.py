@@ -36,7 +36,7 @@ def _exposure() -> pd.DataFrame:
                 "rural_facilities_health_count": 10.0,
                 "rural_facilities_service_count": 20.0,
                 "built_up_area_km2": 50.0,
-                "lulc_agri_area_km2": 10.0,
+                "lgrip_cropland_area_km2": 10.0,
             },
             {
                 "admin_key": "s|large",
@@ -49,7 +49,7 @@ def _exposure() -> pd.DataFrame:
                 "rural_facilities_health_count": 50.0,
                 "rural_facilities_service_count": 50.0,
                 "built_up_area_km2": 10.0,
-                "lulc_agri_area_km2": 800.0,
+                "lgrip_cropland_area_km2": 800.0,
             },
         ]
     )

@@ -501,8 +501,10 @@ EXPOSURE_FIELDS: tuple[tuple[str, str], ...] = (
     ("rural_facilities_total_count_per_100k", "rf_per100k"),
     ("built_up_area_km2", "bu"),
     ("built_up_area_share_pct", "bu_pct"),
-    ("lulc_agri_area_km2", "ag"),
-    ("lulc_agri_share_pct", "ag_pct"),
+    ("lgrip_cropland_area_km2", "ag"),
+    ("lgrip_cropland_share_pct", "ag_pct"),
+    ("population_age_65plus_share_pct", "a65"),
+    ("population_age_under5_share_pct", "au5"),
 )
 
 #: Hydrology fields carried into the page. ``drainage_area_km2`` and
@@ -526,7 +528,8 @@ CONTEXT_PROVENANCE: dict[str, str] = {
     "population": "Population: WorldPop-derived admin master, 2025 snapshot",
     "facilities": "Rural facilities: Mission Antyodaya, 2019–2021 snapshot. The per-100k rate divides RURAL facilities by TOTAL population, so units with large urban populations read low by construction — compare it across rural geographies, never city against countryside.",
     "built_up": "Built-up area: LULC-derived admin master, current snapshot",
-    "lulc": "Agricultural LULC: LULC-derived admin master, current snapshot — PROVISIONAL. The source raster has no recoverable upstream provenance (BACKLOG BL-0027); the encoding is settled, the numbers are not, and they must not be quoted outward until the source is replaced.",
+    "lulc": "Cropland: LGRIP30 V001 (GFSAD, USGS/NASA LP DAAC), DOI 10.5067/Community/LGRIP/LGRIP30.001 — 30 m Landsat-derived, nominal 2015. Cropland is the irrigated and rainfed classes together, as a share of full unit area. This replaces the earlier LULC raster, which had no recoverable provenance (BACKLOG BL-0027). The product also carries an irrigated/rainfed split, which is deliberately NOT shown: it reads monsoon paddy as irrigated across eastern India, so it is withheld pending validation against Agricultural Census data.",
+    "age": "Age structure: WorldPop 2025 age-sex bands, UN-adjusted, same release as the population total. WorldPop applies one State/UT-level age proportion to every grid cell, so these two figures describe the State/UT, not the district or block — they are shown as context, and no map layer is painted from them.",
     "hydro": "Basins and rivers: IRT hydrology crosswalk over the admin roster",
     "density": "Population density: WorldPop-derived admin master, 2025 snapshot — people per km² of total unit area, including uninhabitable land.",
 }
@@ -589,8 +592,12 @@ def _state_exposure_rows(
 
     out: dict[str, dict] = {}
     for state, group in frame.groupby("state_name", sort=True):
+        # A column the local bundle does not publish sums to 0.0 rather than raising:
+        # Context and Evidence is supplementary, so a missing optional master must
+        # degrade the card, never break the page build.
         totals = {
             column: float(pd.to_numeric(group[column], errors="coerce").sum())
+            if column in group.columns else 0.0
             for column in (
                 "pop_2020",
                 "rural_facilities_total_count",
@@ -599,7 +606,9 @@ def _state_exposure_rows(
                 "rural_facilities_health_count",
                 "rural_facilities_service_count",
                 "built_up_area_km2",
-                "lulc_agri_area_km2",
+                "lgrip_cropland_area_km2",
+                "population_age_65plus_count",
+                "population_age_under5_count",
                 "area_km2",
             )
         }
@@ -613,7 +622,7 @@ def _state_exposure_rows(
             "rf_health": _clean_number(totals["rural_facilities_health_count"], 0),
             "rf_service": _clean_number(totals["rural_facilities_service_count"], 0),
             "bu": _clean_number(totals["built_up_area_km2"], 1),
-            "ag": _clean_number(totals["lulc_agri_area_km2"], 1),
+            "ag": _clean_number(totals["lgrip_cropland_area_km2"], 1),
             "n": int(len(group)),
         }
         if population > 0:
@@ -623,9 +632,16 @@ def _state_exposure_rows(
         if national_pop > 0:
             row["pshare"] = _clean_number(100.0 * population / national_pop, 2)
             row["plevel"] = "India"
+        if population > 0:
+            # Recomputed from State/UT totals rather than averaged over district
+            # percentages, like every other share on this card.
+            row["a65"] = _clean_number(
+                100.0 * totals["population_age_65plus_count"] / population, 2)
+            row["au5"] = _clean_number(
+                100.0 * totals["population_age_under5_count"] / population, 2)
         if area > 0:
             row["bu_pct"] = _clean_number(100.0 * totals["built_up_area_km2"] / area, 2)
-            row["ag_pct"] = _clean_number(100.0 * totals["lulc_agri_area_km2"] / area, 2)
+            row["ag_pct"] = _clean_number(100.0 * totals["lgrip_cropland_area_km2"] / area, 2)
         out[str(state)] = {k: v for k, v in row.items() if v is not None}
     return out
 
@@ -709,7 +725,8 @@ def load_context(
             entry: dict[str, object] = {}
             for column, key in EXPOSURE_FIELDS:
                 value = _clean_number(getattr(row, column, None),
-                                      2 if key.endswith(("_pct", "share")) else
+                                      2 if key.endswith(("_pct", "share"))
+                                      or key in {"a65", "au5"} else
                                       (1 if key in {"bu", "ag", "rf_per100k"} else 0))
                 if value is not None:
                     entry[key] = value
@@ -2961,8 +2978,19 @@ PAGE_TEMPLATE = r"""<!doctype html>
       html += "<div class='ctx-grid' style='margin-top:10px'>" +
         cxCell("Built-up area", bu) +
         cxCell("Built-up share", cxPct(row.bu_pct, false)) +
-        cxCell("Agricultural LULC", ag) +
-        cxCell("Agricultural share", cxPct(row.ag_pct, false)) +
+        cxCell("Cropland area", ag) +
+        cxCell("Cropland share", cxPct(row.ag_pct, false)) +
+        "</div>";
+    }
+
+    /* Age structure is a State/UT proportion applied to every cell by the source,
+       so it is labelled as such at district and block scope rather than implying a
+       local measurement. It is text only -- no map layer is painted from it. */
+    var a65 = cxPct(row.a65, false), au5 = cxPct(row.au5, false);
+    if (a65 !== null || au5 !== null) {
+      html += "<div class='ctx-grid' style='margin-top:10px'>" +
+        cxCell("Aged 65+" + (scope.level === "state" ? "" : " (State/UT)"), a65) +
+        cxCell("Under 5" + (scope.level === "state" ? "" : " (State/UT)"), au5) +
         "</div>";
     }
 
