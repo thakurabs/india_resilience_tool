@@ -31,6 +31,7 @@ class BundleWeightEntry:
 #: a frozen national ruler are pinned; the rest have no headline split.
 EXPECTED_HEADLINE_WEIGHT_TOTALS: dict[str, float] = {
     "Heat Risk": 0.2 / 3.0 * 3 + 0.25 / 3.0 * 2 + 0.2 / 3.0 * 3 + 0.2 / 3.0,
+    "Heat Stress": 0.70,
     "Riverine Flood": 1.0,
 }
 
@@ -191,6 +192,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.20 / 2.0,
             source_note="Heat Stress v2 grid-first bundle",
             workbook_group="Night-time recovery stress",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Heat Stress",
@@ -198,6 +200,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             weight=0.20 / 1.0,
             source_note="Heat Stress v2 grid-first bundle",
             workbook_group="Persistence",
+            is_baseline_referenced=True,
         ),
     ),
     "Cold Risk": (
@@ -485,6 +488,23 @@ def validate_bundle_weights() -> list[str]:
     from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG, get_metrics_for_bundle
 
     issues: list[str] = []
+    baseline_flags_by_slug: dict[str, list[tuple[str, bool]]] = {}
+    for bundle_domain, entries in LANDING_BUNDLE_WEIGHTS.items():
+        for entry in entries:
+            baseline_flags_by_slug.setdefault(entry.metric_slug, []).append(
+                (bundle_domain, entry.is_baseline_referenced)
+            )
+    for metric_slug, assignments in sorted(baseline_flags_by_slug.items()):
+        if len({flag for _, flag in assignments}) > 1:
+            detail = ", ".join(
+                f"{bundle_domain}={flag}"
+                for bundle_domain, flag in assignments
+            )
+            issues.append(
+                f"Metric slug {metric_slug!r} has divergent is_baseline_referenced "
+                f"flags across bundles: {detail}."
+            )
+
     for bundle_domain, entries in LANDING_BUNDLE_WEIGHTS.items():
         if not entries:
             issues.append(f"Bundle {bundle_domain!r} has no weight entries.")

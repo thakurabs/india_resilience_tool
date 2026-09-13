@@ -96,6 +96,41 @@ def test_heat_risk_slice_discovery_uses_registered_component_columns(
     assert observed == HEAT_RISK_SLICES
 
 
+def test_heat_stress_slice_discovery_uses_registered_component_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metric_slugs = [
+        entry.metric_slug for entry in get_bundle_headline_weights("Heat Stress")
+    ]
+
+    def load_master(metric_slug: str, **_kwargs: object) -> pd.DataFrame:
+        metric_spec = METRICS_BY_SLUG[metric_slug]
+        column_base = metric_spec.periods_metric_col or metric_spec.value_col
+        assert column_base
+        return pd.DataFrame(
+            {
+                "state": ["Example"],
+                "district": ["District 0"],
+                "district_key": ["example|district 0"],
+                **{
+                    f"{column_base}__{scenario}__{period}__mean": [float(index)]
+                    for index, (scenario, period) in enumerate(HEAT_RISK_SLICES)
+                },
+            }
+        )
+
+    monkeypatch.setattr(fitter, "_load_component_master", load_master)
+
+    observed = fitter.discover_fitted_slices(
+        metric_slugs,
+        states=["Example"],
+        data_dir=Path("unused"),
+    )
+
+    assert observed == HEAT_RISK_SLICES
+    assert fitter.coverage_gate_for_bundle("Heat Stress") == 1.0
+
+
 def test_slice_discovery_rejects_present_master_with_missing_slice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -193,3 +228,95 @@ def test_committed_riverine_ruler_and_canaries_match_config() -> None:
     assert ruler_set.ruler_sha256 == sha256_file(ruler_dir / "cdf_support.parquet")
     assert set(canaries["level"]) == {"district", "block"}
     assert len(canaries) == 24
+
+
+def test_committed_heat_stress_ruler_and_canaries_match_config() -> None:
+    spec = COMPOSITES_BY_SLUG["composite_heat_stress"]
+    ruler_dir = frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version)
+    ruler_set = load_ruler_set(ruler_dir)
+    canaries = pd.read_csv(ruler_dir / "golden_canaries.csv")
+
+    assert spec.normalization == "frozen_national_cdf"
+    assert spec.frozen_ruler_version == "cdf_v1"
+    assert spec.headline_metric_slugs == (
+        "twb_annual_mean",
+        "twb_summer_mean",
+        "twb_annual_max",
+        "twb_days_ge_28",
+        "twb_days_ge_30",
+        "tasmin_tropical_nights_gt28",
+    )
+    assert ruler_set.ruler_id == "composite_heat_stress_cdf_v1"
+    assert ruler_set.slices == HEAT_RISK_SLICES
+    assert ruler_set.coverage_gate == 1.0
+    assert ruler_set.configured_weight == get_bundle_headline_weight_total(
+        "Heat Stress"
+    )
+    assert ruler_set.ruler_sha256 == sha256_file(ruler_dir / "cdf_support.parquet")
+    assert set(canaries["level"]) == {"district", "block"}
+    assert len(canaries) == 168
+
+
+def _roster(rows: list[tuple[str, str, str]]) -> pd.DataFrame:
+    return pd.DataFrame(rows, columns=["district_key", "state", "district"])
+
+
+def _long(rows: list[tuple[str, str, str]]) -> pd.DataFrame:
+    frame = pd.DataFrame(rows, columns=["district_key", "state", "district"])
+    frame["scenario"] = "snapshot"
+    frame["period"] = "Current"
+    frame["value"] = 1.0
+    return frame
+
+
+def test_roster_alignment_rewrites_source_keys_to_canonical_keys() -> None:
+    """The happy path must still realign by name, not by source key."""
+    roster = _roster([("TS-01", "Telangana", "Hyderabad")])
+    aligned = fitter._align_long_frame_to_roster(
+        _long([("OLD-99", "TELANGANA", "hyderabad")]), roster
+    )
+    assert aligned["district_key"].tolist() == ["TS-01"]
+
+
+def test_roster_alignment_refuses_a_key_belonging_to_another_district() -> None:
+    """A name miss whose source key shadows a different roster district is the
+    silent-misattribution case: the row would be scored as a district it is not."""
+    roster = _roster(
+        [("TS-01", "Telangana", "Hyderabad"), ("TS-02", "Telangana", "Warangal")]
+    )
+    with pytest.raises(RuntimeError, match="misattribute"):
+        fitter._align_long_frame_to_roster(
+            _long([("TS-02", "Telangana", "Renamed District")]), roster
+        )
+
+
+def test_roster_alignment_warns_but_keeps_an_unplaceable_row() -> None:
+    """A name miss with a key the roster does not know stays an orphan for
+    ``expand_to_roster`` to report, but must not pass silently."""
+    roster = _roster([("TS-01", "Telangana", "Hyderabad")])
+    with pytest.warns(RuntimeWarning, match="orphans"):
+        aligned = fitter._align_long_frame_to_roster(
+            _long([("UNKNOWN-1", "Telangana", "Renamed District")]), roster
+        )
+    assert aligned["district_key"].tolist() == ["UNKNOWN-1"]
+
+
+def test_roster_alignment_refuses_two_source_keys_collapsing_onto_one() -> None:
+    """Collapsing two source districts onto one canonical key double-weights it
+    in the pooled CDF."""
+    roster = _roster([("TS-01", "Telangana", "Hyderabad")])
+    with pytest.raises(RuntimeError, match="double-weight"):
+        fitter._align_long_frame_to_roster(
+            _long([("OLD-A", "Telangana", "Hyderabad"), ("OLD-B", "Telangana", "HYDERABAD")]),
+            roster,
+        )
+
+
+def test_roster_alignment_refuses_duplicate_district_slice_rows() -> None:
+    """One district must contribute one value per slice to the pool."""
+    roster = _roster([("TS-01", "Telangana", "Hyderabad")])
+    with pytest.raises(RuntimeError, match="duplicate"):
+        fitter._align_long_frame_to_roster(
+            _long([("TS-01", "Telangana", "Hyderabad"), ("TS-01", "Telangana", "Hyderabad")]),
+            roster,
+        )

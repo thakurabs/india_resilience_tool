@@ -270,7 +270,16 @@ def test_compute_composite_master_frame_uses_registry_periods_metric_col_for_com
         registry_spec = METRICS_BY_SLUG[metric_slug]
         metric_base = registry_spec.periods_metric_col or registry_spec.value_col or metric_slug
         df = id_frame.copy()
-        df[f"{metric_base}__ssp585__2040-2060__mean"] = [1.0, 2.0]
+        for scenario, period in (
+            ("historical", "1990-2010"),
+            ("ssp245", "2020-2040"),
+            ("ssp245", "2040-2060"),
+            ("ssp245", "2060-2080"),
+            ("ssp585", "2020-2040"),
+            ("ssp585", "2040-2060"),
+            ("ssp585", "2060-2080"),
+        ):
+            df[f"{metric_base}__{scenario}__{period}__mean"] = [1.0, 2.0]
         _write_component_master(tmp_path, slug=metric_slug, state_name=state_name, filename=filename, df=df)
 
     out = compute_composite_master_frame(

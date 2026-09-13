@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import math
 
+import pytest
+
+from india_resilience_tool.config import bundle_weights
 from india_resilience_tool.config.bundle_weights import (
+    EXPECTED_HEADLINE_WEIGHT_TOTALS,
     LANDING_BUNDLE_WEIGHTS,
     get_bundle_attribute_slugs,
+    get_bundle_baseline_referenced_slugs,
+    get_bundle_headline_weight_total,
+    get_bundle_headline_weights,
     get_bundle_weights,
     validate_bundle_weights,
 )
@@ -56,6 +64,45 @@ def test_heat_stress_bundle_weights_are_stable_and_sum_to_one() -> None:
         0.20 / 1.0,
     ]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    assert [entry.metric_slug for entry in get_bundle_headline_weights("Heat Stress")] == [
+        "twb_annual_mean",
+        "twb_summer_mean",
+        "twb_annual_max",
+        "twb_days_ge_28",
+        "twb_days_ge_30",
+        "tasmin_tropical_nights_gt28",
+    ]
+    assert get_bundle_baseline_referenced_slugs("Heat Stress") == (
+        "tn90p_warm_nights_pct",
+        "wsdi_warm_spell_days",
+    )
+    assert get_bundle_headline_weight_total("Heat Stress") == pytest.approx(0.70)
+    assert EXPECTED_HEADLINE_WEIGHT_TOTALS["Heat Stress"] == pytest.approx(0.70)
+
+
+def test_bundle_weight_validation_rejects_cross_bundle_baseline_flag_divergence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries = list(get_bundle_weights("Heat Stress"))
+    target_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry.metric_slug == "tn90p_warm_nights_pct"
+    )
+    entries[target_index] = replace(entries[target_index], is_baseline_referenced=False)
+    monkeypatch.setitem(
+        bundle_weights.LANDING_BUNDLE_WEIGHTS,
+        "Heat Stress",
+        tuple(entries),
+    )
+
+    issues = validate_bundle_weights()
+
+    assert any(
+        "tn90p_warm_nights_pct" in issue
+        and "divergent is_baseline_referenced" in issue
+        for issue in issues
+    )
 
 
 def test_cold_risk_bundle_weights_are_stable_and_sum_to_one() -> None:

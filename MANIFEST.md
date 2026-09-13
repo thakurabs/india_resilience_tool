@@ -435,7 +435,7 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `build_all_csv.ps1` | PowerShell helper for CSV build workflows |
 | `build_composite_metrics.py` | CLI wrapper that writes persisted district/block composite masters for the thematic dashboard bundles |
-| `fit_frozen_ruler.py` | Fits and commits one bundle's frozen national CDF ruler (`config/frozen_rulers/<slug>/cdf_<version>/`) from the component masters' validated slice contract, emits deterministic district/block `golden_canaries.csv`, and writes `processed_optimised/colour_scale.json`. Coverage gates are bundle-specific or explicitly supplied; published versions cannot be overwritten. Committed v1 rulers currently cover Heat Risk (7 slices) and Riverine Flood (`snapshot/Current`) |
+| `fit_frozen_ruler.py` | Fits and commits one bundle's frozen national CDF ruler (`config/frozen_rulers/<slug>/cdf_<version>/`) from the component masters' validated slice contract, emits deterministic district/block `golden_canaries.csv`, and writes `processed_optimised/colour_scale.json`. Coverage gates are bundle-specific or explicitly supplied; published versions cannot be overwritten. Committed v1 rulers currently cover Heat Risk (7 slices), Heat Stress (7 slices), and Riverine Flood (`snapshot/Current`) |
 | `build_proposal_bundles.py` | CLI wrapper that writes persisted district/block proposal climate-risk bundle masters and the `r95p_interannual_variability` helper masters |
 | `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |

@@ -637,6 +637,10 @@ Section A of this document is implemented and published. `composite_heat_risk` i
 CDF over 784 districts x 7 slices, headline = the 9 absolute-threshold metrics renormalized
 0.6333 -> 1.0, coverage gate 0.70, blocks scored against the district-fitted ruler unchanged (A5).
 
+On 2026-09-12, a Heat Risk re-fit reproduced SHA-256 `06733a03b677…` against masters at
+`data_snapshot_hash 26d647b0…`; slice discovery is regression-guarded but end-to-end hash
+reproduction is not, so while P-10 remains in flight this verification expires when those masters change.
+
 Verification of the published bundle:
 
 | check | result |

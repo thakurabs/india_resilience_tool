@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
@@ -74,10 +75,13 @@ from tools.diagnostics.heat_risk_national_ruler_pilot import (
 )
 
 #: Evidence-backed publication gates by bundle. Heat Risk's nine-metric pilot
-#: measured 0.00% of rows below 0.70. Riverine Flood has one effective metric,
-#: so coverage is binary; all 784 fitted districts measured 1.0 coverage.
+#: measured 0.00% of rows below 0.70. Heat Stress measured complete coverage
+#: across all 784 districts x 7 slices for its six headline metrics, so its gate
+#: refuses partial rows. Riverine Flood has one effective metric, so coverage is
+#: binary; all 784 fitted districts measured 1.0 coverage.
 BUNDLE_COVERAGE_GATES: dict[str, float] = {
     "Heat Risk": 0.70,
+    "Heat Stress": 1.0,
     "Riverine Flood": 1.0,
 }
 
@@ -168,7 +172,22 @@ def discover_fitted_slices(
 def _align_long_frame_to_roster(
     long_frame: pd.DataFrame, roster: pd.DataFrame
 ) -> pd.DataFrame:
-    """Replace source-specific district keys with canonical roster keys by name."""
+    """Replace source-specific district keys with canonical roster keys by name.
+
+    The realignment is name-based, so it can fail in three ways that a silent
+    ``fillna`` would hide. A mis-joined district contributes the wrong value to
+    the pooled CDF, and because the ruler is frozen and committed that error is
+    then baked into every score fitted against it. Each failure mode is therefore
+    either refused or reported:
+
+    * A row that matches no roster name pair but whose source ``district_key``
+      *is* a roster key would be scored as a district it is not. Refused.
+    * Two distinct source keys collapsing onto one canonical key double-weight
+      that district in the pool. Refused.
+    * A row that matches no roster name pair and whose source key is not a roster
+      key keeps its source key, so ``expand_to_roster`` reports it as an orphan
+      under the existing reconciliation contract. Warned, not refused.
+    """
     roster_keys = roster.loc[:, ["district_key", "state", "district"]].copy()
     roster_keys["_state_name_key"] = roster_keys["state"].map(alias)
     roster_keys["_district_name_key"] = roster_keys["district"].map(alias)
@@ -181,9 +200,65 @@ def _align_long_frame_to_roster(
     aligned["_state_name_key"] = aligned["state"].map(alias)
     aligned["_district_name_key"] = aligned["district"].map(alias)
     aligned = aligned.merge(lookup, on=["_state_name_key", "_district_name_key"], how="left")
+
+    known_roster_keys = set(roster["district_key"].dropna())
+    unmatched = aligned["_canonical_district_key"].isna()
+    if unmatched.any():
+        shadowed = unmatched & aligned["district_key"].isin(known_roster_keys)
+        if shadowed.any():
+            sample = (
+                aligned.loc[shadowed, ["state", "district", "district_key"]]
+                .drop_duplicates()
+                .head(10)
+                .to_dict("records")
+            )
+            raise RuntimeError(
+                f"{int(shadowed.sum())} master rows match no canonical roster "
+                "state/district name but carry a district_key that belongs to a "
+                "different roster district; scoring them would silently "
+                f"misattribute their values. Sample: {sample}"
+            )
+        orphans = (
+            aligned.loc[unmatched, ["state", "district", "district_key"]]
+            .drop_duplicates()
+            .head(10)
+            .to_dict("records")
+        )
+        warnings.warn(
+            f"{int(unmatched.sum())} master rows match no canonical roster "
+            "state/district name and keep their source district_key; they will "
+            f"be reported as orphans and excluded from the pool. Sample: {orphans}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    matched = aligned.loc[~unmatched, ["district_key", "_canonical_district_key"]].drop_duplicates()
+    collapsed = matched.groupby("_canonical_district_key").size()
+    collapsed = collapsed[collapsed > 1]
+    if not collapsed.empty:
+        raise RuntimeError(
+            "Name-based roster alignment collapsed multiple source district keys "
+            f"onto {len(collapsed)} canonical key(s), which would double-weight "
+            f"them in the pooled CDF: {sorted(collapsed.index)[:10]}"
+        )
+
     aligned["district_key"] = aligned["_canonical_district_key"].fillna(
         aligned["district_key"]
     )
+
+    grain = ["district_key", "scenario", "period"]
+    if all(column in aligned.columns for column in grain):
+        duplicated = aligned.duplicated(grain)
+        if duplicated.any():
+            sample = (
+                aligned.loc[duplicated, grain].drop_duplicates().head(10).to_dict("records")
+            )
+            raise RuntimeError(
+                f"Roster alignment produced {int(duplicated.sum())} duplicate "
+                "district/scenario/period rows; the pooled CDF would count those "
+                f"districts more than once. Sample: {sample}"
+            )
+
     return aligned.drop(
         columns=["_state_name_key", "_district_name_key", "_canonical_district_key"]
     )
