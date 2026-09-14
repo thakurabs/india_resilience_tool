@@ -166,17 +166,29 @@ def _area_col(level: AdminLevel) -> str:
 # VRT mosaic
 # ---------------------------------------------------------------------------
 
-def build_tile_vrt(tile_dir: Path, vrt_path: Path, *, overwrite: bool, dry_run: bool) -> dict[str, object]:
-    """Write a VRT mosaicking the LGRIP tiles, or fail if they are not co-gridded.
+def build_tile_vrt(
+    tile_dir: Path,
+    vrt_path: Path,
+    *,
+    overwrite: bool,
+    dry_run: bool,
+    tile_glob: str = TILE_GLOB,
+    product: str = "LGRIP30",
+) -> dict[str, object]:
+    """Write a VRT mosaicking co-gridded uint8 tiles, or fail if they are not.
 
     A VRT is used rather than a physical mosaic because the ten India tiles are
     roughly 14 GB uncompressed. Every tile is verified to share one resolution and
     to sit at an integer cell offset from a common origin, so the mosaic involves
     no resampling whatsoever; anything else is refused rather than silently warped.
+
+    ``tile_glob`` and ``product`` exist so the same mosaicker serves any single-band
+    uint8 EPSG:4326 tile set on a common grid; JRC Global Surface Water is the second
+    caller. Nothing here is specific to the class semantics of either product.
     """
-    tiles = sorted(tile_dir.glob(TILE_GLOB))
+    tiles = sorted(tile_dir.glob(tile_glob))
     if not tiles:
-        raise FileNotFoundError(f"No LGRIP30 tiles matching {TILE_GLOB} in {tile_dir}")
+        raise FileNotFoundError(f"No {product} tiles matching {tile_glob} in {tile_dir}")
 
     specs = []
     for path in tiles:

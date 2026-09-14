@@ -505,6 +505,10 @@ EXPOSURE_FIELDS: tuple[tuple[str, str], ...] = (
     ("lgrip_cropland_share_pct", "ag_pct"),
     ("population_age_65plus_share_pct", "a65"),
     ("population_age_under5_share_pct", "au5"),
+    ("surface_water_permanent_area_km2", "sw"),
+    ("surface_water_permanent_share_pct", "sw_pct"),
+    ("surface_water_seasonal_area_km2", "swz"),
+    ("surface_water_seasonal_share_pct", "swz_pct"),
 )
 
 #: Hydrology fields carried into the page. ``drainage_area_km2`` and
@@ -530,6 +534,7 @@ CONTEXT_PROVENANCE: dict[str, str] = {
     "built_up": "Built-up area: LULC-derived admin master, current snapshot",
     "lulc": "Cropland: LGRIP30 V001 (GFSAD, USGS/NASA LP DAAC), DOI 10.5067/Community/LGRIP/LGRIP30.001 — 30 m Landsat-derived, nominal 2015. Cropland is the irrigated and rainfed classes together, as a share of full unit area. This replaces the earlier LULC raster, which had no recoverable provenance (BACKLOG BL-0027). The product also carries an irrigated/rainfed split, which is deliberately NOT shown: it reads monsoon paddy as irrigated across eastern India, so it is withheld pending validation against Agricultural Census data.",
     "age": "Age structure: WorldPop 2025 age-sex bands, UN-adjusted, same release as the population total. WorldPop applies one State/UT-level age proportion to every grid cell, so these two figures describe the State/UT, not the district or block — they are shown as context, and no map layer is painted from them.",
+    "water": "Surface water: JRC Global Surface Water v1.4 occurrence band (Pekel et al., 2016), 30 m, observed 1984–2021. Permanent is water present in at least 75% of valid observations; seasonal is 25–74%. Both thresholds are this tool\u2019s choice, not a product definition. Marine water is removed before aggregation — GSW classifies a nearshore ocean band as permanent water and coastal polygons reach into it, so uncorrected figures report the sea as district water (the Nicobars measure 17.5% permanent water, almost all of it ocean). Island and creek-dense coastal units keep some residual nearshore water even after the correction.",
     "hydro": "Basins and rivers: IRT hydrology crosswalk over the admin roster",
     "density": "Population density: WorldPop-derived admin master, 2025 snapshot — people per km² of total unit area, including uninhabitable land.",
 }
@@ -609,6 +614,8 @@ def _state_exposure_rows(
                 "lgrip_cropland_area_km2",
                 "population_age_65plus_count",
                 "population_age_under5_count",
+                "surface_water_permanent_area_km2",
+                "surface_water_seasonal_area_km2",
                 "area_km2",
             )
         }
@@ -623,6 +630,8 @@ def _state_exposure_rows(
             "rf_service": _clean_number(totals["rural_facilities_service_count"], 0),
             "bu": _clean_number(totals["built_up_area_km2"], 1),
             "ag": _clean_number(totals["lgrip_cropland_area_km2"], 1),
+            "sw": _clean_number(totals["surface_water_permanent_area_km2"], 1),
+            "swz": _clean_number(totals["surface_water_seasonal_area_km2"], 1),
             "n": int(len(group)),
         }
         if population > 0:
@@ -642,6 +651,10 @@ def _state_exposure_rows(
         if area > 0:
             row["bu_pct"] = _clean_number(100.0 * totals["built_up_area_km2"] / area, 2)
             row["ag_pct"] = _clean_number(100.0 * totals["lgrip_cropland_area_km2"] / area, 2)
+            row["sw_pct"] = _clean_number(
+                100.0 * totals["surface_water_permanent_area_km2"] / area, 2)
+            row["swz_pct"] = _clean_number(
+                100.0 * totals["surface_water_seasonal_area_km2"] / area, 2)
         out[str(state)] = {k: v for k, v in row.items() if v is not None}
     return out
 
@@ -925,12 +938,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
   .ctx-dot.ctx-dna { fill: none; stroke: #1b2545; stroke-opacity: .6;
                      stroke-dasharray: 2 2; }
   .ctx-dot.ctx-muted { fill-opacity: .10; stroke-opacity: .15; }
-  /* Cropland stipple. Texture is a visual channel independent of the
-     choropleth's hue and value, so the score colour is never evicted and the
-     two read as one gestalt: "red and dense" rather than "red, then look up
-     what the circle means". Dots rather than diagonal hatching, because
-     hatching conventionally means excluded or disputed and its direction reads
-     as a category rather than as an amount. */
+  /* Texture layers (cropland stipple, surface-water hatch). Texture is a visual
+     channel independent of the choropleth's hue and value, so the score colour
+     is never evicted and the two read as one gestalt: "red and dense" rather
+     than "red, then look up what the circle means". Only one texture layer is
+     ever on, so they share this one group; see TEX in the script for why each
+     uses the mark it does. */
   #g-tex { pointer-events: none; }
   .tex { stroke: none; }
   .tex.muted { opacity: .26; }
@@ -1209,6 +1222,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
                 <option value="">None</option>
                 <option value="pop">Population density</option>
                 <option value="crop">Cropland share</option>
+                <option value="water">Surface water</option>
               </select>
             </label>
             <span class="ctx-key" id="ctx-key" hidden></span>
@@ -1349,48 +1363,101 @@ PAGE_TEMPLATE = r"""<!doctype html>
     return n;
   }
 
-  /* ---- cropland stipple ----
+  /* ---- texture layers ----
+     Two layers share the texture channel, because only one Context layer draws
+     at a time: cropland as a dot stipple, surface water as a blue hatch. The
+     mark differs as well as the colour, so a reader who arrives mid-session
+     cannot mistake one for the other.
+
      Three levels is the honest ceiling for a texture: a reader ranks three
      grains reliably and cannot read a value off any of them. The lowest level
-     paints nothing, which makes "not agricultural" read as absence rather than
-     as yet another shade to decode. The distribution is bimodal -- 207 of 783
-     districts sit below 35% and 313 above 75% -- so three levels lose very
-     little. Breaks are CONSTANTS: the ruler never moves with a data refresh. */
-  var CROP_BREAKS = [35, 75];
-  var CROP_LABELS = ["Little (<35%)", "Mixed (35–75%)", "Mostly (75%+)"];
+     paints nothing, which makes "not agricultural" -- or "no standing water" --
+     read as absence rather than as yet another shade to decode.
 
-  var CROP_ANY = (function () {
+     Breaks are CONSTANTS: the ruler never moves with a data refresh. Cropland
+     is bimodal (207 of 783 districts below 35%, 313 above 75%), so three levels
+     lose very little. Permanent water has the opposite shape, a long tail: the
+     median district is 0.14% water, the 90th percentile 1.25%, and the maximum
+     18.3% (Puri, which holds most of Chilika). Its breaks therefore sit very low
+     and its top level means "a landscape with a lot of standing water in it",
+     not "mostly water" -- 1.5% puts a district in the top 8% nationally. At
+     0.25/1.5 the three levels hold 59/33/8% of districts and 77/16/8% of blocks;
+     blocks are barer because they are smaller and water concentrates.
+
+     Dots rather than diagonal hatching for cropland, because hatching
+     conventionally means excluded or disputed. Water gets horizontal rules
+     instead, the long-standing cartographic mark for open water, which reads as
+     water rather than as a second, confusable grain of the same stipple. */
+  var TEX = {
+    crop: {
+      field: "ag_pct",
+      breaks: [35, 75],
+      labels: ["Little (<35%)", "Mixed (35\u201375%)", "Mostly (75%+)"],
+      legend: "Stipple = cropland share",
+      mark: "dot",
+      ink: "#1b2024",
+      opacity: ".55",
+      tile: [8.0, 4.2],
+      size: 1.0,
+      aria: "with a dot stipple whose density rises with the share of each unit under cropland",
+      note: "Cropland extent only \u2014 not cropping intensity, season, or irrigation.",
+      bare: "cropland figure",
+      absent: "absent cropland"
+    },
+    water: {
+      field: "sw_pct",
+      breaks: [0.25, 1.5],
+      labels: ["Little (<0.25%)", "Some (0.25\u20131.5%)", "Water-rich (1.5%+)"],
+      legend: "Hatch = permanent water share",
+      mark: "rule",
+      ink: "#14508c",
+      opacity: ".70",
+      tile: [7.0, 3.4],
+      size: 0.85,
+      aria: "with a blue hatch whose density rises with the share of each unit under permanent water",
+      note: "Permanent inland water only \u2014 seasonal water is on the card, not the map. " +
+            "Sea is removed before aggregation, but island and creek-dense coastal units keep " +
+            "some residual nearshore water.",
+      bare: "surface-water figure",
+      absent: "absent water"
+    }
+  };
+
+  function texCfg() { return TEX[S.ctxLayer] || null; }
+
+  function texAny(cfg) {
     for (var k in CTX_EXPOSURE) {
-      var v = CTX_EXPOSURE[k].ag_pct;
+      var v = CTX_EXPOSURE[k][cfg.field];
       if (typeof v === "number" && !isNaN(v)) return true;
     }
     return false;
-  }());
+  }
+
+  var CROP_ANY = texAny(TEX.crop);
+  var WATER_ANY = texAny(TEX.water);
 
   /* -1 means "no figure"; 0 means "measured, and low". Both render bare, but
      they are different claims, so the note counts the -1s explicitly. */
-  function cropLevel(v) {
+  function texLevel(cfg, v) {
     if (typeof v !== "number" || isNaN(v)) return -1;
-    for (var i = 0; i < CROP_BREAKS.length; i++) {
-      if (v < CROP_BREAKS[i]) return i;
+    for (var i = 0; i < cfg.breaks.length; i++) {
+      if (v < cfg.breaks[i]) return i;
     }
-    return CROP_BREAKS.length;
+    return cfg.breaks.length;
   }
 
-  function cropMissing() {
+  function texMissing(cfg) {
     var n = 0;
     ctxUnits().forEach(function (u) {
-      if (cropLevel((CTX_EXPOSURE[u.k] || {}).ag_pct) < 0) n++;
+      if (texLevel(cfg, (CTX_EXPOSURE[u.k] || {})[cfg.field]) < 0) n++;
     });
     return n;
   }
 
   /* Grain geometry in SCREEN pixels. A <pattern> tiles in USER space, so every
-     one of these must be divided by the viewBox zoom on each render or the dots
+     one of these must be divided by the viewBox zoom on each render or the marks
      swell into blobs when the map drills into a district -- the same correction
      CTX_RMIN_PX already applies to the circle floor. */
-  var CROP_TILE_PX = [8.0, 4.2];   /* level 1, level 2 */
-  var CROP_DOT_PX = 1.0;
 
   /* The units this view paints, which are the units it overlays. */
   function ctxUnits() {
@@ -1694,14 +1761,14 @@ PAGE_TEMPLATE = r"""<!doctype html>
     });
     svg.appendChild(gb);
 
-    /* ---- cropland stipple ----
-       Two map patterns (level 0 paints nothing) plus two fixed-size twins for
-       the legend, which must NOT follow the map zoom. The path layer re-uses
-       the geometry strings already in memory, so the whole overlay costs DOM
-       nodes and zero payload bytes. */
+    /* ---- texture patterns ----
+       Per layer: two map patterns (level 0 paints nothing) plus two fixed-size
+       twins for the legend, which must NOT follow the map zoom. The path layer
+       re-uses the geometry strings already in memory, so the whole overlay costs
+       DOM nodes and zero payload bytes. */
     var defs = document.createElementNS(ns, "defs");
     defs.setAttribute("id", "tex-defs");
-    function stipplePattern(id, tile, radius) {
+    function texPattern(cfg, id, tile, size) {
       var pat = document.createElementNS(ns, "pattern");
       pat.setAttribute("id", id);
       pat.setAttribute("patternUnits", "userSpaceOnUse");
@@ -1709,23 +1776,38 @@ PAGE_TEMPLATE = r"""<!doctype html>
         pat.setAttribute("width", tile.toFixed(2));
         pat.setAttribute("height", tile.toFixed(2));
       }
-      var dot = document.createElementNS(ns, "circle");
-      if (tile) {
-        dot.setAttribute("cx", (tile / 2).toFixed(2));
-        dot.setAttribute("cy", (tile / 2).toFixed(2));
-        dot.setAttribute("r", radius.toFixed(2));
+      var mark;
+      if (cfg.mark === "rule") {
+        /* a short horizontal rule, centred in the tile */
+        mark = document.createElementNS(ns, "rect");
+        if (tile) {
+          mark.setAttribute("x", (tile * 0.15).toFixed(2));
+          mark.setAttribute("y", ((tile - size) / 2).toFixed(2));
+          mark.setAttribute("width", (tile * 0.7).toFixed(2));
+          mark.setAttribute("height", size.toFixed(2));
+        }
+      } else {
+        mark = document.createElementNS(ns, "circle");
+        if (tile) {
+          mark.setAttribute("cx", (tile / 2).toFixed(2));
+          mark.setAttribute("cy", (tile / 2).toFixed(2));
+          mark.setAttribute("r", size.toFixed(2));
+        }
       }
-      dot.setAttribute("fill", "#1b2024");
-      dot.setAttribute("fill-opacity", ".55");
-      pat.appendChild(dot);
+      mark.setAttribute("fill", cfg.ink);
+      mark.setAttribute("fill-opacity", cfg.opacity);
+      pat.appendChild(mark);
       defs.appendChild(pat);
     }
-    /* map patterns: sized per render, so left unsized here */
-    stipplePattern("crop-p1", 0, 0);
-    stipplePattern("crop-p2", 0, 0);
-    /* legend patterns: fixed forever */
-    stipplePattern("crop-k1", CROP_TILE_PX[0], CROP_DOT_PX);
-    stipplePattern("crop-k2", CROP_TILE_PX[1], CROP_DOT_PX);
+    Object.keys(TEX).forEach(function (name) {
+      var cfg = TEX[name];
+      /* map patterns: sized per render, so left unsized here */
+      texPattern(cfg, name + "-p1", 0, 0);
+      texPattern(cfg, name + "-p2", 0, 0);
+      /* legend patterns: fixed forever */
+      texPattern(cfg, name + "-k1", cfg.tile[0], cfg.size);
+      texPattern(cfg, name + "-k2", cfg.tile[1], cfg.size);
+    });
     svg.appendChild(defs);
 
     var gt = document.createElementNS(ns, "g");
@@ -1940,9 +2022,8 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (S.ctxLayer === "pop") {
       return base + ", with circles sized by population and shaded by population density";
     }
-    if (S.ctxLayer === "crop") {
-      return base + ", with a dot stipple whose density rises with the share of each unit under cropland";
-    }
+    var cfg = texCfg();
+    if (cfg) return base + ", " + cfg.aria;
     return base;
   }
 
@@ -1982,23 +2063,30 @@ PAGE_TEMPLATE = r"""<!doctype html>
   function paintTextureLayer(emphDistricts) {
     var g = document.getElementById("g-tex");
     if (!g) return;
-    var on = S.ctxLayer === "crop";
-    g.style.display = on ? "" : "none";
-    if (!on) return;
+    var cfg = texCfg();
+    g.style.display = cfg ? "" : "none";
+    if (!cfg) return;
 
     /* hold the grain constant in SCREEN space at every zoom level */
     var zoom = ctxZoom();
     [1, 2].forEach(function (lvl) {
-      var pat = document.getElementById("crop-p" + lvl);
+      var pat = document.getElementById(S.ctxLayer + "-p" + lvl);
       if (!pat) return;
-      var tile = CROP_TILE_PX[lvl - 1] / zoom;
-      var r = CROP_DOT_PX / zoom;
+      var tile = cfg.tile[lvl - 1] / zoom;
+      var size = cfg.size / zoom;
       pat.setAttribute("width", tile.toFixed(4));
       pat.setAttribute("height", tile.toFixed(4));
-      var dot = pat.firstChild;
-      dot.setAttribute("cx", (tile / 2).toFixed(4));
-      dot.setAttribute("cy", (tile / 2).toFixed(4));
-      dot.setAttribute("r", r.toFixed(4));
+      var mark = pat.firstChild;
+      if (cfg.mark === "rule") {
+        mark.setAttribute("x", (tile * 0.15).toFixed(4));
+        mark.setAttribute("y", ((tile - size) / 2).toFixed(4));
+        mark.setAttribute("width", (tile * 0.7).toFixed(4));
+        mark.setAttribute("height", size.toFixed(4));
+      } else {
+        mark.setAttribute("cx", (tile / 2).toFixed(4));
+        mark.setAttribute("cy", (tile / 2).toFixed(4));
+        mark.setAttribute("r", size.toFixed(4));
+      }
     });
 
     var painted = {};
@@ -2007,10 +2095,10 @@ PAGE_TEMPLATE = r"""<!doctype html>
     function apply(key, node, emphKey) {
       if (!node) return;
       if (!painted[key]) { node.style.display = "none"; return; }
-      var lvl = cropLevel((CTX_EXPOSURE[key] || {}).ag_pct);
+      var lvl = texLevel(cfg, (CTX_EXPOSURE[key] || {})[cfg.field]);
       if (lvl < 1) { node.style.display = "none"; return; }
       node.style.display = "";
-      node.setAttribute("fill", "url(#crop-p" + lvl + ")");
+      node.setAttribute("fill", "url(#" + S.ctxLayer + "-p" + lvl + ")");
       /* muting mirrors the choropleth: the pinned bin emphasises districts, and
          a block inherits its parent district's emphasis */
       node.classList.toggle("muted",
@@ -2329,15 +2417,17 @@ PAGE_TEMPLATE = r"""<!doctype html>
     /* Section 5: omit an unavailable overlay rather than showing it disabled.
        Population is carried for districts AND blocks, so it is available in
        every view; only a payload with no population at all removes the row. */
-    var available = POP_MAX > 0 || CROP_ANY;
+    var available = POP_MAX > 0 || CROP_ANY || WATER_ANY;
     row.hidden = !available;
     if (!available) return;
 
     /* Section 5: omit an unavailable overlay rather than showing it disabled. */
     var popOpt = document.querySelector("#ctx-layer option[value='pop']");
     var cropOpt = document.querySelector("#ctx-layer option[value='crop']");
+    var waterOpt = document.querySelector("#ctx-layer option[value='water']");
     if (popOpt && !(POP_MAX > 0)) { popOpt.remove(); popOpt = null; }
     if (cropOpt && !CROP_ANY) { cropOpt.remove(); cropOpt = null; }
+    if (waterOpt && !WATER_ANY) { waterOpt.remove(); waterOpt = null; }
     /* If no unit carries a density figure the layer is still a valid population
        overlay, so label it for what it actually shows rather than what it was
        meant to show. */
@@ -2348,7 +2438,8 @@ PAGE_TEMPLATE = r"""<!doctype html>
     var key = document.getElementById("ctx-key");
     var note = document.getElementById("ctx-note");
 
-    if (S.ctxLayer === "crop") { renderCropKey(key, note); return; }
+    var texActive = texCfg();
+    if (texActive) { renderTexKey(texActive, S.ctxLayer, key, note); return; }
     if (S.ctxLayer !== "pop") {
       key.hidden = true; key.innerHTML = ""; note.textContent = "";
       return;
@@ -2409,11 +2500,11 @@ PAGE_TEMPLATE = r"""<!doctype html>
 
   /* The legend uses the fixed-size twin patterns, never the map's, so a swatch
      means the same thing whatever the map is zoomed to. */
-  function renderCropKey(key, note) {
+  function renderTexKey(cfg, layer, key, note) {
     key.hidden = false;
-    key.innerHTML = "<span class='ctx-key-lab'>Stipple = cropland share</span>" +
-      CROP_LABELS.map(function (lab, i) {
-        var fill = i === 0 ? "#ffffff" : "url(#crop-k" + i + ")";
+    key.innerHTML = "<span class='ctx-key-lab'>" + cfg.legend + "</span>" +
+      cfg.labels.map(function (lab, i) {
+        var fill = i === 0 ? "#ffffff" : "url(#" + layer + "-k" + i + ")";
         return "<span class='ctx-key-step'>" +
                "<svg width='24' height='14' viewBox='0 0 24 14'>" +
                "<rect x='.5' y='.5' width='23' height='13' fill='" + fill +
@@ -2421,13 +2512,11 @@ PAGE_TEMPLATE = r"""<!doctype html>
                "<span>" + lab + "</span></span>";
       }).join("");
 
-    var miss = cropMissing(), unit = S.view === "india" ? "district" : "block";
-    note.textContent =
-      "Cropland extent only — not cropping intensity, season, or irrigation. " +
-      "Provisional source, pending BL-0027." +
+    var miss = texMissing(cfg), unit = S.view === "india" ? "district" : "block";
+    note.textContent = cfg.note +
       (miss ? " " + miss + " " + unit + (miss === 1 ? " carries" : "s carry") +
-              " no cropland figure and is drawn bare — that is missing data, " +
-              "not absent cropland." : "");
+              " no " + cfg.bare + " and is drawn bare \u2014 that is missing data, " +
+              "not " + cfg.absent + "." : "");
   }
 
   /* ================= answer card ================= */
@@ -2911,6 +3000,15 @@ PAGE_TEMPLATE = r"""<!doctype html>
     var x = isFraction ? v * 100 : v;
     return (Math.abs(x - Math.round(x)) < 0.05 ? x.toFixed(0) : x.toFixed(1)) + "%";
   }
+  /* Permanent water share is a long tail: most units sit well under a tenth of a
+     percent, where the shared percent formatter rounds to "0%" and reads as "no
+     water at all". Below the rounding floor, say that it is below the floor. */
+  function cxSmallPct(v) {
+    if (v === undefined || v === null || isNaN(v)) return null;
+    if (v === 0) return "0%";
+    if (v < 0.05) return "<0.1%";
+    return (v < 1 ? v.toFixed(2) : v.toFixed(1)) + "%";
+  }
   function cxArea(v) {
     if (v === undefined || v === null || isNaN(v)) return null;
     return v.toLocaleString("en-IN", { maximumFractionDigits: 1 }) + " km²";
@@ -2980,6 +3078,21 @@ PAGE_TEMPLATE = r"""<!doctype html>
         cxCell("Built-up share", cxPct(row.bu_pct, false)) +
         cxCell("Cropland area", ag) +
         cxCell("Cropland share", cxPct(row.ag_pct, false)) +
+        "</div>";
+    }
+
+    /* Permanent and seasonal water are shown together because either alone
+       misleads: Kachchh reads 2.8% permanent and 16.2% seasonal, and only the
+       pair says "the Rann", where permanent alone says "dry". The map paints
+       permanent only -- one layer at a time, and the seasonal figure needs the
+       permanent one beside it to be read correctly. */
+    var sw = cxArea(row.sw), swz = cxArea(row.swz);
+    if (sw !== null || swz !== null) {
+      html += "<div class='ctx-grid' style='margin-top:10px'>" +
+        cxCell("Permanent water", sw) +
+        cxCell("Permanent water share", cxSmallPct(row.sw_pct)) +
+        cxCell("Seasonal water", swz) +
+        cxCell("Seasonal water share", cxSmallPct(row.swz_pct)) +
         "</div>";
     }
 

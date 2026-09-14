@@ -1,4 +1,4 @@
-"""Tests for the wave-2 context layer masters: WorldPop age structure and LGRIP30.
+"""Tests for the wave-2 context layer masters: WorldPop age, LGRIP30 and JRC GSW.
 
 These cover the two things that would be expensive to discover later: the share
 arithmetic (which denominator divides what) and the guardrails that stand between a
@@ -17,6 +17,7 @@ import rasterio
 from affine import Affine
 from shapely.geometry import box
 
+from tools.geodata import build_gsw_admin_masters as gsw
 from tools.geodata import build_lgrip_admin_masters as lgrip
 from tools.geodata import build_worldpop_agesex_admin_masters as agesex
 
@@ -372,3 +373,278 @@ def test_implausible_national_cropland_total_fails():
             allow_incomplete_coverage=False, allow_unexpected_values=False,
             allow_total_outlier=False, allow_share_outlier=False,
         )
+
+
+# ---------------------------------------------------------------------------
+# JRC Global Surface Water: sea mask
+# ---------------------------------------------------------------------------
+
+def _states_file(path: Path, geom) -> Path:
+    gpd.GeoDataFrame({"state_name": ["Teststate"], "geometry": [geom]}, crs="EPSG:4326").to_file(
+        path, driver="GeoJSON"
+    )
+    return path
+
+
+def _coast_scene(tmp_path: Path, *, cells: int = 60):
+    """An ocean, a landmass, and a lagoon joined to the ocean by a one-cell mouth.
+
+    This is the shape the sea mask exists to handle. Vembanad and Chilika are
+    physically connected to the sea, so pure connectivity removes them along with
+    the ocean; only an opening wide enough to sever the mouth keeps them.
+    """
+    data = np.zeros((cells, cells), dtype="uint8")
+    half = cells // 2
+    data[:, :half] = 100                      # ocean, west
+    data[20:40, half + 5:cells - 5] = 100     # lagoon, inland
+    data[29:30, half:half + 5] = 100          # one-cell mouth joining the two
+    raster = _write_raster(tmp_path / "occurrence.tif", data, dtype="uint8")
+
+    land = box(ORIGIN_X + half * RES, ORIGIN_Y - cells * RES, ORIGIN_X + cells * RES, ORIGIN_Y)
+    states = _states_file(tmp_path / "states.geojson", land)
+    return raster, states, half
+
+
+def test_sea_fill_without_an_opening_swallows_a_connected_lagoon(tmp_path):
+    raster, states, half = _coast_scene(tmp_path)
+    sea, _transform, stats = gsw.build_sea_mask(
+        raster, states, decimation=1, opening_cells=0
+    )
+    assert sea[:, :half].all()                       # the ocean is removed
+    assert sea[25, half + 10]                        # and so is the lagoon
+    assert stats["opening_cells"] == 0
+
+
+def test_one_cell_opening_severs_the_mouth_and_keeps_the_lagoon(tmp_path):
+    """The measured reason for the default: at opening 0 Alappuzha loses 2.4
+    percentage points of water and Puri 3.2, all of it genuine inland lagoon."""
+    raster, states, half = _coast_scene(tmp_path)
+    sea, _transform, stats = gsw.build_sea_mask(
+        raster, states, decimation=1, opening_cells=1
+    )
+    assert sea[:, :half].any()                       # the ocean is still removed
+    assert not sea[25, half + 10]                    # the lagoon is not
+    assert stats["seed_component_count"] >= 1
+
+
+def test_sea_mask_refuses_a_scene_with_no_water(tmp_path):
+    raster = _write_raster(
+        tmp_path / "occurrence.tif", np.zeros((20, 20), dtype="uint8"), dtype="uint8"
+    )
+    states = _states_file(tmp_path / "states.geojson", box(ORIGIN_X, ORIGIN_Y - 0.2,
+                                                           ORIGIN_X + 0.2, ORIGIN_Y))
+    with pytest.raises(ValueError, match="No permanent water"):
+        gsw.build_sea_mask(raster, states, decimation=1, opening_cells=0)
+
+
+def test_sea_mask_refuses_a_scene_whose_water_is_all_inland(tmp_path):
+    """No seed means no correction, which must be an error rather than a silent
+    pass: it is what a CRS mismatch between raster and boundaries looks like."""
+    data = np.zeros((40, 40), dtype="uint8")
+    data[10:20, 10:20] = 100
+    raster = _write_raster(tmp_path / "occurrence.tif", data, dtype="uint8")
+    land = box(ORIGIN_X, ORIGIN_Y - 40 * RES, ORIGIN_X + 40 * RES, ORIGIN_Y)
+    states = _states_file(tmp_path / "states.geojson", land)
+    with pytest.raises(ValueError, match="no seed"):
+        gsw.build_sea_mask(raster, states, decimation=1, opening_cells=0)
+
+
+# ---------------------------------------------------------------------------
+# JRC Global Surface Water: zonal arithmetic
+# ---------------------------------------------------------------------------
+
+def _sea_raster(tmp_path: Path, shape, *, marine_cols: int = 0) -> Path:
+    mask = np.zeros(shape, dtype="uint8")
+    if marine_cols:
+        mask[:, :marine_cols] = 1
+    return _write_raster(tmp_path / "sea.tif", mask, dtype="uint8")
+
+
+def test_occurrence_splits_into_permanent_and_seasonal_by_threshold(tmp_path):
+    data = np.zeros((100, 100), dtype="uint8")
+    data[:40, :] = 90      # permanent
+    data[40:70, :] = 50    # seasonal
+    data[70:90, :] = 10    # ephemeral, counted as neither
+    raster = _write_raster(tmp_path / "occurrence.tif", data, dtype="uint8")
+
+    master, _ = gsw.aggregate_surface_water_to_admin_units(
+        _district_gdf(100), level="district", raster_path=raster,
+        sea_mask_path=_sea_raster(tmp_path, data.shape),
+    )
+
+    row = master.iloc[0]
+    assert row[gsw.PERMANENT_SHARE_COL] == pytest.approx(40.0, abs=1.0)
+    assert row[gsw.SEASONAL_SHARE_COL] == pytest.approx(30.0, abs=1.0)
+
+
+def test_no_observation_is_neither_water_nor_dry(tmp_path):
+    """255 means the pixel was never validly observed. Folding it into either
+    class invents a measurement; it is counted separately and reported."""
+    data = np.full((100, 100), gsw.NODATA_VALUE, dtype="uint8")
+    data[:20, :] = 90
+    raster = _write_raster(tmp_path / "occurrence.tif", data, dtype="uint8")
+
+    master, _ = gsw.aggregate_surface_water_to_admin_units(
+        _district_gdf(100), level="district", raster_path=raster,
+        sea_mask_path=_sea_raster(tmp_path, data.shape),
+    )
+
+    row = master.iloc[0]
+    assert row[gsw.PERMANENT_SHARE_COL] == pytest.approx(20.0, abs=1.0)
+    assert row[gsw.SEASONAL_SHARE_COL] == pytest.approx(0.0, abs=0.5)
+    # nodata is the overwhelming majority of the unit and must be visible as such
+    assert row["nodata_pct_of_support"] == pytest.approx(80.0, abs=1.0)
+    assert bool(row["high_nodata"]) is True
+
+
+def test_marine_cells_are_removed_from_water_and_recorded(tmp_path):
+    """The Nicobars case: uncorrected, the sea is published as district water."""
+    data = np.full((100, 100), 100, dtype="uint8")
+    raster = _write_raster(tmp_path / "occurrence.tif", data, dtype="uint8")
+
+    master, _ = gsw.aggregate_surface_water_to_admin_units(
+        _district_gdf(100), level="district", raster_path=raster,
+        sea_mask_path=_sea_raster(tmp_path, data.shape, marine_cols=60),
+    )
+
+    row = master.iloc[0]
+    assert row[gsw.PERMANENT_SHARE_COL] == pytest.approx(40.0, abs=1.5)
+    assert row["marine_removed_pct_of_polygon"] == pytest.approx(60.0, abs=1.5)
+    assert bool(row["marine_corrected"]) is True
+
+
+def test_water_share_divides_by_unit_area_not_by_water(tmp_path):
+    data = np.zeros((100, 100), dtype="uint8")
+    data[:25, :] = 90     # permanent
+    data[25:50, :] = 50   # seasonal
+    raster = _write_raster(tmp_path / "occurrence.tif", data, dtype="uint8")
+
+    master, _ = gsw.aggregate_surface_water_to_admin_units(
+        _district_gdf(100), level="district", raster_path=raster,
+        sea_mask_path=_sea_raster(tmp_path, data.shape),
+    )
+
+    row = master.iloc[0]
+    # permanent is 50% OF WATER but 25% of unit area; the wrong denominator doubles it
+    assert row[gsw.PERMANENT_SHARE_COL] == pytest.approx(25.0, abs=1.0)
+    assert row[gsw.PERMANENT_SHARE_COL] < 40.0
+
+
+# ---------------------------------------------------------------------------
+# JRC Global Surface Water: guardrails
+# ---------------------------------------------------------------------------
+
+def _gsw_master(coverage: float, permanent_cells=1, seasonal_cells=1, support_cells=10,
+                permanent_share=5.0, seasonal_share=5.0) -> pd.DataFrame:
+    total = permanent_share + seasonal_share
+    return pd.DataFrame(
+        [
+            {
+                "state": "Teststate",
+                "district": "Testdistrict",
+                "district_key": "Teststate::Testdistrict",
+                "tile_coverage_pct": coverage,
+                "permanent_cell_count": permanent_cells,
+                "seasonal_cell_count": seasonal_cells,
+                "raster_extent_support_cell_count": support_cells,
+                "water_exceeds_support": (permanent_cells + seasonal_cells) > support_cells,
+                "share_out_of_range": total > gsw.SHARE_OUTLIER_MAX_PCT,
+                gsw.PERMANENT_SHARE_COL: permanent_share,
+                gsw.SEASONAL_SHARE_COL: seasonal_share,
+                "polygon_area_km2": 50.0,
+            }
+        ]
+    )
+
+
+def _gsw_summary(permanent_km2: float = 17_000.0) -> pd.DataFrame:
+    return pd.DataFrame([{"district_permanent_km2": permanent_km2}])
+
+
+def test_gsw_incomplete_tile_coverage_fails_the_build():
+    """Same trap as LGRIP: an uncovered area reads as occurrence 0, which is a
+    legitimate value meaning "never water", so only tile geometry detects it."""
+    with pytest.raises(ValueError, match="tile coverage is incomplete"):
+        gsw.assert_surface_water_guardrails(
+            district_master_df=_gsw_master(coverage=61.0), block_master_df=None,
+            national_summary_df=_gsw_summary(), value_histogram={},
+            allow_incomplete_coverage=False, allow_unexpected_values=False,
+            allow_total_outlier=False, allow_share_outlier=False,
+        )
+
+
+def test_gsw_water_exceeding_raster_support_always_fails():
+    with pytest.raises(ValueError, match="exceeds the raster support"):
+        gsw.assert_surface_water_guardrails(
+            district_master_df=_gsw_master(coverage=100.0, permanent_cells=8,
+                                           seasonal_cells=5, support_cells=10),
+            block_master_df=None, national_summary_df=_gsw_summary(), value_histogram={},
+            allow_incomplete_coverage=True, allow_unexpected_values=True,
+            allow_total_outlier=True, allow_share_outlier=True,
+        )
+
+
+def test_gsw_occurrence_outside_0_100_and_255_fails():
+    with pytest.raises(ValueError, match="outside"):
+        gsw.assert_surface_water_guardrails(
+            district_master_df=_gsw_master(coverage=100.0), block_master_df=None,
+            national_summary_df=_gsw_summary(), value_histogram={0: 5, 100: 2, 255: 1, 137: 3},
+            allow_incomplete_coverage=False, allow_unexpected_values=False,
+            allow_total_outlier=False, allow_share_outlier=False,
+        )
+
+
+def test_gsw_no_observation_value_is_not_treated_as_unexpected():
+    gsw.assert_surface_water_guardrails(
+        district_master_df=_gsw_master(coverage=100.0), block_master_df=None,
+        national_summary_df=_gsw_summary(), value_histogram={0: 5, 100: 2, 255: 9},
+        allow_incomplete_coverage=False, allow_unexpected_values=False,
+        allow_total_outlier=False, allow_share_outlier=False,
+    )
+
+
+def test_a_sea_mask_that_failed_open_trips_the_national_total():
+    """Marine water is roughly two thirds of the permanent water in the India box,
+    so a correction that stops working shows up as a several-fold national total."""
+    with pytest.raises(ValueError, match="permanent water total"):
+        gsw.assert_surface_water_guardrails(
+            district_master_df=_gsw_master(coverage=100.0), block_master_df=None,
+            national_summary_df=_gsw_summary(permanent_km2=250_000.0), value_histogram={},
+            allow_incomplete_coverage=False, allow_unexpected_values=False,
+            allow_total_outlier=False, allow_share_outlier=False,
+        )
+
+
+def test_sea_mask_at_a_coarser_resolution_lands_within_one_coarse_cell(tmp_path):
+    """The mask is built at ~550 m and applied to a ~27 m grid, so the index
+    arithmetic that replaced the per-window warp has to register to within one
+    coarse cell -- and must not drift consistently to one side, which is what a
+    half-cell origin error looks like.
+
+    Here one coarse cell is 5% of the district, so the bound is 5 percentage
+    points; at the real 550 m against district-sized polygons it is a fraction of
+    one percent. Measured errors across ratios 1, 2, 5 and 10 and four boundary
+    positions stay inside half a coarse cell and change sign, so the residual is
+    discretisation rather than registration.
+    """
+    data = np.full((100, 100), 100, dtype="uint8")
+    raster = _write_raster(tmp_path / "occurrence.tif", data, dtype="uint8")
+
+    results = []
+    for marine_coarse_cols, expected in ((4, 20.0), (8, 40.0), (12, 60.0), (16, 80.0)):
+        coarse = np.zeros((20, 20), dtype="uint8")     # one coarse cell = five fine cells
+        coarse[:, :marine_coarse_cols] = 1
+        sea = _write_raster(tmp_path / f"sea_{marine_coarse_cols}.tif", coarse,
+                            dtype="uint8", res=RES * 5)
+        master, _ = gsw.aggregate_surface_water_to_admin_units(
+            _district_gdf(100), level="district", raster_path=raster, sea_mask_path=sea
+        )
+        row = master.iloc[0]
+        got = float(row["marine_removed_pct_of_polygon"])
+        assert got == pytest.approx(expected, abs=5.0)
+        # the two classes partition the unit: what is not marine is water
+        assert row[gsw.PERMANENT_SHARE_COL] == pytest.approx(100.0 - got, abs=1.0)
+        results.append(got - expected)
+
+    # not all on one side, which a half-cell origin error would be
+    assert min(results) < 0 < max(results)

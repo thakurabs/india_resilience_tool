@@ -671,6 +671,9 @@ python -m tools.geodata.build_worldpop_agesex_admin_masters --overwrite
 
 # Cropland extent from LGRIP30 (irrigated/rainfed split is built but not published)
 python -m tools.geodata.build_lgrip_admin_masters --overwrite
+
+# Inland surface water from JRC GSW (marine water removed by a connectivity mask)
+python -m tools.geodata.build_gsw_admin_masters --overwrite
 ```
 
 This aggregates the 2025 1 km population raster onto canonical district and block polygons and writes:

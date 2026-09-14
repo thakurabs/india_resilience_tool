@@ -182,6 +182,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_lulc_admin_masters.py` | Build district and block agricultural LULC exposure masters (`lulc_agri_area_km2`, `lulc_agri_share_pct`) and the display-only binary agricultural LULC overlay PNG/metadata from `LULC_2_Agri.tif` | `python -m tools.geodata.build_lulc_admin_masters --help` |
 | `tools/geodata/build_worldpop_agesex_admin_masters.py` | Build district and block age-structure masters (`population_age_65plus_count`/`_share_pct`, `population_age_under5_count`/`_share_pct`) by summing the WorldPop 2025 age-sex bands. Shares are State/UT-level proportions by construction (see notes) | `python -m tools.geodata.build_worldpop_agesex_admin_masters --help` |
 | `tools/geodata/build_lgrip_admin_masters.py` | Build district and block cropland masters (`lgrip_cropland_*`, `lgrip_irrigated_*`, `lgrip_rainfed_*`) from LGRIP30 V001 via a generated no-resample VRT over the 12 India tiles | `python -m tools.geodata.build_lgrip_admin_masters --help` |
+| `tools/geodata/build_gsw_admin_masters.py` | Build district and block inland surface-water masters (`surface_water_{permanent,seasonal}_{area_km2,share_pct}`) from JRC Global Surface Water v1.4 occurrence, with marine water removed by a connectivity mask | `python -m tools.geodata.build_gsw_admin_masters --help` |
 | `tools/geodata/build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook with district-alias QA outputs | `python -m tools.geodata.build_groundwater_district_masters --help` |
 | `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build per-state (`--state`, default Telangana) district/block JRC flood-depth masters. Strict RP-100 mode uses `--source-manifest <source_manifest.json> --rp100-only` with explicit aligned 3-arc-second depth/coverage rasters, publishes depth/extent/severity only for RP-100, treats covered `-9999` as dry support, and emits full/partial/none source-coverage QA. Legacy four-return-period builds require `--source-dir ... --allow-unversioned-source --assume-units m` and retain unresolved RP-10/50/500 provenance semantics. | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
 | `tools/geodata/build_water_availability_district_masters.py` | Build district per-capita water-scarcity masters from the NITI Aayog ICED *Per Capita Water Availability 2025 & 2050* workbook. Encodes the 4 ordinal classes to integer codes 1..4 (higher worse), reconciles source `(state, district)` onto the canonical district layer via curated state/district aliases + worst-class collision aggregation, left-joins the full canonical roster (NaN where no source), computes a 2050−2025 deterioration delta, and writes masters for `water_scarcity_percapita`, `water_scarcity_percapita_2050`, `water_scarcity_deterioration_2050`. Fail-fast on unmatched/invalid/duplicate/2050-improves (`--allow-unmatched` opt-in); reports `source_rows_resolved` and `canonical_rows_with_source` separately. `--dry-run`/`--overwrite`. Usually driven by the `prepare_dashboard water-availability` subcommand. | `python -m tools.geodata.build_water_availability_district_masters --help` |
@@ -401,6 +402,39 @@ Windows tip: if HDF5 writes get flaky under parallelism, fall back to `--workers
   as irrigated across eastern India (Assam measures 78.8% irrigated against a Census
   figure near 12%; mean bias +26.7pp, rank correlation 0.667). Masters are written so
   the data is ready, but only `lgrip_cropland_*` is registered and published.
+
+`tools/geodata/build_gsw_admin_masters.py` notes:
+
+- Inputs: `<IRT_DATA_DIR>/surface_water/occurrence_*.tif` (11 JRC GSW v1.4 tiles covering
+  India). Band 1 is `0-100` percent of valid observations that were water, and `255` for
+  no valid observation -- which is NOT zero water and is never folded into either class.
+- Reuses `build_lgrip_admin_masters.build_tile_vrt` to mosaic with no resampling, and its
+  `tile_coverage_pct` guardrail. The same trap applies here and is worse: uncovered area
+  reads as occurrence 0, which is the legitimate value "never water".
+- **Permanent is occurrence >= 75%, seasonal 25-74%.** These are this repo's thresholds,
+  not product definitions. GSW ships a `seasonality` band that would settle the split
+  without thresholds; only `occurrence` was acquired. Anything that ranks units on these
+  numbers inherits the choice.
+- **Marine water is removed before aggregation, and this is not optional.** GSW masks the
+  open ocean inconsistently -- far offshore carries 0 or 255, but a nearshore band tens of
+  kilometres wide is classified as permanent water at 99-100% occurrence. Coastal polygons
+  reach into that band, so an uncorrected tabulation publishes the sea as district water:
+  the Nicobars measure 17.5% permanent water, almost all of it ocean. Because the offshore
+  mask is inconsistent, a flood fill from the raster edge cannot reach the band; the mask
+  is seeded from water lying outside the national land union instead.
+- **The opening is what protects coastal lagoons.** Vembanad and Chilika connect to the sea
+  through mouths under a kilometre wide, so pure connectivity removes them with the ocean:
+  Alappuzha falls 10.7% -> 8.2% and Puri 19.8% -> 16.7%. One cell of binary opening
+  (`--sea-opening-cells`, ~550 m at the default decimation) restores both to 8.9% and 18.2%,
+  stable at every larger opening, while still removing ~90% of the marine water from island
+  districts (Nicobars 24.2% -> 2.2%). Larger openings only protect more nearshore creeks, so
+  the smallest opening that stabilises the lagoons is the default.
+- The correction is published, not hidden: `marine_removed_area_km2` and
+  `marine_corrected` are written per unit, so a coastal unit's residual nearshore water
+  stays auditable. Island and creek-dense coastal units do keep some.
+- National permanent water measures about 17,000 km2, roughly 0.5% of land area. That is
+  far below the 2-3% usually quoted for "water bodies", which mixes in seasonal extent; a
+  75% occurrence floor counts only what is wet in three observations out of four.
 
 `tools/geodata/build_lulc_admin_masters.py` notes:
 - source raster:

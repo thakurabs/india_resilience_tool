@@ -60,6 +60,18 @@ _AGE_METRICS = {
     "population_age_under5_count": "population_age_under5_count__snapshot__2025__mean",
     "population_age_under5_share_pct": "population_age_under5_share_pct__snapshot__2025__mean",
 }
+# JRC Global Surface Water v1.4 occurrence. Permanent is occurrence >= 75%, seasonal
+# 25-74%; both are thresholds this repo chose, not product definitions. Marine water
+# is removed before aggregation, because GSW classifies a nearshore ocean band as
+# permanent water and coastal polygons extend into it (the Nicobars measure 17.5%
+# permanent water uncorrected, almost all of it sea). The correction is recorded per
+# unit in the QA tables, not folded away silently.
+_GSW_METRICS = {
+    "surface_water_permanent_area_km2": "surface_water_permanent_area_km2__snapshot__Current__mean",
+    "surface_water_permanent_share_pct": "surface_water_permanent_share_pct__snapshot__Current__mean",
+    "surface_water_seasonal_area_km2": "surface_water_seasonal_area_km2__snapshot__Current__mean",
+    "surface_water_seasonal_share_pct": "surface_water_seasonal_share_pct__snapshot__Current__mean",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +466,7 @@ def build(data_dir: Path) -> Path:
     all_rows = _merge_metric_group(data_dir, all_rows, _LULC_METRICS)
     all_rows = _merge_metric_group(data_dir, all_rows, _LGRIP_METRICS)
     all_rows = _merge_metric_group(data_dir, all_rows, _AGE_METRICS)
+    all_rows = _merge_metric_group(data_dir, all_rows, _GSW_METRICS)
 
     if all_rows.empty:
         raise ValueError(
