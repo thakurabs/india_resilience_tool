@@ -38,6 +38,23 @@ export async function withSession(fn, { viewport } = {}) {
   try {
     await fn(page, context);
   } finally {
+    // The app ROTATES refresh tokens: any run that triggers
+    // POST /api/api/auth/refresh invalidates the refresh token saved on disk and
+    // issues a new pair into THIS context only. Discarding the context therefore
+    // burned the saved session after exactly one refresh — which is what the old
+    // "session expires in ~24h" note was actually observing. Persist the rotated
+    // cookies back so the session survives across runs.
+    if (process.env.QA_NO_PERSIST !== '1') {
+      try {
+        // Guard: never overwrite a good saved session with a logged-out one.
+        const state = await context.storageState();
+        const hasAuth = state.cookies.some((c) => /refresh_token|access_token/.test(c.name));
+        if (hasAuth) await context.storageState({ path: AUTH_STATE });
+        else console.warn('  ! context holds no auth cookies — saved session left untouched');
+      } catch (e) {
+        console.warn(`  ! could not persist rotated session: ${e && e.message}`);
+      }
+    }
     await context.close();
     await browser.close();
   }
