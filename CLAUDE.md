@@ -218,14 +218,42 @@ python -m tools.optimized.audit_processed_optimised_parity
 ### Knowledge graph (graphify)
 
 A persistent code/doc knowledge graph lives in `graphify-out/` (git-ignored, local-only).
+It persists across sessions; nothing needs to run at startup.
 
-- **Query (read-only — run freely):** ask a natural-language question about the
-  codebase, or run `graphify query "<question>"` / `graphify path "A" "B"` /
-  `graphify explain "<node>"`. These reuse `graphify-out/graph.json`; no rebuild.
+**Query the graph before reaching for `grep`, `find`, or a file read.** This is a
+navigation default, not a suggestion — do not fall back to text search merely
+because it is the familiar reflex. Queries are read-only, reuse
+`graphify-out/graph.json`, and need no rebuild or approval, so there is no cost
+argument for skipping this step.
+
+- **Query (read-only — run freely):** `graphify query "<question>"` /
+  `graphify path "A" "B"` / `graphify explain "<node>"`.
 - **Rebuild (writes files + spends tokens — treat as `APPROVED: APPLY`):**
   `/graphify . --update` (incremental) re-extracts only changed files.
   Full `/graphify .` rebuilds from scratch.
-- The graph persists across sessions; nothing needs to run at startup.
+
+**Use the graph for structural questions** — what calls a function, what imports
+a module, what reads an artifact, what breaks if a symbol changes, where a
+concept is implemented, how two parts of the repo connect. These are edges, and
+edges are what the graph stores. `grep` answers these with string hits that must
+then be read one by one; the graph answers them directly.
+
+**Fall back to text search only for question shapes the graph does not model,
+and say which shape applies when you do:**
+
+- an exact literal — a column name, a magic number, an error string, a file path;
+- the *absence* of something, where the finding is that no code matches;
+- prose in Markdown, where the claim is about wording rather than structure.
+
+A graph query that returns an unhelpfully broad node dump is a third valid
+reason to fall back — but report that it was tried, rather than presenting the
+grep as a first choice.
+
+**Staleness is a reportable condition, never a silent one.** `graphify query`
+prints a note when the graph predates a schema change or when extraction is
+behind the working tree. Surface that note to the user and name the rebuild it
+asks for; a rebuild writes files and spends tokens, so it waits for explicit
+approval like any other write.
 
 ## 11. Key environment variables
 
