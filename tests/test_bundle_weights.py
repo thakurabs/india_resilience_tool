@@ -183,10 +183,47 @@ def test_cold_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
 
+def test_drought_headline_is_the_absolute_dry_spell_metric_not_spi() -> None:
+    assert [
+        entry.metric_slug for entry in get_bundle_headline_weights("Drought Risk")
+    ] == ["pr_consecutive_dry_days_lt1mm"]
+    assert get_bundle_baseline_referenced_slugs("Drought Risk") == (
+        "spi3_count_events_lt_minus1",
+        "spi6_count_events_lt_minus1",
+        "spi12_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "spi6_max_spell_lt_minus1",
+        "spi12_max_spell_lt_minus1",
+    )
+    assert get_bundle_headline_weight_total("Drought Risk") == pytest.approx(0.40)
+    assert EXPECTED_HEADLINE_WEIGHT_TOTALS["Drought Risk"] == pytest.approx(0.40)
+
+
+def test_drought_lens_preserves_the_approved_relative_spi_weighting() -> None:
+    """The workbook's SPI proportions must survive being rescaled to 0.60."""
+    lens = {
+        entry.metric_slug: entry.weight
+        for entry in get_bundle_weights("Drought Risk")
+        if entry.is_baseline_referenced
+    }
+    assert sum(lens.values()) == pytest.approx(0.60)
+    approved = {
+        "spi3_count_events_lt_minus1": 0.08,
+        "spi6_count_events_lt_minus1": 0.12,
+        "spi12_count_events_lt_minus1": 0.20,
+        "spi3_max_spell_lt_minus1": 0.12,
+        "spi6_max_spell_lt_minus1": 0.18,
+        "spi12_max_spell_lt_minus1": 0.30,
+    }
+    for slug, original in approved.items():
+        assert lens[slug] / 0.60 == pytest.approx(original)
+
+
 def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
     entries = get_bundle_weights("Drought Risk")
 
     assert [entry.metric_slug for entry in entries] == [
+        "pr_consecutive_dry_days_lt1mm",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
@@ -194,7 +231,9 @@ def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
         "spi6_max_spell_lt_minus1",
         "spi12_max_spell_lt_minus1",
     ]
-    assert [entry.weight for entry in entries] == [0.08, 0.12, 0.20, 0.12, 0.18, 0.30]
+    assert [entry.weight for entry in entries] == pytest.approx(
+        [0.40, 0.048, 0.072, 0.12, 0.072, 0.108, 0.18]
+    )
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
 

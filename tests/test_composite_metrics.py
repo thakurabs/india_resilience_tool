@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pandas as pd
 import pytest
 
+from india_resilience_tool.compute import composite_metrics
 from india_resilience_tool.compute.composite_metrics import (
     build_composite_metrics,
     compute_composite_master_frame,
     parse_args,
 )
-from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
+from india_resilience_tool.config.composite_metrics import (
+    CompositeMetricSpec,
+    get_composite_metric_for_bundle,
+)
 from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG
 
 
@@ -38,11 +43,43 @@ def _write_component_master(
     df.to_csv(root / filename, index=False)
 
 
+SPI_COMPONENT_SLUGS: tuple[str, ...] = (
+    "spi3_count_events_lt_minus1",
+    "spi6_count_events_lt_minus1",
+    "spi12_count_events_lt_minus1",
+    "spi3_max_spell_lt_minus1",
+    "spi6_max_spell_lt_minus1",
+    "spi12_max_spell_lt_minus1",
+)
+
+
+def _per_period_spec() -> CompositeMetricSpec:
+    """A synthetic per-period composite over the six SPI components.
+
+    The tests below exercise generic ``compute_composite_master_frame`` mechanics
+    -- weighting, key derivation, provenance, schema intersection -- and used to
+    borrow the live Drought Risk bundle to do it. Drought Risk moved to the
+    frozen national CDF on 2026-09-14 and gained CDD as its headline, so a test
+    pinned to the live bundle measures that bundle's configuration rather than
+    the mechanics it means to test. Synthesising the spec keeps these tests
+    honest about what they cover and stops the next bundle migration breaking
+    ten unrelated assertions.
+    """
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+    return replace(
+        spec,
+        normalization="per_period",
+        frozen_ruler_version="",
+        headline_metric_slugs=(),
+        component_metric_slugs=SPI_COMPONENT_SLUGS,
+    )
+
+
 def test_compute_composite_master_frame_matches_current_district_weighted_method(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     id_frame = pd.DataFrame(
         {
@@ -79,14 +116,21 @@ def test_compute_composite_master_frame_matches_current_district_weighted_method
     assert math.isnan(float(observed_scores["C"]))
 
 
-def test_drought_risk_composite_spec_uses_per_period_normalization() -> None:
-    """CHG-0061: Drought Risk uses per-period cohort normalization like the other
-    thematic bundles. Guards against regressing to the baseline-anchored mode,
-    which floored end-century scores to 0 when the projected SPI drought field
-    fell entirely below the 1990-2010 inter-district baseline envelope."""
+def test_drought_risk_composite_publishes_the_absolute_dry_spell_headline() -> None:
+    """Drought Risk moved to the frozen national CDF on 2026-09-14, with CDD as
+    its headline and the six SPI metrics demoted to an anomaly lens.
+
+    This supersedes the CHG-0061 guard, which pinned per-period normalization to
+    avoid a baseline-anchored floor. The frozen ruler removes that failure mode
+    outright, and per-period normalization turned out to carry a worse one: every
+    SPI metric is a z-score against the unit's own 1981-2010 rainfall, so pooled
+    nationally they ranked the Andamans above Rajasthan and made high emissions
+    read as less drought-prone."""
     spec = get_composite_metric_for_bundle("Drought Risk")
     assert spec is not None
-    assert spec.normalization == "per_period"
+    assert spec.normalization == "frozen_national_cdf"
+    assert spec.headline_metric_slugs == ("pr_consecutive_dry_days_lt1mm",)
+    assert all(slug.startswith("spi") for slug in spec.component_metric_slugs[1:])
 
 
 def test_drought_composite_per_period_keeps_spatial_spread_when_future_below_history(tmp_path) -> None:
@@ -96,8 +140,7 @@ def test_drought_composite_per_period_keeps_spatial_spread_when_future_below_his
     every district to 0 (the retired baseline-anchored floor)."""
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     id_frame = pd.DataFrame(
         {
@@ -130,8 +173,7 @@ def test_drought_composite_per_period_keeps_spatial_spread_when_future_below_his
 def test_compute_composite_master_frame_uses_schema_intersection_for_available_pairs(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_block.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     id_frame = pd.DataFrame(
         {
@@ -159,11 +201,13 @@ def test_compute_composite_master_frame_uses_schema_intersection_for_available_p
     assert "composite_drought_risk__ssp585__2040-2060__mean" not in out.columns
 
 
-def test_build_composite_metrics_writes_legacy_csv_and_parquet(tmp_path) -> None:
+def test_build_composite_metrics_writes_legacy_csv_and_parquet(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
+    # build_composite_metrics resolves the spec by slug from the live
+    # registry, so the synthetic per-period spec has to be injected.
+    monkeypatch.setitem(composite_metrics.COMPOSITES_BY_SLUG, spec.composite_slug, spec)
 
     base = pd.DataFrame(
         {
@@ -208,15 +252,17 @@ def test_build_composite_metrics_rejects_retired_agriculture_slug_as_normal_targ
         raise AssertionError("retired agriculture composite slug should be rejected")
 
 
-def test_build_composite_metrics_prune_retired_honors_dry_run(tmp_path) -> None:
+def test_build_composite_metrics_prune_retired_honors_dry_run(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     retired_root = tmp_path / "processed" / "composite_agriculture_growing_conditions"
     retired_root.mkdir(parents=True)
     marker = retired_root / "marker.txt"
     marker.write_text("legacy", encoding="utf-8")
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
+    # build_composite_metrics resolves the spec by slug from the live
+    # registry, so the synthetic per-period spec has to be injected.
+    monkeypatch.setitem(composite_metrics.COMPOSITES_BY_SLUG, spec.composite_slug, spec)
     base = pd.DataFrame({"state": [state_name], "district": ["A"], "district_key": ["a"]})
     for slug in spec.component_metric_slugs:
         df = base.copy()
@@ -296,8 +342,7 @@ def test_compute_composite_master_frame_uses_registry_periods_metric_col_for_com
 def test_compute_composite_master_frame_derives_missing_district_keys_from_names(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     base = pd.DataFrame(
         {
@@ -325,8 +370,7 @@ def test_compute_composite_master_frame_derives_missing_district_keys_from_names
 def test_compute_composite_master_frame_derives_missing_block_keys_from_names(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_block.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     base = pd.DataFrame(
         {
@@ -359,8 +403,7 @@ def test_compute_composite_master_frame_propagates_idw_provenance(tmp_path) -> N
     ``_build_wide_component_frame`` (which strips the flag)."""
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     id_frame = pd.DataFrame(
         {
@@ -396,8 +439,7 @@ def test_compute_composite_master_frame_no_provenance_column_when_absent(tmp_pat
     byte-identical (no ``climate_fill_method`` column added)."""
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     id_frame = pd.DataFrame(
         {"state": [state_name, state_name], "district": ["A", "B"], "district_key": ["a", "b"]}

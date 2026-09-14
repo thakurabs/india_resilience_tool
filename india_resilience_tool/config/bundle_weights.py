@@ -35,6 +35,7 @@ EXPECTED_HEADLINE_WEIGHT_TOTALS: dict[str, float] = {
     "Riverine Flood": 1.0,
     "Extreme Rainfall | Flash Flood Risk": 0.75,
     "Cold Risk": 0.75,
+    "Drought Risk": 0.40,
 }
 
 
@@ -295,51 +296,78 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
     "Drought Risk": (
         BundleWeightEntry(
             bundle_domain="Drought Risk",
+            metric_slug="pr_consecutive_dry_days_lt1mm",
+            weight=0.40,
+            source_note=(
+                "Absolute drought headline, added 2026-09-14. The six SPI metrics "
+                "are z-scores against each unit's own 1981-2010 rainfall, so they "
+                "measure drought as an anomaly and cannot rank absolute dryness: "
+                "fitted nationally they put the Andamans above Rajasthan and made "
+                "high emissions look less drought-prone. CDD measures the standing "
+                "condition instead -- the longest run of days under 1mm, the "
+                "interval that must be carried with no recharge."
+            ),
+            substitution_note=(
+                "Placeholder weight. The published score is unaffected by its value "
+                "while CDD is the sole headline metric (the headline renormalizes to "
+                "1.0), so it can be revised when an aridity index P/PET joins the "
+                "headline without republishing any score."
+            ),
+            workbook_group="Dry-spell Condition",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Drought Risk",
             metric_slug="spi3_count_events_lt_minus1",
-            weight=0.08,
+            weight=0.08 * 0.60,
             source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses SPI drought-event counts for seasonal drought.",
             workbook_group="Seasonal Drought",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Drought Risk",
             metric_slug="spi6_count_events_lt_minus1",
-            weight=0.12,
+            weight=0.12 * 0.60,
             source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses SPI drought-event counts for meteorological drought.",
             workbook_group="Meteorological Drought",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Drought Risk",
             metric_slug="spi12_count_events_lt_minus1",
-            weight=0.20,
+            weight=0.20 * 0.60,
             source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses SPI drought-event counts for long-term drought.",
             workbook_group="Long-term Drought",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Drought Risk",
             metric_slug="spi3_max_spell_lt_minus1",
-            weight=0.12,
+            weight=0.12 * 0.60,
             source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses longest within-year SPI3 drought spell length.",
             workbook_group="Seasonal Drought",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Drought Risk",
             metric_slug="spi6_max_spell_lt_minus1",
-            weight=0.18,
+            weight=0.18 * 0.60,
             source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses longest within-year SPI6 drought spell length.",
             workbook_group="Meteorological Drought",
+            is_baseline_referenced=True,
         ),
         BundleWeightEntry(
             bundle_domain="Drought Risk",
             metric_slug="spi12_max_spell_lt_minus1",
-            weight=0.30,
+            weight=0.30 * 0.60,
             source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses longest within-year SPI12 drought spell length.",
             workbook_group="Long-term Drought",
+            is_baseline_referenced=True,
         ),
     ),
     "Riverine Flood": (

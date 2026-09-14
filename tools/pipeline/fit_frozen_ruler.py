@@ -88,6 +88,10 @@ BUNDLE_COVERAGE_GATES: dict[str, float] = {
     "Riverine Flood": 1.0,
     "Extreme Rainfall | Flash Flood Risk": 1.0,
     "Cold Risk": 1.0,
+    # Drought Risk publishes a single headline metric (CDD), so coverage is
+    # binary; all 5,488 fitting rows carried it. The SPI metrics that gated 3.2%
+    # of rows are lenses and no longer enter the denominator.
+    "Drought Risk": 1.0,
 }
 
 LEVEL = "district"

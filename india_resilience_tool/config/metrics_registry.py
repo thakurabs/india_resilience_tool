@@ -2712,6 +2712,10 @@ DOMAINS: dict[str, list[str]] = {
     ],
     "Drought Risk": [
         "composite_drought_risk",
+        # The absolute headline: the longest run of days with under 1mm, i.e. the
+        # interval soil moisture, wells and tanks must carry with no recharge.
+        # Same 1mm convention as CWD in the flash-flood bundle, opposite sign.
+        "pr_consecutive_dry_days_lt1mm",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
@@ -2906,7 +2910,8 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
     ),
     "Drought Risk": (
         "Metrics related to dry spells and drought conditions. "
-        "Includes SPI and SPEI indices at multiple timescales."
+        "The scored headline is the absolute dry-spell length (CDD); the SPI "
+        "indices are retained as a lens on drying relative to a unit's own past."
     ),
     "Agricultural Risk": (
         "Persisted sector-wise climate-risk composite for agriculture. "

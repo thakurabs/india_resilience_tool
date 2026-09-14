@@ -230,6 +230,30 @@ def test_committed_riverine_ruler_and_canaries_match_config() -> None:
     assert len(canaries) == 24
 
 
+def test_committed_drought_ruler_publishes_the_absolute_dry_spell_metric() -> None:
+    """Drought's headline must be CDD, never the SPI metrics.
+
+    Every SPI metric is a z-score against the unit's own 1981-2010 rainfall.
+    Fitted nationally they rank the Andamans above Rajasthan and make high
+    emissions look less drought-prone, because a fixed historical baseline
+    reports a wetter future as less drought. They stay as an anomaly lens.
+    """
+    spec = COMPOSITES_BY_SLUG["composite_drought_risk"]
+    ruler_dir = frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version)
+    ruler_set = load_ruler_set(ruler_dir)
+
+    assert spec.normalization == "frozen_national_cdf"
+    assert spec.headline_metric_slugs == ("pr_consecutive_dry_days_lt1mm",)
+    assert ruler_set.ruler_id == "composite_drought_risk_cdf_v1"
+    assert ruler_set.slices == HEAT_RISK_SLICES
+    assert ruler_set.coverage_gate == 1.0
+    assert ruler_set.configured_weight == get_bundle_headline_weight_total("Drought Risk")
+    assert ruler_set.ruler_sha256 == sha256_file(ruler_dir / "cdf_support.parquet")
+    assert not any(
+        slug.startswith("spi") for slug in ruler_set.rulers
+    ), "an SPI metric was frozen into the Drought headline ruler"
+
+
 def test_cdf_ruler_inverts_scores_for_a_lower_is_worse_metric() -> None:
     """Cold Risk is the first bundle to score metrics where lower is worse.
 

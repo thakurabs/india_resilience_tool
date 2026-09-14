@@ -331,8 +331,10 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
     assert spi12.params["scale_months"] == 12
 
     drought_metrics = get_metrics_for_bundle("Drought Risk", spatial_family="admin", level="district")
+    # CDD carries the published headline; the SPI metrics are the anomaly lens.
     assert drought_metrics == [
         "composite_drought_risk",
+        "pr_consecutive_dry_days_lt1mm",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
@@ -340,12 +342,17 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
         "spi6_max_spell_lt_minus1",
         "spi12_max_spell_lt_minus1",
     ]
-    for slug in drought_metrics[1:]:
+    spi_metrics = [slug for slug in drought_metrics if slug.startswith("spi")]
+    assert len(spi_metrics) == 6
+    for slug in spi_metrics:
         params = METRICS_BY_SLUG[slug].params
         assert int(params["min_event_months"]) > 0
     for slug in ("spi3_max_spell_lt_minus1", "spi6_max_spell_lt_minus1", "spi12_max_spell_lt_minus1"):
         assert METRICS_BY_SLUG[slug].params["period_rollup"] == "period_max"
-    assert set(drought_metrics[1:]) == set(DROUGHT_GRIDFIRST_SLUGS)
+    assert set(spi_metrics) == set(DROUGHT_GRIDFIRST_SLUGS)
+    # CDD reaches the bundle through the extreme-rainfall grid-first path, not
+    # the drought one, so it must not have been added to DROUGHT_GRIDFIRST_SLUGS.
+    assert "pr_consecutive_dry_days_lt1mm" not in DROUGHT_GRIDFIRST_SLUGS
     assert is_drought_gridfirst("spi3_count_events_lt_minus1", "district") is True
     assert is_drought_gridfirst("spi3_count_events_lt_minus1", "basin") is False
 

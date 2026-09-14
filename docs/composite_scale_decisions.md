@@ -754,6 +754,79 @@ a scoring one, and those metrics are lenses in any case.
 
 ---
 
+## Part D5 — Drought Risk, frozen 2026-09-14 (CHG-0459..0463)
+
+Drought Risk was the one bundle where the lens rule could not simply be applied, and the first
+where the decision was reversed by measurement rather than by argument.
+
+**What was tried first.** All six SPI metrics were treated as absolute, on the reasoning that
+months-spent-in-drought is a comparable quantity and that drought impact genuinely scales with
+local normals. Fitted and scored nationally, that produced a map which is not defensible:
+
+| | historical/1990-2010 |
+|---|---|
+| Worst-drought states | Andaman & Nicobar **94.5**, Ladakh 91.8, Arunachal 91.2, Assam 90.0 |
+| Least-drought states | **Rajasthan 66.3**, Gujarat 68.2, Madhya Pradesh 74.1 |
+| Lowest district in India | Jhalawar (Rajasthan) **55.8**; nothing scored below 55 |
+| Direction under warming | national mean **fell** 81.6 -> 19.3 at SSP5-8.5 2060-2080 |
+
+Both failures have one cause. SPI is standardized against 1981-2010, so by construction roughly
+the same fraction of months sits below -1 in every district over that baseline: the historical
+range compresses and the ordering becomes residual noise rather than aridity. And because CMIP6
+raises Indian monsoon precipitation above that fixed baseline, SPI shifts positive and the event
+counts collapse -- a wetter future reported as less drought. The raw metrics confirm it is not a
+scoring artefact: `spi12_max_spell_lt_minus1` falls 8.30 -> 4.74 months and
+`spi12_count_events_lt_minus1` 0.46 -> 0.22 events.
+
+The two coverage problems already on record were the same property in other clothes: SPI3 is
+undefined for ~25 districts (176 of 5,488 district-slices), almost all Thar Rajasthan and Kachchh
+Gujarat, because a three-month near-rainless window there degenerates the gamma fit. India's
+driest districts are exactly where the metric cannot be computed.
+
+**What shipped.** The bundle now separates the two questions it was conflating:
+
+* **Condition (headline):** `pr_consecutive_dry_days_lt1mm` -- the longest run of days under 1mm,
+  the interval soil moisture, wells and tanks must carry with no recharge. The 1mm threshold is
+  the same ETCCDI wet-day convention CWD uses in the flash-flood bundle, opposite sign. Absolute,
+  therefore poolable. The metric was already computed and on disk for all 784 districts x 7 slices.
+* **Anomaly (lens):** the six SPI metrics, rescaled to 0.60 with their approved workbook
+  proportions preserved exactly, now correctly answering "is this place drying relative to its
+  own past" instead of being asked to rank absolute dryness.
+
+| check | result |
+|---|---|
+| Coverage at fit | 5,488 / 5,488, gate **1.0**, 0 gated (the SPI metrics that gated 3.2% are no longer in the denominator) |
+| Published | 784 districts / 7,137 blocks, float64, **zero new nulls** (Kiltan was already NaN pre-migration) |
+| Key parity vs `geometry/` | 784/784 and 7,137/7,137, 0 missing either direction |
+| Driest | Jaisalmer, Barmer, Jalore, Banas Kantha, Kachchh, Patan, Sirohi, Jodhpur -- all **above 99** |
+| Wettest | Nicobars **0.0**, Kanniyakumari 0.1, Thiruvananthapuram 0.2, Lakshadweep 0.5 |
+| States | Gujarat 94.9 / Rajasthan 92.9 top, Lakshadweep 0.5 / Nagaland 5.6 / J&K 6.2 bottom |
+| Jensen guard | historical max **3.05**, SSP5-8.5 2060-2080 max **3.26**, mean 0.14, **none** above 10 -- the tightest of any bundle, a single smooth metric having no internal cancellation |
+| Same guard pre-migration | max **52.39**, mean 3.70, **36** districts above 10 |
+| `parity_report.json` issue count | **0** |
+
+**Known and accepted limitation.** CDD is nearly flat under warming -- national mean score 49.6
+(historical), 50.1 (SSP2-4.5 2060-2080), 48.5 (SSP5-8.5 2060-2080) -- because monsoon dry-season
+length barely moves. The spatial map is now correct; the scenario comparison is close to empty.
+This is deliberate: correct and uninformative in place of confidently wrong. CDD also conflates
+aridity with seasonality, so a sharply seasonal but adequately watered regime (Maharashtra,
+128 days) sits nearer the Thar (152 days) than its water situation warrants.
+
+**The planned fix is an aridity index P/PET**, which is the physically complete statement --
+supply against atmospheric demand, with absolute UNEP/FAO class boundaries (hyper-arid <0.05,
+arid 0.05-0.20, semi-arid 0.20-0.50, dry sub-humid 0.50-0.65) of exactly the kind that makes a
+metric poolable. It restores the temporal signal, because PET rises with temperature while
+rainfall does not keep pace. PET is not implemented, but Hargreaves needs only tmax, tmin, tmean
+and latitude, all of which the registry already carries, and it is the FAO-recommended method for
+precisely this data-limited case. When it lands it shares the headline with CDD, and the
+placeholder 0.40 weight is revised then; the published score does not change on that revision
+while CDD is the sole headline metric, because the headline renormalizes to 1.0 either way.
+
+One caveat to document when it ships: PET assumes demand is purely energy-driven and ignores
+stomatal closure under higher CO2, so PET-based indices are known to overstate future drying.
+
+---
+
 ## Part E — Open
 
 | ref | item | why it matters |

@@ -4,7 +4,19 @@ from pathlib import Path
 
 import pandas as pd
 
+from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
 from tools.diagnostics.audit_thematic_bundle_completeness import audit_thematic_bundles
+
+
+def _drought_component_slugs() -> tuple[str, ...]:
+    """Read the bundle's components rather than restating them.
+
+    Drought Risk gained CDD as its absolute headline on 2026-09-14; a hardcoded
+    list here silently stopped covering the bundle the audit actually walks.
+    """
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+    return tuple(spec.component_metric_slugs)
 
 
 def _repo_audit_doc() -> Path:
@@ -25,14 +37,7 @@ def test_drought_audit_reports_complete_when_sources_and_composite_align(tmp_pat
         "district": ["A"],
         "district_key": ["a"],
     }
-    component_slugs = (
-        "spi3_count_events_lt_minus1",
-        "spi6_count_events_lt_minus1",
-        "spi12_count_events_lt_minus1",
-        "spi3_max_spell_lt_minus1",
-        "spi6_max_spell_lt_minus1",
-        "spi12_max_spell_lt_minus1",
-    )
+    component_slugs = _drought_component_slugs()
     for slug in component_slugs:
         _write_master(
             tmp_path,
@@ -80,14 +85,7 @@ def test_drought_audit_reports_missing_composite_master(tmp_path: Path) -> None:
         "district": ["A"],
         "district_key": ["a"],
     }
-    component_slugs = (
-        "spi3_count_events_lt_minus1",
-        "spi6_count_events_lt_minus1",
-        "spi12_count_events_lt_minus1",
-        "spi3_max_spell_lt_minus1",
-        "spi6_max_spell_lt_minus1",
-        "spi12_max_spell_lt_minus1",
-    )
+    component_slugs = _drought_component_slugs()
     for slug in component_slugs:
         _write_master(
             tmp_path,
