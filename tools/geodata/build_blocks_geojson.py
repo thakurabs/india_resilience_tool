@@ -19,6 +19,7 @@ from india_resilience_tool.data.adm3_loader import (
     ensure_adm3_columns,
     ensure_epsg4326,
 )
+from india_resilience_tool.utils.naming import normalize_compact, normalize_name
 from paths import BLOCKS_PATH, get_paths_config
 
 
@@ -50,6 +51,46 @@ def _invalid_identity_mask(series: pd.Series) -> pd.Series:
 
 def _block_key(state_name: object, district_name: object, block_name: object) -> str:
     return f"{str(state_name).strip()}::{str(district_name).strip()}::{str(block_name).strip()}"
+
+
+# LGD admin renames (CHG-0092). build_blocks_geojson is superseded by
+# build_admin_boundaries_from_lgd, but the legacy GHS-WUP block source still
+# labels some districts with pre-LGD spellings that no longer match the canonical
+# district boundary (districts_4326.geojson, built from bharatlas LGD). Without
+# reconciliation, every block under a renamed district carries a stale
+# parent-district name and fails the block<->district join (e.g.
+# tools.geodata.build_jrc_flood_depth_admin_masters). Keyed by
+# (normalize_name(state), normalize_compact(source district)) -> canonical LGD name.
+_TELANGANA_KEY = normalize_name("Telangana")
+DISTRICT_RENAMES: dict[tuple[str, str], str] = {
+    (_TELANGANA_KEY, normalize_compact("Jagtial")): "Jagitial",
+    (_TELANGANA_KEY, normalize_compact("Jayashankar Bhupalpalli")): "Jayashankar Bhupalapally",
+    (_TELANGANA_KEY, normalize_compact("Komarram Bheem")): "Kumuram Bheem Asifabad",
+    (_TELANGANA_KEY, normalize_compact("Suriyapet")): "Suryapet",
+    (_TELANGANA_KEY, normalize_compact("Wanparti")): "Wanaparthy",
+}
+
+
+def _apply_district_renames(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
+    """Reconcile legacy pre-LGD district spellings to canonical LGD names (CHG-0092).
+
+    Operates on the canonical ``state_name``/``district_name`` columns before
+    ``block_key`` construction so the new spelling flows into the key, the
+    dissolve, and the output. Returns the (possibly mutated) frame and the number
+    of rows renamed.
+    """
+    if not DISTRICT_RENAMES or "district_name" not in gdf.columns or "state_name" not in gdf.columns:
+        return gdf, 0
+    state_keys = gdf["state_name"].map(lambda v: normalize_name(str(v if v is not None else "")))
+    dist_keys = gdf["district_name"].map(lambda v: normalize_compact(str(v if v is not None else "")))
+    renamed = 0
+    for (state_key, old_key), new_name in DISTRICT_RENAMES.items():
+        mask = (state_keys == state_key) & (dist_keys == old_key)
+        count = int(mask.sum())
+        if count:
+            gdf.loc[mask, "district_name"] = new_name
+            renamed += count
+    return gdf, renamed
 
 
 def _fix_invalid_geometries(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -117,6 +158,8 @@ def prepare_blocks_geojson(
     if gdf.empty:
         raise ValueError("No valid block rows remain after canonical identity filtering.")
 
+    gdf, renamed_district_rows = _apply_district_renames(gdf)
+
     gdf["block_key"] = [
         _block_key(state_name, district_name, block_name)
         for state_name, district_name, block_name in zip(
@@ -148,6 +191,7 @@ def prepare_blocks_geojson(
                 "dropped_invalid_identity_rows": dropped_invalid_rows,
                 "duplicate_rows_before_dissolve": duplicate_rows_before_dissolve,
                 "suspicious_label_rows": int(len(anomalies_df)),
+                "renamed_district_rows": int(renamed_district_rows),
             }
         ]
     )

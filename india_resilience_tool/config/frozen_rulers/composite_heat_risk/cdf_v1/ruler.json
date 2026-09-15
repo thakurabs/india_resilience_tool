@@ -1,0 +1,59 @@
+{
+  "bundle_domain": "Heat Risk",
+  "colour_scale_id": "whbgyr-101-floor045-v1",
+  "composite_slug": "composite_heat_risk",
+  "configured_weight": 0.6333333333333333,
+  "coverage_gate": 0.7,
+  "data_snapshot_hash": "26d647b058265667fa32be100ca13cabe3e619303ee90a63b08d39faca71b134",
+  "fitted_utc": "2026-09-10T09:20:30Z",
+  "headline_metric_count": 9,
+  "level_fitted": "district",
+  "n_districts": 784,
+  "n_source_masters": 324,
+  "n_states": 36,
+  "pooled_n": 5488,
+  "ruler_id": "composite_heat_risk_cdf_v1",
+  "ruler_kind": "cdf",
+  "ruler_sha256": "06733a03b677c671cb494360d6652775e0da75c1fc535d01c1e79bf3ef62b269",
+  "slices": [
+    [
+      "historical",
+      "1990-2010"
+    ],
+    [
+      "ssp245",
+      "2020-2040"
+    ],
+    [
+      "ssp245",
+      "2040-2060"
+    ],
+    [
+      "ssp245",
+      "2060-2080"
+    ],
+    [
+      "ssp585",
+      "2020-2040"
+    ],
+    [
+      "ssp585",
+      "2040-2060"
+    ],
+    [
+      "ssp585",
+      "2060-2080"
+    ]
+  ],
+  "weights": {
+    "hwa_heatwave_amplitude": 0.08333333333333333,
+    "tas_annual_mean": 0.06666666666666667,
+    "tas_summer_mean": 0.06666666666666667,
+    "tasmax_summer_mean": 0.06666666666666667,
+    "tasmin_tropical_nights_gt25": 0.06666666666666667,
+    "tnx_annual_max": 0.06666666666666667,
+    "txge30_hot_days": 0.06666666666666667,
+    "txge35_extreme_heat_days": 0.06666666666666667,
+    "txx_annual_max": 0.08333333333333333
+  }
+}

@@ -64,11 +64,12 @@ def master_needs_rebuild(master_path: Path | tuple[Path, ...], processed_root: P
 
 def state_profile_files_missing(processed_root: Path, state: str, level: str) -> bool:
     """Return True when required level-specific state profile files are missing."""
-    if is_optimized_metric_root(processed_root):
+    root = Path(processed_root)
+    if root.parent.name == "metrics" and any((root / child).exists() for child in ("masters", "yearly_ensemble", "yearly_models")):
         return False
 
     level_norm = str(level or "district").strip().lower()
-    state_root = Path(processed_root) / str(state)
+    state_root = root / str(state)
     required = [
         state_root / f"state_yearly_ensemble_stats_{level_norm}.csv",
         state_root / f"state_ensemble_stats_{level_norm}.csv",

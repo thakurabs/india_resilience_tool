@@ -184,19 +184,14 @@ def test_set_crosswalk_overlay_from_context_sets_expected_overlay() -> None:
     }
 
 
-def test_navigate_from_crosswalk_overlap_opens_subbasin_view() -> None:
+def test_navigate_from_crosswalk_overlap_skips_subbasin_navigation() -> None:
     session_state: dict[str, object] = {"crosswalk_overlay": {"level": "sub_basin"}}
     navigate_from_crosswalk_overlap(
         session_state,
         context=_district_to_subbasin_context(),
         overlap={"counterpart_name": "Godavari Upper", "basin_name": "Godavari"},
     )
-    pending = session_state["_pending_crosswalk_navigation"]
-    assert isinstance(pending, dict)
-    assert pending["spatial_family"] == "hydro"
-    assert pending["admin_level"] == "sub_basin"
-    assert pending["selected_basin"] == "Godavari"
-    assert pending["selected_subbasin"] == "Godavari Upper"
+    assert "_pending_crosswalk_navigation" not in session_state
     assert session_state["crosswalk_overlay"] is None
 
 
@@ -219,19 +214,15 @@ def test_navigate_from_crosswalk_overlap_opens_district_view() -> None:
     assert pending["selected_district"] == "Karimnagar"
 
 
-def test_navigate_from_crosswalk_overlap_opens_basin_view() -> None:
+def test_navigate_from_crosswalk_overlap_skips_basin_navigation() -> None:
     session_state: dict[str, object] = {}
     navigate_from_crosswalk_overlap(
         session_state,
         context=_block_to_basin_context(),
         overlap={"counterpart_name": "Godavari"},
     )
-    pending = session_state["_pending_crosswalk_navigation"]
-    assert isinstance(pending, dict)
-    assert pending["spatial_family"] == "hydro"
-    assert pending["admin_level"] == "basin"
-    assert pending["selected_basin"] == "Godavari"
-    assert pending["selected_subbasin"] == "All"
+    assert "_pending_crosswalk_navigation" not in session_state
+    assert session_state["crosswalk_overlay"] is None
 
 
 def test_navigate_from_crosswalk_overlap_opens_block_view() -> None:

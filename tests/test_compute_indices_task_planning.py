@@ -1,0 +1,442 @@
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+from india_resilience_tool.data.source_inventory import (
+    InventoryYearRecord,
+    SourceInventoryShard,
+)
+from tools.pipeline import compute_indices_multiprocess as CMP
+
+
+def _record(
+    path: Path,
+    *,
+    year: int,
+    engine: str | None = "netcdf4",
+    valid: bool = True,
+    reason: str | None = None,
+) -> InventoryYearRecord:
+    return InventoryYearRecord(
+        year=year,
+        path=path,
+        size=10,
+        mtime_ns=year,
+        engine=engine if valid else None,
+        open_status=valid,
+        validation_reason=reason or ("ok" if valid else "open_failed:ValueError"),
+        var_present=valid,
+    )
+
+
+def _shard(
+    *,
+    scenario: str,
+    varname: str,
+    model: str,
+    records: list[InventoryYearRecord],
+) -> SourceInventoryShard:
+    return SourceInventoryShard(
+        schema_version=1,
+        scenario=scenario,
+        varname=varname,
+        model=model,
+        records=tuple(records),
+        source_signature=f"{scenario}:{varname}:{model}:{len(records)}",
+    )
+
+
+def _configure_planner(
+    monkeypatch,
+    tmp_path: Path,
+    *,
+    metrics: list[dict],
+    scenarios: dict[str, dict] | None = None,
+    models: list[str] | None = None,
+    path_map: dict[tuple[str, str, str], Path] | None = None,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "METRICS", metrics)
+    monkeypatch.setattr(
+        CMP,
+        "SCENARIOS",
+        scenarios
+        or {
+            "historical": {"subdir": "historical/tas", "periods": {}},
+            "ssp245": {"subdir": "ssp245/tas", "periods": {}},
+            "ssp585": {"subdir": "ssp585/tas", "periods": {}},
+        },
+    )
+    monkeypatch.setattr(CMP, "_get_models", lambda: list(models or ["ModelA"]))
+    monkeypatch.setattr(CMP, "_inventory_path_engines", {})
+
+    def _fake_var_data_dir(_data_root: Path, scenario_subdir: str, varname: str, model: str) -> Path:
+        key = (scenario_subdir.split("/")[0], varname, model)
+        if path_map is not None and key in path_map:
+            return path_map[key]
+        return tmp_path / key[0] / varname / model
+
+    monkeypatch.setattr(CMP, "var_data_dir", _fake_var_data_dir)
+
+
+def test_metric_role_varnames_uses_level_aware_percentile_and_drought_baselines() -> None:
+    rainfall_metric = {
+        "slug": "r99p_extreme_wet_precip",
+        "var": "pr",
+        "compute": "percentile_precipitation_total",
+        "params": {"percentile": 99},
+    }
+    drought_metric = {
+        "slug": "spi3_count_months_lt_minus1",
+        "var": "pr",
+        "compute": "standardised_precipitation_index",
+        "params": {"annual_aggregation": "count_months_lt"},
+    }
+
+    district_rainfall_roles = CMP._metric_role_varnames(metric=rainfall_metric, scenario="ssp585", level="district")
+    basin_rainfall_roles = CMP._metric_role_varnames(metric=rainfall_metric, scenario="ssp585", level="basin")
+    district_drought_roles = CMP._metric_role_varnames(metric=drought_metric, scenario="ssp585", level="district")
+    basin_drought_roles = CMP._metric_role_varnames(metric=drought_metric, scenario="ssp585", level="basin")
+
+    assert district_rainfall_roles["baseline"] == ("pr",)
+    assert "baseline" not in basin_rainfall_roles
+    assert district_drought_roles["baseline"] == ("pr",)
+    assert "baseline" not in basin_drought_roles
+
+
+def test_build_processing_task_plan_reuses_source_inventory_per_unique_key(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    metrics = [
+        {"slug": "tas_metric_a", "var": "tas"},
+        {"slug": "tas_metric_b", "var": "tas"},
+    ]
+    _configure_planner(monkeypatch, tmp_path, metrics=metrics, scenarios={"historical": {"subdir": "historical/tas", "periods": {}}})
+
+    data_dir = tmp_path / "historical" / "tas" / "ModelA"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    year_path = data_dir / "2030.nc"
+    year_path.touch()
+
+    load_calls: list[tuple[str, str, str]] = []
+    shard = _shard(
+        scenario="historical",
+        varname="tas",
+        model="ModelA",
+        records=[_record(year_path, year=2030)],
+    )
+
+    def _fake_loader(_cache_root: Path, *, data_dir: Path, scenario: str, varname: str, model: str, allow_write: bool, engines=()) -> SourceInventoryShard:
+        load_calls.append((scenario, varname, model))
+        assert allow_write is True
+        assert data_dir == year_path.parent
+        return shard
+
+    monkeypatch.setattr(CMP, "load_or_refresh_inventory_shard", _fake_loader)
+
+    with caplog.at_level(logging.INFO):
+        plan = CMP.build_processing_task_plan(
+            metrics_filter=["tas_metric_a", "tas_metric_b"],
+            models_filter=["ModelA"],
+            scenarios_filter=["historical"],
+            level="district",
+            state="Telangana",
+        )
+
+    assert [task.slug for task in plan.tasks] == ["tas_metric_a", "tas_metric_b"]
+    assert load_calls == [("historical", "tas", "ModelA")]
+    assert any("unique_source_availability_keys=1" in message for message in caplog.messages)
+    assert any("tasks_built=2" in message for message in caplog.messages)
+    assert CMP._inventory_path_engines[str(year_path.resolve())] == "netcdf4"
+
+
+def test_build_processing_task_plan_missing_directory_is_no_available_years(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    metrics = [{"slug": "tas_metric", "var": "tas"}]
+    missing_dir = tmp_path / "missing" / "tas" / "ModelA"
+    _configure_planner(
+        monkeypatch,
+        tmp_path,
+        metrics=metrics,
+        scenarios={"historical": {"subdir": "historical/tas", "periods": {}}},
+        path_map={("historical", "tas", "ModelA"): missing_dir},
+    )
+
+    plan = CMP.build_processing_task_plan(
+        metrics_filter=["tas_metric"],
+        models_filter=["ModelA"],
+        scenarios_filter=["historical"],
+        level="district",
+        state="Telangana",
+    )
+
+    assert plan.tasks == ()
+    assert plan.skipped_reasons_by_metric["tas_metric"] == ("no_available_years",)
+    assert plan.skipped_counts_by_reason["no_available_years"] == 1
+
+
+def test_build_processing_task_plan_invalid_only_sources_are_flagged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    metrics = [{"slug": "tas_metric", "var": "tas"}]
+    _configure_planner(monkeypatch, tmp_path, metrics=metrics, scenarios={"historical": {"subdir": "historical/tas", "periods": {}}})
+
+    data_dir = tmp_path / "historical" / "tas" / "ModelA"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    bad_path = data_dir / "2030.nc"
+    bad_path.touch()
+
+    monkeypatch.setattr(
+        CMP,
+        "load_or_refresh_inventory_shard",
+        lambda *_args, **_kwargs: _shard(
+            scenario="historical",
+            varname="tas",
+            model="ModelA",
+            records=[_record(bad_path, year=2030, valid=False)],
+        ),
+    )
+
+    plan = CMP.build_processing_task_plan(
+        metrics_filter=["tas_metric"],
+        models_filter=["ModelA"],
+        scenarios_filter=["historical"],
+        level="district",
+        state="Telangana",
+    )
+
+    assert plan.tasks == ()
+    assert plan.skipped_reasons_by_metric["tas_metric"] == ("invalid_source_files",)
+    assert plan.skipped_counts_by_reason["invalid_source_files"] == 1
+
+
+def test_build_processing_task_plan_multi_var_without_overlap_is_no_common_years(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    metrics = [{"slug": "combo_metric", "vars": ["tas", "pr"], "var": "tas"}]
+    _configure_planner(monkeypatch, tmp_path, metrics=metrics, scenarios={"historical": {"subdir": "historical/tas", "periods": {}}})
+
+    tas_dir = tmp_path / "historical" / "tas" / "ModelA"
+    pr_dir = tmp_path / "historical" / "pr" / "ModelA"
+    tas_dir.mkdir(parents=True, exist_ok=True)
+    pr_dir.mkdir(parents=True, exist_ok=True)
+    tas_path = tas_dir / "2030.nc"
+    pr_path = pr_dir / "2031.nc"
+    tas_path.touch()
+    pr_path.touch()
+
+    def _fake_loader(_cache_root: Path, *, data_dir: Path, scenario: str, varname: str, model: str, allow_write: bool, engines=()) -> SourceInventoryShard:
+        if varname == "tas":
+            return _shard(
+                scenario=scenario,
+                varname=varname,
+                model=model,
+                records=[_record(tas_path, year=2030)],
+            )
+        return _shard(
+            scenario=scenario,
+            varname=varname,
+            model=model,
+            records=[_record(pr_path, year=2031)],
+        )
+
+    monkeypatch.setattr(CMP, "load_or_refresh_inventory_shard", _fake_loader)
+
+    plan = CMP.build_processing_task_plan(
+        metrics_filter=["combo_metric"],
+        models_filter=["ModelA"],
+        scenarios_filter=["historical"],
+        level="district",
+        state="Telangana",
+    )
+
+    assert plan.tasks == ()
+    assert plan.skipped_reasons_by_metric["combo_metric"] == ("no_common_years",)
+    assert plan.skipped_counts_by_reason["no_common_years"] == 1
+
+
+def test_build_processing_task_plan_caches_signatures_across_shared_historical_roles(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    metrics = [
+        {
+            "slug": "pr_percentile",
+            "var": "pr",
+            "compute": "percentile_precipitation_total",
+        },
+        {
+            "slug": "pr_djf_mean",
+            "var": "pr",
+            "compute": "seasonal_mean",
+            "params": {"months": [12, 1, 2]},
+        },
+    ]
+    _configure_planner(monkeypatch, tmp_path, metrics=metrics)
+
+    scenario_paths = {}
+    for scenario_name in ("historical", "ssp245", "ssp585"):
+        data_dir = tmp_path / scenario_name / "pr" / "ModelA"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        year_path = data_dir / "2030.nc"
+        year_path.touch()
+        scenario_paths[scenario_name] = year_path
+
+    def _fake_loader(_cache_root: Path, *, data_dir: Path, scenario: str, varname: str, model: str, allow_write: bool, engines=()) -> SourceInventoryShard:
+        return _shard(
+            scenario=scenario,
+            varname=varname,
+            model=model,
+            records=[_record(scenario_paths[scenario], year=2030)],
+        )
+
+    signature_calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def _fake_inventory_signature_for_role(*, role_name: str, shards: dict[str, SourceInventoryShard]) -> str:
+        signature_calls.append((role_name, tuple(sorted(shards))))
+        return f"{role_name}:{','.join(sorted(shards))}"
+
+    monkeypatch.setattr(CMP, "load_or_refresh_inventory_shard", _fake_loader)
+    monkeypatch.setattr(CMP, "_inventory_signature_for_role", _fake_inventory_signature_for_role)
+
+    plan = CMP.build_processing_task_plan(
+        metrics_filter=["pr_percentile", "pr_djf_mean"],
+        models_filter=["ModelA"],
+        scenarios_filter=["ssp245", "ssp585"],
+        level="district",
+        state="Telangana",
+    )
+
+    assert len(plan.tasks) == 4
+    assert signature_calls == [
+        ("eval", ("pr",)),
+        ("baseline", ("pr",)),
+        ("historical_prev_dec", ("pr",)),
+        ("eval", ("pr",)),
+    ]
+    percentile_task = next(task for task in plan.tasks if task.slug == "pr_percentile" and task.scenario == "ssp245")
+    djf_task = next(task for task in plan.tasks if task.slug == "pr_djf_mean" and task.scenario == "ssp245")
+    assert percentile_task.source_signatures["baseline"] == "baseline:pr"
+    assert djf_task.source_signatures["historical_prev_dec"] == "historical_prev_dec:pr"
+    assert percentile_task.source_signatures["baseline"] != djf_task.source_signatures["historical_prev_dec"]
+
+
+def test_build_processing_task_plan_populates_inventory_engines_from_cached_shards(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    metrics = [{"slug": "tas_metric", "var": "tas"}]
+    _configure_planner(monkeypatch, tmp_path, metrics=metrics, scenarios={"historical": {"subdir": "historical/tas", "periods": {}}})
+
+    data_dir = tmp_path / "historical" / "tas" / "ModelA"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    year_path = data_dir / "2030.nc"
+    year_path.touch()
+
+    monkeypatch.setattr(
+        CMP,
+        "load_or_refresh_inventory_shard",
+        lambda *_args, **_kwargs: _shard(
+            scenario="historical",
+            varname="tas",
+            model="ModelA",
+            records=[_record(year_path, year=2030, engine="h5netcdf")],
+        ),
+    )
+
+    CMP.build_processing_task_plan(
+        metrics_filter=["tas_metric"],
+        models_filter=["ModelA"],
+        scenarios_filter=["historical"],
+        level="district",
+        state="Telangana",
+    )
+
+    assert CMP._inventory_path_engines[str(year_path.resolve())] == "h5netcdf"
+
+
+# --- CHG-0113 (Option C) partition_drought_reps invariants (G-C7) -----------------------------
+
+
+def _task(slug: str, *, model: str, scenario: str, task_id: int) -> "CMP.ProcessingTask":
+    """Minimal ProcessingTask for partition tests (only slug/model/scenario are read)."""
+    return CMP.ProcessingTask(
+        metric_idx=0,
+        slug=slug,
+        model=model,
+        scenario=scenario,
+        scenario_conf={},
+        task_id=task_id,
+        total_tasks=0,
+    )
+
+
+def test_partition_drought_reps_invariants() -> None:
+    drought_slugs = [
+        "spi3_count_events_lt_minus1",
+        "spi6_count_events_lt_minus1",
+        "spi12_max_spell_lt_minus1",
+        "spi3_count_months_lt_minus1",  # admin-only grid-first slug
+    ]
+    non_drought_slugs = ["tas_mean", "spi3_count_events_lt_minus1_block_only_lookalike", "hwd"]
+
+    tasks: list[CMP.ProcessingTask] = []
+    tid = 0
+    groups = [("ModelA", "ssp245"), ("ModelA", "ssp585"), ("ModelB", "ssp245")]
+    # Every (model, scenario) group gets the full set of drought slugs -> only ONE should become a rep.
+    for model, scenario in groups:
+        for slug in drought_slugs:
+            tasks.append(_task(slug, model=model, scenario=scenario, task_id=tid))
+            tid += 1
+    # Non-drought tasks spread across the same and other groups -> always remainder.
+    for slug in non_drought_slugs:
+        tasks.append(_task(slug, model="ModelA", scenario="ssp245", task_id=tid))
+        tid += 1
+
+    reps, remainder = CMP.partition_drought_reps(tasks, level="district")
+
+    # No loss, no duplication: union == tasks, disjoint by identity.
+    assert set(map(id, reps)) | set(map(id, remainder)) == set(map(id, tasks))
+    assert set(map(id, reps)).isdisjoint(set(map(id, remainder)))
+    assert len(reps) + len(remainder) == len(tasks)
+
+    # Exactly one rep per (model, scenario) drought group.
+    rep_groups = [(t.model, t.scenario) for t in reps]
+    assert sorted(rep_groups) == sorted(groups)
+    assert len(rep_groups) == len(set(rep_groups))
+
+    # Every rep is a grid-first drought slug (the cube route); 1:1 group<->cube-key assumption holds.
+    assert all(CMP.is_drought_gridfirst(t.slug, "district") for t in reps)
+
+    # Non-drought tasks all land in remainder.
+    assert all(not CMP.is_drought_gridfirst(t.slug, "district") for t in remainder if t.slug in non_drought_slugs)
+    for slug in non_drought_slugs:
+        assert any(t.slug == slug for t in remainder)
+
+
+def test_partition_drought_reps_no_drought_is_noop() -> None:
+    tasks = [
+        _task("tas_mean", model="ModelA", scenario="ssp245", task_id=0),
+        _task("hwd", model="ModelA", scenario="ssp585", task_id=1),
+    ]
+    reps, remainder = CMP.partition_drought_reps(tasks, level="district")
+    assert reps == []
+    assert remainder == tasks
+
+
+def test_partition_drought_reps_block_level_also_grid_first() -> None:
+    # is_drought_gridfirst covers {"district", "block"}; a block-level drought task is still a rep.
+    tasks = [
+        _task("spi6_count_events_lt_minus1", model="ModelA", scenario="ssp245", task_id=0),
+        _task("spi6_count_events_lt_minus1", model="ModelA", scenario="ssp245", task_id=1),
+    ]
+    reps, remainder = CMP.partition_drought_reps(tasks, level="block")
+    assert len(reps) == 1
+    assert len(remainder) == 1

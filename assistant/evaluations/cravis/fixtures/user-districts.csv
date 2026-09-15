@@ -1,0 +1,12 @@
+input_row,district,state,note
+1,Pune,Maharashtra,exact
+2,Ahmedabad,Gujarat,exact
+3,Dehradun,Uttarakhand,exact
+4,Cuttack,Odisha,exact
+5,Jaipur,Rajasthan,exact
+6,Chennai,Tamil Nadu,exact
+7,Ahmadabad,Gujarat,alias candidate
+8,Atlantis,Odisha,impossible district
+9,Pune,Maharashtra,duplicate valid district
+10,,,blank district
+

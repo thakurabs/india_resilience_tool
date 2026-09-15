@@ -7,10 +7,8 @@ import pytest
 
 from india_resilience_tool.config.paths import get_paths_config
 from india_resilience_tool.data.crosswalks import (
-    build_basin_admin_context,
     build_block_hydro_context,
     build_district_hydro_context,
-    build_subbasin_admin_context,
     ensure_block_basin_crosswalk,
     ensure_block_subbasin_crosswalk,
     ensure_district_basin_crosswalk,
@@ -157,41 +155,3 @@ def test_build_block_subbasin_context_returns_dominant_subbasin() -> None:
     assert ctx.dominant_counterpart_name == "Godavari Upper"
     assert ctx.selected_fraction_label == "Block share"
 
-
-def test_build_subbasin_admin_context_returns_ordered_districts() -> None:
-    ctx = build_subbasin_admin_context(
-        ensure_district_subbasin_crosswalk(_district_subbasin_df()),
-        subbasin_id="SB02",
-        subbasin_name="Godavari Middle",
-        alias_fn=lambda s: str(s).strip().lower(),
-        admin_level="district",
-    )
-    assert ctx is not None
-    assert ctx.section_title == "Administrative context"
-    assert ctx.primary_basin_name == "Godavari"
-    assert ctx.dominant_counterpart_name == "Karimnagar"
-    assert ctx.dominant_label == "District covering the largest share of this sub-basin"
-    assert ctx.selected_fraction_label == "Share of sub-basin"
-    assert ctx.counterpart_fraction_label == "Share of district in sub-basin"
-    assert ctx.overlap_count == 2
-    assert ctx.classification == "concentrated_in_one_district"
-    assert [ov.counterpart_name for ov in ctx.overlaps] == ["Karimnagar", "Nizamabad"]
-    assert ctx.all_counterpart_ids == ("Telangana::Karimnagar", "Telangana::Nizamabad")
-
-
-def test_build_basin_admin_context_can_drill_to_blocks() -> None:
-    ctx = build_basin_admin_context(
-        ensure_block_basin_crosswalk(_block_basin_df()),
-        basin_id="B02",
-        basin_name="Krishna",
-        alias_fn=lambda s: str(s).strip().lower(),
-        admin_level="block",
-    )
-    assert ctx is not None
-    assert ctx.selected_level == "basin"
-    assert ctx.counterpart_level == "block"
-    assert ctx.dominant_counterpart_name == "Bheemgal"
-    assert ctx.dominant_label == "Block covering the largest share of this basin"
-    assert ctx.selected_fraction_label == "Share of basin"
-    assert ctx.counterpart_fraction_label == "Share of block in basin"
-    assert ctx.highlight_action_label == "Highlight related blocks"

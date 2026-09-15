@@ -23,22 +23,12 @@ import pandas as pd
 def _resolve_summary_target(
     *,
     admin_level: str,
-    spatial_family: str,
     selected_state: str,
     selected_district: str,
     selected_block: str,
-    selected_basin: str,
-    selected_subbasin: str,
 ) -> Optional[str]:
     """Return the summary renderer target for the current selection, if any."""
     level_norm = str(admin_level).strip().lower()
-    family_norm = str(spatial_family).strip().lower()
-    if family_norm == "hydro" and level_norm == "sub_basin":
-        if selected_basin != "All" and selected_subbasin == "All":
-            return "hydro_basin"
-        return None
-    if level_norm == "basin":
-        return None
     if level_norm == "block":
         return "state" if selected_state != "All" and selected_block == "All" else None
     return "state" if selected_state != "All" and selected_district == "All" else None
@@ -50,10 +40,7 @@ def render_right_panel(
     selected_state: str,
     selected_district: str,
     selected_block: str,
-    selected_basin: str,
-    selected_subbasin: str,
     admin_level: str,
-    spatial_family: str,
     # Variable/metric context
     variables: Mapping[str, Mapping[str, Any]],
     variable_slug: str,
@@ -72,8 +59,6 @@ def render_right_panel(
     # Config
     pilot_state: str,
     data_dir: Path,
-    river_reaches_path: Path,
-    river_overlay_message: Optional[str],
     logo_path: Optional[Path],
     # Figure styling
     fig_size_panel: tuple[float, float],
@@ -112,25 +97,20 @@ def render_right_panel(
     import streamlit as st
 
     from india_resilience_tool.analysis.metrics import compute_position_stats
-    from india_resilience_tool.app.geo_cache import load_river_reaches_cached
     from india_resilience_tool.app.perf import render_perf_panel_safe
     from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
     from india_resilience_tool.app.portfolio_ui import render_portfolio_panel
     from india_resilience_tool.app.views.details_panel import render_details_panel
-    from india_resilience_tool.app.views.hydro_summary_view import render_hydro_summary_view
     from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
     from india_resilience_tool.data.master_columns import find_baseline_column_for_metric
     from india_resilience_tool.data.crosswalks import (
-        build_basin_admin_context,
         build_block_hydro_context,
         build_district_hydro_context,
-        build_subbasin_admin_context,
         load_block_basin_crosswalk,
         load_block_subbasin_crosswalk,
         load_district_basin_crosswalk,
         load_district_subbasin_crosswalk,
     )
-    from india_resilience_tool.data.river_topology import build_hydro_river_summary
     from india_resilience_tool.data.spatial_match import (
         extract_click_coords,
         extract_clicked_feature,
@@ -261,58 +241,35 @@ def render_right_panel(
         click_coords=click_coords,
         selected_district=str(st.session_state.get("selected_district", "All")),
         selected_block=str(st.session_state.get("selected_block", "All")),
-        selected_basin=str(st.session_state.get("selected_basin", "All")),
-        selected_subbasin=str(st.session_state.get("selected_subbasin", "All")),
     )
 
     summary_target = _resolve_summary_target(
         admin_level=admin_level,
-        spatial_family=spatial_family,
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
     )
 
     if (matched_row is None or getattr(matched_row, "empty", True)) and summary_target:
         if "Multi" in str(analysis_mode):
             return
-        if summary_target == "hydro_basin":
-            render_hydro_summary_view(
-                selected_basin=selected_basin,
-                variables=variables,
-                variable_slug=variable_slug,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                metric_col=metric_col,
-                merged_gdf=merged,
-                processed_root=processed_root,
-            )
-        else:
-            render_state_summary_view(
-                selected_state=selected_state,
-                variables=variables,
-                variable_slug=variable_slug,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                metric_col=metric_col,
-                merged_gdf=merged,
-                processed_root=processed_root,
-                level=admin_level,
-            )
+        render_state_summary_view(
+            selected_state=selected_state,
+            variables=variables,
+            variable_slug=variable_slug,
+            sel_scenario=sel_scenario,
+            sel_period=sel_period,
+            sel_stat=sel_stat,
+            metric_col=metric_col,
+            merged_gdf=merged,
+            processed_root=processed_root,
+            level=admin_level,
+        )
         return
 
     # ----------- UNIT DETAILS MODE (district or block) -----------
     level_norm = str(admin_level).strip().lower()
-    if level_norm == "sub_basin":
-        unit_label = "sub-basin"
-    elif level_norm == "basin":
-        unit_label = "basin"
-    else:
-        unit_label = "block" if level_norm == "block" else "district"
+    unit_label = "block" if level_norm == "block" else "district"
 
     if matched_row is None or getattr(matched_row, "empty", True):
         st.warning(f"No {unit_label}-level data found for the current selection.")
@@ -331,14 +288,10 @@ def render_right_panel(
     row = matched_row.iloc[0]
     district_name = row.get("district_name", "Unknown")
     block_name = row.get("block_name", "Unknown") if level_norm == "block" else None
-    basin_name = row.get("basin_name", "Unknown")
-    basin_id = row.get("basin_id", "")
-    subbasin_id = row.get("subbasin_id", "")
-    subbasin_name = row.get("subbasin_name", "Unknown") if level_norm == "sub_basin" else None
     state_to_show = (
         st.session_state.get("selected_state")
         if st.session_state.get("selected_state") != "All"
-        else (row.get("state_name") or ("Hydro" if spatial_family == "hydro" else "Unknown"))
+        else (row.get("state_name") or "Unknown")
     )
 
     # --- Compact selection view in Multi-unit portfolio mode ---
@@ -394,12 +347,7 @@ def render_right_panel(
 
     # --- Full unit climate profile (single-district/block focus mode) ---
     if click_coords is not None:
-        if level_norm == "sub_basin":
-            unit_label_display = "sub-basin"
-        elif level_norm == "basin":
-            unit_label_display = "basin"
-        else:
-            unit_label_display = "block" if level_norm == "block" else "district"
+        unit_label_display = "block" if level_norm == "block" else "district"
         st.caption(
             f"Point location used: lat {click_coords[0]:.4f}, "
             f"lon {click_coords[1]:.4f} (assigned to this {unit_label_display})."
@@ -518,24 +466,6 @@ def render_right_panel(
             normalize_fn=alias_fn,
         )
 
-    @st.cache_data
-    def _load_hydro_yearly(
-        ts_root: Path,
-        hydro_level: str,
-        basin_display: str,
-        subbasin_display: str | None,
-        scenario_name: str,
-    ) -> pd.DataFrame:
-        from india_resilience_tool.analysis.timeseries import load_hydro_yearly
-
-        return load_hydro_yearly(
-            ts_root=ts_root,
-            level="sub_basin" if hydro_level == "sub_basin" else "basin",
-            basin_display=basin_display,
-            subbasin_display=subbasin_display,
-            scenario_name=scenario_name,
-        )
-
     def _filter_series_for_trend(
         series_df: pd.DataFrame,
         state_name: str,
@@ -611,7 +541,7 @@ def render_right_panel(
     requested_state_dir = (
         selected_state if selected_state != "All" else (row.get("state_name") or pilot_state)
     )
-    state_dir_for_fs = "hydro" if spatial_family == "hydro" else requested_state_dir
+    state_dir_for_fs = requested_state_dir
     district_for_fs = row.get("district_name") or selected_district
     block_for_fs = row.get("block_name") or selected_block
 
@@ -650,12 +580,8 @@ def render_right_panel(
         required_crosswalk_kinds = {"district_basin", "district_subbasin"}
     elif level_norm == "block":
         required_crosswalk_kinds = {"block_basin", "block_subbasin"}
-    elif level_norm == "basin":
-        required_crosswalk_kinds = {"district_basin", "block_basin"}
-    elif level_norm == "sub_basin":
-        required_crosswalk_kinds = {"district_subbasin", "block_subbasin"}
     else:
-        required_crosswalk_kinds = set(crosswalk_specs)
+        required_crosswalk_kinds = set()
     loaded_crosswalks: dict[str, pd.DataFrame] = {}
     for kind, path in crosswalk_specs.items():
         if kind not in required_crosswalk_kinds:
@@ -721,102 +647,7 @@ def render_right_panel(
             )
             if context is not None:
                 crosswalk_contexts["sub_basin"] = context
-    elif level_norm == "basin":
-        district_basin_df = loaded_crosswalks.get("district_basin")
-        if district_basin_df is not None:
-            context = build_basin_admin_context(
-                district_basin_df,
-                basin_id=str(basin_id or ""),
-                basin_name=str(basin_name or ""),
-                alias_fn=alias_fn,
-                admin_level="district",
-            )
-            if context is not None:
-                crosswalk_contexts["district"] = context
-
-        block_basin_df = loaded_crosswalks.get("block_basin")
-        if block_basin_df is not None:
-            context = build_basin_admin_context(
-                block_basin_df,
-                basin_id=str(basin_id or ""),
-                basin_name=str(basin_name or ""),
-                alias_fn=alias_fn,
-                admin_level="block",
-            )
-            if context is not None:
-                crosswalk_contexts["block"] = context
-    elif level_norm == "sub_basin":
-        district_subbasin_df = loaded_crosswalks.get("district_subbasin")
-        if district_subbasin_df is not None:
-            context = build_subbasin_admin_context(
-                district_subbasin_df,
-                subbasin_id=str(subbasin_id or ""),
-                subbasin_name=str(subbasin_name or ""),
-                alias_fn=alias_fn,
-                admin_level="district",
-            )
-            if context is not None:
-                crosswalk_contexts["district"] = context
-
-        block_subbasin_df = loaded_crosswalks.get("block_subbasin")
-        if block_subbasin_df is not None:
-            context = build_subbasin_admin_context(
-                block_subbasin_df,
-                subbasin_id=str(subbasin_id or ""),
-                subbasin_name=str(subbasin_name or ""),
-                alias_fn=alias_fn,
-                admin_level="block",
-            )
-            if context is not None:
-                crosswalk_contexts["block"] = context
-
-    if level_norm in {"basin", "sub_basin"} and river_reaches_path.exists():
-        reaches_gdf = load_river_reaches_cached(str(river_reaches_path))
-        river_context = build_hydro_river_summary(
-            reaches_gdf,
-            level="sub_basin" if level_norm == "sub_basin" else "basin",
-            basin_id=str(basin_id or ""),
-            subbasin_id=str(subbasin_id or "") if level_norm == "sub_basin" else None,
-        )
-        if river_context is not None and river_overlay_message:
-            river_context = dict(river_context)
-            river_context["status_note"] = str(river_overlay_message).strip()
-
-    if level_norm == "sub_basin":
-        yearly_hist = _load_hydro_yearly(
-            ts_root=processed_root,
-            hydro_level="sub_basin",
-            basin_display=str(basin_name),
-            subbasin_display=str(subbasin_name),
-            scenario_name="historical",
-        )
-        yearly_scen = _load_hydro_yearly(
-            ts_root=processed_root,
-            hydro_level="sub_basin",
-            basin_display=str(basin_name),
-            subbasin_display=str(subbasin_name),
-            scenario_name=sel_scenario,
-        )
-        hist_ts = yearly_hist
-        scen_ts = yearly_scen
-    elif level_norm == "basin":
-        yearly_hist = _load_hydro_yearly(
-            ts_root=processed_root,
-            hydro_level="basin",
-            basin_display=str(basin_name),
-            subbasin_display=None,
-            scenario_name="historical",
-        )
-        yearly_scen = _load_hydro_yearly(
-            ts_root=processed_root,
-            hydro_level="basin",
-            basin_display=str(basin_name),
-            subbasin_display=None,
-            scenario_name=sel_scenario,
-        )
-        hist_ts = yearly_hist
-        scen_ts = yearly_scen
-    elif level_norm == "block" and selected_block != "All":
+    if level_norm == "block" and selected_block != "All":
         yearly_hist = _load_block_yearly(
             ts_root=processed_root,
             state_dir=str(state_dir_for_fs),
@@ -859,13 +690,83 @@ def render_right_panel(
 
     _fig_size_panel = ensure_16x9_figsize(fig_size_panel, mode="fit_width")
 
+    # Geography header (district / block / basin / sub-basin) — rendered here so
+    # it sits directly below the "Climate Profile" panel header, above the
+    # Exposure Snapshot and Hydrological Context cards.
+    from india_resilience_tool.app.views.details_panel import render_geography_header
+
+    render_geography_header(
+        row=row,
+        district_name=district_name,
+        state_to_show=state_to_show,
+        selected_district=selected_district,
+        level=admin_level,
+        block_name=block_name,
+        parent_district_name=district_name if level_norm == "block" else None,
+    )
+
+    # Exposure Snapshot + Hydrological Context cards (admin mode only).
+    # These are lightweight runtime summaries; the dashboard degrades gracefully
+    # when the optional parquet files are absent.
+    _context_spatial_family = "admin"
+    _context_level = str(admin_level or "district").strip().lower()
+    if _context_spatial_family == "admin" and _context_level in {"district", "block"}:
+        try:
+            from india_resilience_tool.app.summary_cache import (
+                load_exposure_summary_cached,
+                load_hydro_summary_cached,
+            )
+            from india_resilience_tool.app.views.context_cards import render_admin_context_cards
+            from india_resilience_tool.data.exposure_summary import slice_exposure_for_admin_key
+            from india_resilience_tool.data.hydro_summary import slice_hydro_for_admin_key
+            from india_resilience_tool.data.optimized_bundle import optimized_context_path
+
+            _state_key = alias_fn(str(row.get("state_name") or state_to_show or ""))
+            _dist_key = alias_fn(str(district_name or row.get("district_name") or ""))
+            _context_admin_key = None
+            if _state_key and _dist_key:
+                _context_admin_key = f"{_state_key}|{_dist_key}"
+                if _context_level == "block":
+                    _block_key = alias_fn(str(row.get("block_name") or block_for_fs or selected_block or ""))
+                    if _block_key and _block_key.lower() != "all":
+                        _context_admin_key = f"{_context_admin_key}|{_block_key}"
+
+            # Clear stale overlay when the user switches to a different admin unit.
+            _active_boundary = st.session_state.get("active_hydro_boundary_overlay")
+            if (
+                isinstance(_active_boundary, dict)
+                and _context_admin_key
+                and _active_boundary.get("admin_key") != _context_admin_key
+            ):
+                st.session_state["active_hydro_boundary_overlay"] = None
+
+            _exposure_row = None
+            _hydro_row = None
+            if _context_admin_key:
+                _exp_path = optimized_context_path("admin_exposure_summary.parquet", data_dir=data_dir)
+                if _exp_path.exists():
+                    _exp_df = load_exposure_summary_cached(str(_exp_path), float(_exp_path.stat().st_mtime))
+                    _exposure_row = slice_exposure_for_admin_key(_exp_df, admin_key=_context_admin_key, admin_level=_context_level)
+
+                _hyd_path = optimized_context_path("admin_hydro_summary.parquet", data_dir=data_dir)
+                if _hyd_path.exists():
+                    _hyd_df = load_hydro_summary_cached(str(_hyd_path), float(_hyd_path.stat().st_mtime))
+                    _hydro_row = slice_hydro_for_admin_key(_hyd_df, admin_key=_context_admin_key, admin_level=_context_level)
+
+            render_admin_context_cards(
+                exposure_summary_row=_exposure_row,
+                hydro_summary_row=_hydro_row,
+                level=_context_level,
+                admin_key=_context_admin_key,
+                spatial_family=_context_spatial_family,
+            )
+        except Exception:
+            # Context cards are optional — never break the core risk profile.
+            pass
+
     render_details_panel(
         row=row,
-        district_name=(
-            str(subbasin_name)
-            if level_norm == "sub_basin"
-            else str(basin_name) if level_norm == "basin" else district_name
-        ),
+        district_name=district_name,
         state_to_show=state_to_show,
         selected_district=selected_district,
         variables=variables,

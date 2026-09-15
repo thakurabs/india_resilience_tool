@@ -1,16 +1,33 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pandas as pd
+import pytest
 
-from india_resilience_tool.analysis.bundle_scores import BundleMetricSpec, compute_bundle_score_frame
+from india_resilience_tool.compute import composite_metrics
 from india_resilience_tool.compute.composite_metrics import (
     build_composite_metrics,
     compute_composite_master_frame,
+    parse_args,
 )
-from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
+from india_resilience_tool.config.composite_metrics import (
+    CompositeMetricSpec,
+    get_composite_metric_for_bundle,
+)
 from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG
+
+
+_HEAT_RISK_RULER_SLICES = (
+    ("historical", "1990-2010"),
+    ("ssp245", "2020-2040"),
+    ("ssp245", "2040-2060"),
+    ("ssp245", "2060-2080"),
+    ("ssp585", "2020-2040"),
+    ("ssp585", "2040-2060"),
+    ("ssp585", "2060-2080"),
+)
 
 
 def _write_component_master(
@@ -26,11 +43,43 @@ def _write_component_master(
     df.to_csv(root / filename, index=False)
 
 
+SPI_COMPONENT_SLUGS: tuple[str, ...] = (
+    "spi3_count_events_lt_minus1",
+    "spi6_count_events_lt_minus1",
+    "spi12_count_events_lt_minus1",
+    "spi3_max_spell_lt_minus1",
+    "spi6_max_spell_lt_minus1",
+    "spi12_max_spell_lt_minus1",
+)
+
+
+def _per_period_spec() -> CompositeMetricSpec:
+    """A synthetic per-period composite over the six SPI components.
+
+    The tests below exercise generic ``compute_composite_master_frame`` mechanics
+    -- weighting, key derivation, provenance, schema intersection -- and used to
+    borrow the live Drought Risk bundle to do it. Drought Risk moved to the
+    frozen national CDF on 2026-09-14 and gained CDD as its headline, so a test
+    pinned to the live bundle measures that bundle's configuration rather than
+    the mechanics it means to test. Synthesising the spec keeps these tests
+    honest about what they cover and stops the next bundle migration breaking
+    ten unrelated assertions.
+    """
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+    return replace(
+        spec,
+        normalization="per_period",
+        frozen_ruler_version="",
+        headline_metric_slugs=(),
+        component_metric_slugs=SPI_COMPONENT_SLUGS,
+    )
+
+
 def test_compute_composite_master_frame_matches_current_district_weighted_method(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     id_frame = pd.DataFrame(
         {
@@ -43,9 +92,13 @@ def test_compute_composite_master_frame_matches_current_district_weighted_method
         "spi3_count_events_lt_minus1": [1.0, 4.0, None],
         "spi6_count_events_lt_minus1": [2.0, 6.0, None],
         "spi12_count_events_lt_minus1": [3.0, 8.0, None],
+        "spi3_max_spell_lt_minus1": [1.0, 5.0, None],
+        "spi6_max_spell_lt_minus1": [2.0, 7.0, None],
+        "spi12_max_spell_lt_minus1": [3.0, 9.0, None],
     }
     for slug, raw in values.items():
         df = id_frame.copy()
+        df[f"{slug}__historical__1990-2010__mean"] = raw
         df[f"{slug}__ssp585__2040-2060__mean"] = raw
         _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
 
@@ -56,49 +109,71 @@ def test_compute_composite_master_frame_matches_current_district_weighted_method
         data_dir=tmp_path,
     )
 
-    wide = id_frame.copy()
-    for slug, raw in values.items():
-        wide[slug] = raw
-    expected = compute_bundle_score_frame(
-        wide.rename(columns={"state": "state_name", "district": "district_name"}),
-        metric_specs=[
-            BundleMetricSpec(
-                slug="spi3_count_events_lt_minus1",
-                label="SPI3",
-                column="spi3_count_events_lt_minus1",
-                weight=0.20,
-                higher_is_worse=True,
-            ),
-            BundleMetricSpec(
-                slug="spi6_count_events_lt_minus1",
-                label="SPI6",
-                column="spi6_count_events_lt_minus1",
-                weight=0.30,
-                higher_is_worse=True,
-            ),
-            BundleMetricSpec(
-                slug="spi12_count_events_lt_minus1",
-                label="SPI12",
-                column="spi12_count_events_lt_minus1",
-                weight=0.50,
-                higher_is_worse=True,
-            ),
-        ],
-        id_columns=("state_name", "district_name"),
-    )
-    expected_scores = dict(zip(expected["district_name"], expected["bundle_score"]))
     observed_scores = dict(zip(out["district"], out["composite_drought_risk__ssp585__2040-2060__mean"]))
 
-    assert observed_scores["A"] == expected_scores["A"]
-    assert observed_scores["B"] == expected_scores["B"]
+    assert observed_scores["A"] == 0.0
+    assert observed_scores["B"] == 100.0
     assert math.isnan(float(observed_scores["C"]))
+
+
+def test_drought_risk_composite_publishes_the_absolute_dry_spell_headline() -> None:
+    """Drought Risk moved to the frozen national CDF on 2026-09-14, with CDD as
+    its headline and the six SPI metrics demoted to an anomaly lens.
+
+    This supersedes the CHG-0061 guard, which pinned per-period normalization to
+    avoid a baseline-anchored floor. The frozen ruler removes that failure mode
+    outright, and per-period normalization turned out to carry a worse one: every
+    SPI metric is a z-score against the unit's own 1981-2010 rainfall, so pooled
+    nationally they ranked the Andamans above Rajasthan and made high emissions
+    read as less drought-prone."""
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+    assert spec.normalization == "frozen_national_cdf"
+    assert spec.headline_metric_slugs == ("pr_consecutive_dry_days_lt1mm",)
+    assert all(slug.startswith("spi") for slug in spec.component_metric_slugs[1:])
+
+
+def test_drought_composite_per_period_keeps_spatial_spread_when_future_below_history(tmp_path) -> None:
+    """Regression for the uniform-map bug: when every projected component value sits
+    far below the historical baseline (the real end-century SSP5-8.5 case), per-period
+    normalization must still produce a graded 0-100 spatial score rather than collapsing
+    every district to 0 (the retired baseline-anchored floor)."""
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = _per_period_spec()
+
+    id_frame = pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["a", "b", "c"],
+        }
+    )
+    # Future values lie entirely below the historical envelope (80-100): under the
+    # retired baseline-anchored mode all three clip to 0; under per-period they
+    # spread across the cohort min-max to 0 / 50 / 100.
+    for slug in spec.component_metric_slugs:
+        df = id_frame.copy()
+        df[f"{slug}__historical__1990-2010__mean"] = [80.0, 90.0, 100.0]
+        df[f"{slug}__ssp585__2060-2080__mean"] = [3.0, 5.0, 7.0]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(spec, level="district", state_name=state_name, data_dir=tmp_path)
+    by_district = out.set_index("district")
+    col = "composite_drought_risk__ssp585__2060-2080__mean"
+
+    assert by_district.loc["A", col] == 0.0
+    assert by_district.loc["B", col] == 50.0
+    assert by_district.loc["C", col] == 100.0
+    # Core guard: the score is not a degenerate single value across the state.
+    assert out[col].nunique(dropna=True) == 3
+    assert float(out[col].max()) > 0.0
 
 
 def test_compute_composite_master_frame_uses_schema_intersection_for_available_pairs(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_block.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     id_frame = pd.DataFrame(
         {
@@ -126,11 +201,13 @@ def test_compute_composite_master_frame_uses_schema_intersection_for_available_p
     assert "composite_drought_risk__ssp585__2040-2060__mean" not in out.columns
 
 
-def test_build_composite_metrics_writes_legacy_csv_and_parquet(tmp_path) -> None:
+def test_build_composite_metrics_writes_legacy_csv_and_parquet(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
+    # build_composite_metrics resolves the spec by slug from the live
+    # registry, so the synthetic per-period spec has to be injected.
+    monkeypatch.setitem(composite_metrics.COMPOSITES_BY_SLUG, spec.composite_slug, spec)
 
     base = pd.DataFrame(
         {
@@ -160,6 +237,68 @@ def test_build_composite_metrics_writes_legacy_csv_and_parquet(tmp_path) -> None
     assert target.with_suffix(".parquet").exists()
 
 
+def test_build_composite_metrics_rejects_retired_agriculture_slug_as_normal_target(tmp_path) -> None:
+    try:
+        build_composite_metrics(
+            levels=("district",),
+            states=("Telangana",),
+            composite_slugs=("composite_agriculture_growing_conditions",),
+            data_dir=tmp_path,
+            quiet=True,
+        )
+    except ValueError as exc:
+        assert "Unsupported composite metric selection" in str(exc)
+    else:
+        raise AssertionError("retired agriculture composite slug should be rejected")
+
+
+def test_build_composite_metrics_prune_retired_honors_dry_run(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    retired_root = tmp_path / "processed" / "composite_agriculture_growing_conditions"
+    retired_root.mkdir(parents=True)
+    marker = retired_root / "marker.txt"
+    marker.write_text("legacy", encoding="utf-8")
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = _per_period_spec()
+    # build_composite_metrics resolves the spec by slug from the live
+    # registry, so the synthetic per-period spec has to be injected.
+    monkeypatch.setitem(composite_metrics.COMPOSITES_BY_SLUG, spec.composite_slug, spec)
+    base = pd.DataFrame({"state": [state_name], "district": ["A"], "district_key": ["a"]})
+    for slug in spec.component_metric_slugs:
+        df = base.copy()
+        df[f"{slug}__ssp245__2020-2040__mean"] = [1.0]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    dry_run_paths = build_composite_metrics(
+        levels=("district",),
+        states=(state_name,),
+        composite_slugs=(spec.composite_slug,),
+        data_dir=tmp_path,
+        dry_run=True,
+        prune_retired=True,
+        quiet=True,
+    )
+    assert retired_root in dry_run_paths
+    assert marker.exists()
+
+    pruned_paths = build_composite_metrics(
+        levels=("district",),
+        states=(state_name,),
+        composite_slugs=(spec.composite_slug,),
+        data_dir=tmp_path,
+        dry_run=False,
+        prune_retired=True,
+        quiet=True,
+    )
+    assert retired_root in pruned_paths
+    assert not retired_root.exists()
+
+
+def test_composite_metrics_parse_args_accepts_prune_retired() -> None:
+    args = parse_args(["--prune-retired", "--dry-run"])
+    assert args.prune_retired is True
+
+
 def test_compute_composite_master_frame_uses_registry_periods_metric_col_for_component_columns(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
@@ -177,7 +316,16 @@ def test_compute_composite_master_frame_uses_registry_periods_metric_col_for_com
         registry_spec = METRICS_BY_SLUG[metric_slug]
         metric_base = registry_spec.periods_metric_col or registry_spec.value_col or metric_slug
         df = id_frame.copy()
-        df[f"{metric_base}__ssp585__2040-2060__mean"] = [1.0, 2.0]
+        for scenario, period in (
+            ("historical", "1990-2010"),
+            ("ssp245", "2020-2040"),
+            ("ssp245", "2040-2060"),
+            ("ssp245", "2060-2080"),
+            ("ssp585", "2020-2040"),
+            ("ssp585", "2040-2060"),
+            ("ssp585", "2060-2080"),
+        ):
+            df[f"{metric_base}__{scenario}__{period}__mean"] = [1.0, 2.0]
         _write_component_master(tmp_path, slug=metric_slug, state_name=state_name, filename=filename, df=df)
 
     out = compute_composite_master_frame(
@@ -194,8 +342,7 @@ def test_compute_composite_master_frame_uses_registry_periods_metric_col_for_com
 def test_compute_composite_master_frame_derives_missing_district_keys_from_names(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     base = pd.DataFrame(
         {
@@ -223,8 +370,7 @@ def test_compute_composite_master_frame_derives_missing_district_keys_from_names
 def test_compute_composite_master_frame_derives_missing_block_keys_from_names(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_block.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
+    spec = _per_period_spec()
 
     base = pd.DataFrame(
         {
@@ -248,3 +394,196 @@ def test_compute_composite_master_frame_derives_missing_block_keys_from_names(tm
     assert "block_key" in out.columns
     assert out["block_key"].tolist() == ["telangana|a|north", "telangana|a|south"]
     assert "composite_drought_risk__ssp245__2020-2040__mean" in out.columns
+
+
+def test_compute_composite_master_frame_propagates_idw_provenance(tmp_path) -> None:
+    """CHG-0306(c): a composite unit drawing on any idw-filled component reads
+    ``climate_fill_method="idw"``; units with only native components read
+    ``"native"``. Guards the provenance read against being taken from
+    ``_build_wide_component_frame`` (which strips the flag)."""
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = _per_period_spec()
+
+    id_frame = pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["a", "b", "c"],
+        }
+    )
+    component_slugs = list(spec.component_metric_slugs)
+    for i, slug in enumerate(component_slugs):
+        df = id_frame.copy()
+        df[f"{slug}__ssp245__2020-2040__mean"] = [1.0, 2.0, 3.0]
+        # Only the first component is idw, and only for district A. The composite
+        # for A must still read idw (any-component rule); B and C read native.
+        if i == 0:
+            df["climate_fill_method"] = ["idw", "native", "native"]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(
+        spec,
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+    )
+
+    assert "climate_fill_method" in out.columns
+    by_district = dict(zip(out["district"], out["climate_fill_method"]))
+    assert by_district == {"A": "idw", "B": "native", "C": "native"}
+
+
+def test_compute_composite_master_frame_no_provenance_column_when_absent(tmp_path) -> None:
+    """When no component master carries the flag, the composite output is
+    byte-identical (no ``climate_fill_method`` column added)."""
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = _per_period_spec()
+
+    id_frame = pd.DataFrame(
+        {"state": [state_name, state_name], "district": ["A", "B"], "district_key": ["a", "b"]}
+    )
+    for slug in spec.component_metric_slugs:
+        df = id_frame.copy()
+        df[f"{slug}__ssp245__2020-2040__mean"] = [1.0, 2.0]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(spec, level="district", state_name=state_name, data_dir=tmp_path)
+    assert "climate_fill_method" not in out.columns
+
+
+def test_frozen_ruler_composite_publishes_the_four_part_column_and_absolute_scores(tmp_path) -> None:
+    """CHG-0367d: Heat Risk scores through the committed frozen national ruler.
+
+    Three properties at once, because all three are silent when they break: the
+    published column keeps its 4-part ``slug__scenario__period__stat`` name; the
+    score is *absolute*, so a two-district state does not get a 0 and a 100 the
+    way per-state min-max forced; and only the 9 headline masters are required --
+    the 5 baseline-referenced ones are deliberately absent here and must not
+    block the state from being scored.
+    """
+    from india_resilience_tool.analysis.frozen_rulers import frozen_ruler_dir
+
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = get_composite_metric_for_bundle("Heat Risk")
+    assert spec is not None
+    assert spec.normalization == "frozen_national_cdf"
+
+    if not (frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version) / "ruler.json").exists():
+        pytest.skip("No frozen ruler committed")
+
+    id_frame = pd.DataFrame(
+        {
+            "state": [state_name, state_name],
+            "district": ["A", "B"],
+            "district_key": ["a", "b"],
+        }
+    )
+    # Two districts a little apart, both well inside the national support.
+    for offset, slug in enumerate(spec.headline_metric_slugs):
+        df = id_frame.copy()
+        for scenario, period in _HEAT_RISK_RULER_SLICES:
+            df[f"{slug}__{scenario}__{period}__mean"] = [
+                20.0 + offset,
+                24.0 + offset,
+            ]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(
+        spec, level="district", state_name=state_name, data_dir=tmp_path
+    )
+
+    column = "composite_heat_risk__ssp585__2040-2060__mean"
+    assert column in out.columns
+    expected_columns = {
+        f"composite_heat_risk__{scenario}__{period}__mean"
+        for scenario, period in _HEAT_RISK_RULER_SLICES
+    }
+    assert expected_columns <= set(out.columns)
+    assert len([col for col in out.columns if col.startswith("composite_heat_risk__")]) == 7
+    assert "composite_heat_risk__historical__1990-2010__mean" in out.columns
+    scores = dict(zip(out["district"], out[column]))
+    assert all(0.0 <= float(v) <= 100.0 for v in scores.values())
+    # Absolute, not cohort-relative: neither district is pinned to an endpoint.
+    assert 0.0 < float(scores["A"]) < float(scores["B"]) < 100.0
+
+
+def test_frozen_ruler_composite_requires_only_the_headline_masters(tmp_path) -> None:
+    """A baseline-referenced master missing must not empty the frame (CHG-0367d)."""
+    from india_resilience_tool.analysis.frozen_rulers import frozen_ruler_dir
+
+    spec = get_composite_metric_for_bundle("Heat Risk")
+    assert spec is not None
+    if not (frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version) / "ruler.json").exists():
+        pytest.skip("No frozen ruler committed")
+
+    baseline_only = set(spec.component_metric_slugs) - set(spec.headline_metric_slugs)
+    assert len(baseline_only) == 5
+
+    state_name = "Telangana"
+    id_frame = pd.DataFrame(
+        {"state": [state_name], "district": ["A"], "district_key": ["a"]}
+    )
+    for slug in spec.headline_metric_slugs:
+        df = id_frame.copy()
+        for scenario, period in _HEAT_RISK_RULER_SLICES:
+            df[f"{slug}__{scenario}__{period}__mean"] = [25.0]
+        _write_component_master(
+            tmp_path,
+            slug=slug,
+            state_name=state_name,
+            filename="master_metrics_by_district.csv",
+            df=df,
+        )
+
+    out = compute_composite_master_frame(
+        spec, level="district", state_name=state_name, data_dir=tmp_path
+    )
+    assert not out.empty
+    assert not math.isnan(
+        float(out["composite_heat_risk__ssp585__2040-2060__mean"].iloc[0])
+    )
+
+
+def test_frozen_ruler_composite_rejects_a_missing_declared_slice(tmp_path) -> None:
+    """The fitted seven-slice grid is also an all-or-nothing publication contract."""
+    from india_resilience_tool.analysis.frozen_rulers import frozen_ruler_dir
+
+    spec = get_composite_metric_for_bundle("Heat Risk")
+    assert spec is not None
+    if not (frozen_ruler_dir(spec.composite_slug, spec.frozen_ruler_version) / "ruler.json").exists():
+        pytest.skip("No frozen ruler committed")
+
+    state_name = "Telangana"
+    id_frame = pd.DataFrame(
+        {"state": [state_name], "district": ["A"], "district_key": ["a"]}
+    )
+    incomplete_slug = spec.headline_metric_slugs[0]
+    for slug in spec.headline_metric_slugs:
+        df = id_frame.copy()
+        for scenario, period in _HEAT_RISK_RULER_SLICES:
+            if slug == incomplete_slug and scenario == "historical":
+                continue
+            df[f"{slug}__{scenario}__{period}__mean"] = [25.0]
+        _write_component_master(
+            tmp_path,
+            slug=slug,
+            state_name=state_name,
+            filename="master_metrics_by_district.csv",
+            df=df,
+        )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            rf"missing declared slice.*historical/1990-2010.*{incomplete_slug}"
+        ),
+    ):
+        compute_composite_master_frame(
+            spec,
+            level="district",
+            state_name=state_name,
+            data_dir=tmp_path,
+        )

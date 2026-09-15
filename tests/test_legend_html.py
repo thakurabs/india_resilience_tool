@@ -1,7 +1,12 @@
 """Regression tests for compact map legend HTML."""
 
 from india_resilience_tool.app.map_pipeline import _build_legend_title
-from india_resilience_tool.viz.colors import build_vertical_binned_legend_block_html
+from india_resilience_tool.app.overlays import LULC_AGRI_BINS, RP100_FLOOD_DEPTH_BINS
+from india_resilience_tool.viz.colors import (
+    build_lulc_agri_legend_html,
+    build_rp100_flood_depth_legend_html,
+    build_vertical_binned_legend_block_html,
+)
 
 
 def test_build_legend_title_uses_metric_units_only() -> None:
@@ -48,3 +53,24 @@ def test_build_vertical_binned_legend_block_html_centers_full_legend() -> None:
         map_height=560,
     )
     assert "height: 100%; width: 100%; display: flex; align-items: center; justify-content: center;" in html
+
+
+def test_build_rp100_flood_depth_legend_html_contains_all_bin_labels() -> None:
+    html = build_rp100_flood_depth_legend_html(bins=RP100_FLOOD_DEPTH_BINS, map_height=560)
+
+    assert "RP-100 flood depth" in html
+    assert "<=0 m" in html
+    assert "0.5-1 m" in html
+    assert "4-7 m" in html
+    assert ">7 m" in html
+    assert "#d6f0ff" in html
+    assert "#0f2f5f" in html
+
+
+def test_build_lulc_agri_legend_html_contains_binary_labels() -> None:
+    html = build_lulc_agri_legend_html(bins=LULC_AGRI_BINS, map_height=560)
+
+    assert "Agricultural LULC" in html
+    assert "0 background/nodata" in html
+    assert "1 agricultural LULC" in html
+    assert "#2ca25f" in html

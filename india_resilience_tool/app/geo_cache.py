@@ -12,6 +12,8 @@ import pandas as pd
 import streamlit as st
 
 from india_resilience_tool.config.constants import (
+    ADM2_MIN_AREA,
+    ADM3_MIN_AREA,
     MAX_LAT,
     MAX_LON,
     MIN_LAT,
@@ -26,6 +28,7 @@ from india_resilience_tool.data.adm2_loader import (
     enrich_adm2_with_state_names as _enrich_adm2_with_state_names,
     ensure_key_column as _ensure_key_column,
     featurecollections_by_state as _featurecollections_by_state,
+    load_local_adm1_artifact as _load_local_adm1_artifact,
     load_local_adm2 as _load_local_adm2,
 )
 from india_resilience_tool.data.adm3_loader import load_local_adm3 as _load_local_adm3
@@ -127,14 +130,39 @@ def _ensure_adm3_identity_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 @st.cache_data
-def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
+def load_local_adm2(
+    path: str,
+    tolerance: float = SIMPLIFY_TOL_ADM2,
+    cache_version: str = "adm2_state_v2",
+) -> gpd.GeoDataFrame:
+    _ = cache_version
     gdf = _load_local_adm2(
         path=path,
         tolerance=float(tolerance),
         bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
-        min_area=0.0003,
+        min_area=ADM2_MIN_AREA,
     )
     return gdf
+
+
+@st.cache_data(ttl=3600)
+def load_local_adm1(path: str) -> gpd.GeoDataFrame:
+    """Read the precomputed ADM1 state polygons artifact (Streamlit-cached)."""
+    return _load_local_adm1_artifact(path)
+
+
+@st.cache_data(ttl=3600)
+def build_state_outline_fc(adm1: gpd.GeoDataFrame) -> dict:
+    """Geometry-only state-boundary FeatureCollection for the map outline layer."""
+    return gpd.GeoDataFrame(geometry=adm1.geometry, crs=adm1.crs).__geo_interface__
+
+
+@st.cache_data(ttl=3600)
+def build_country_outline_fc(adm1: gpd.GeoDataFrame) -> dict:
+    """Dissolved national-outline FeatureCollection built from the ADM1 polygons."""
+    geoms = adm1.geometry
+    dissolved = geoms.union_all() if hasattr(geoms, "union_all") else geoms.unary_union
+    return gpd.GeoDataFrame(geometry=[dissolved], crs=adm1.crs).__geo_interface__
 
 
 @st.cache_data(ttl=3600)
@@ -150,7 +178,7 @@ def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM3) -> gpd.GeoD
         path=path,
         tolerance=float(tolerance),
         bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
-        min_area=0.00005,
+        min_area=ADM3_MIN_AREA,
     )
     return gdf
 
@@ -563,6 +591,54 @@ def build_river_geojson_by_subbasin(
             "basin_name_clean",
             "subbasin_name_clean",
             "state_names_clean",
+            "length_km_source",
+            "__key",
+            "geometry",
+        ],
+    )
+
+
+@st.cache_data(ttl=3600)
+def build_river_geojson_by_district(
+    path: str,
+    mtime: float,
+) -> dict[str, dict]:
+    """Build river FeatureCollections keyed by normalized district name.
+
+    Returns an empty dict if the river artifact has not been enriched with
+    `district_names_clean` (i.e. `tools.pipeline.enrich_river_network_districts`
+    has not been run).
+
+    Bypasses the path-only cached `load_local_river_display` so this function's
+    own `(path, mtime)` cache is the sole authority — re-enriching the artifact
+    on disk invalidates this cache without a manual clear.
+    """
+    _ = mtime
+    gdf = _load_local_river_display(
+        path=path,
+        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
+    )
+    if "district_names_clean" not in gdf.columns:
+        return {}
+    gdf = _ensure_river_key_column(gdf, alias_fn=alias, key_col="__key")
+    gdf = gdf.copy()
+    gdf["district_names_clean"] = gdf["district_names_clean"].fillna("").astype(str)
+    exploded = gdf.assign(
+        __selector=gdf["district_names_clean"].str.split(",")
+    ).explode("__selector", ignore_index=False)
+    exploded["__selector"] = exploded["__selector"].astype(str).str.strip().map(alias)
+    exploded = exploded[exploded["__selector"] != ""]
+    return _featurecollections_by_selector(
+        exploded,
+        selector_col="__selector",
+        keep_cols=[
+            "river_feature_id",
+            "source_uid_river",
+            "river_name_clean",
+            "basin_name_clean",
+            "subbasin_name_clean",
+            "state_names_clean",
+            "district_names_clean",
             "length_km_source",
             "__key",
             "geometry",

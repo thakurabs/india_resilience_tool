@@ -23,24 +23,19 @@ ANALYSIS_MODE_PORTFOLIO = "Multi-district portfolio"
 
 # Spatial family constants
 SPATIAL_FAMILY_ADMIN = "admin"
-SPATIAL_FAMILY_HYDRO = "hydro"
 
 # Administrative / spatial level constants
 ADMIN_LEVEL_DISTRICT = "district"
 ADMIN_LEVEL_BLOCK = "block"
-ADMIN_LEVEL_BASIN = "basin"
-ADMIN_LEVEL_SUB_BASIN = "sub_basin"
 
-SpatialFamily = Literal["admin", "hydro"]
-AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+SpatialFamily = Literal["admin"]
+AdminLevel = Literal["district", "block"]
 
 SESSION_DEFAULTS: dict[str, Any] = {
     # Core mode/router keys
     "analysis_mode": ANALYSIS_MODE_SINGLE,
     "portfolio_districts": [],
     "portfolio_blocks": [],
-    "portfolio_basins": [],
-    "portfolio_subbasins": [],
     "portfolio_build_route": None,
     "jump_to_rankings": False,
     "jump_to_map": False,
@@ -53,6 +48,7 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "landing_focus_level": "india",
     "landing_selected_state": None,
     "landing_selected_district": None,
+    "landing_selected_block": None,
     "landing_tab": "Rankings",
     "landing_search": "",
     "landing_search_selection": None,
@@ -63,15 +59,26 @@ SESSION_DEFAULTS: dict[str, Any] = {
 
     # Main layout (right panel)
     "right_panel_collapsed": False,
+    "ribbon_collapsed": False,
+    "active_hydro_boundary_overlay": None,
 
     # Administrative level (NEW)
     "spatial_family": SPATIAL_FAMILY_ADMIN,
     "admin_level": ADMIN_LEVEL_DISTRICT,
     "selected_block": "All",  # For block-level selection
-    "selected_basin": "All",
-    "selected_subbasin": "All",
-    "hydro_admin_context_level": "district",
-    "show_river_network": False,
+    "overlay_rp100_flood_depth_raster_enabled": False,
+    "overlay_rp100_flood_depth_raster_opacity_pct": 65,
+    "overlay_population_exposure_2025_raster_enabled": False,
+    "overlay_population_exposure_2025_raster_opacity_pct": 50,
+    "overlay_rural_facilities_density_enabled": False,
+    "overlay_rural_facilities_density_opacity_pct": 55,
+    "overlay_rural_facilities_density_category": "total",
+    "overlay_built_up_area_current_raster_enabled": False,
+    "overlay_built_up_area_current_raster_opacity_pct": 55,
+    "overlay_lulc_agri_current_raster_enabled": False,
+    "overlay_lulc_agri_current_raster_opacity_pct": 55,
+    "overlay_river_network_enabled": False,
+    "overlay_river_network_opacity_pct": 75,
 
     # Other stable keys (widget keys / caches)
     # NOTE: Do NOT pre-seed unified metric selection keys here. The legacy dashboard
@@ -148,66 +155,82 @@ def get_current_level(session_state: Optional[MutableMapping[str, Any]] = None) 
     return session_state.get("admin_level", ADMIN_LEVEL_DISTRICT)
 
 
+def reset_level_dependent_state(
+    session_state: Optional[MutableMapping[str, Any]] = None,
+) -> None:
+    """
+    Unconditionally reset all state that depends on the administrative level.
+
+    Resets:
+    - Selected district/block back to "All"
+    - Portfolio lists and multiindex selection/context (items are level-specific)
+    - Cached merged data
+    """
+    if session_state is None:
+        import streamlit as st
+        session_state = st.session_state
+
+    session_state["selected_district"] = "All"
+    session_state["selected_block"] = "All"
+
+    # Clear portfolio when switching levels (level-specific lists)
+    session_state["portfolio_districts"] = []
+    session_state["portfolio_blocks"] = []
+    session_state["portfolio_multiindex_df"] = None
+    session_state["portfolio_multiindex_context"] = None
+    session_state["portfolio_multiindex_selection"] = []
+
+    # Clear merged cache
+    session_state["_merged_cache"] = {}
+
+    reset_district_option_state(session_state)
+
+
+def reset_district_option_state(
+    session_state: MutableMapping[str, Any],
+) -> None:
+    """
+    Clear the auxiliary district-option keys used by the state="All" selector.
+
+    Single canonical reset for `selected_district_option` and
+    `_district_effective_state`; tolerates absent keys.
+    """
+    session_state.pop("selected_district_option", None)
+    session_state.pop("_district_effective_state", None)
+
+
 def set_level(
     session_state: Optional[MutableMapping[str, Any]] = None,
     level: AdminLevel = ADMIN_LEVEL_DISTRICT,
 ) -> None:
     """
     Set the administrative level and reset dependent state.
-    
-    When switching levels, we need to reset:
-    - Selected district/block
-    - Portfolio (since items are level-specific)
-    - Cached merged data
+
+    No-ops when `session_state["admin_level"]` already equals `level`;
+    widget-driven callers that update `admin_level` before calling should use
+    `reset_level_dependent_state` directly.
     """
     if session_state is None:
         import streamlit as st
         session_state = st.session_state
-    
+
     old_level = session_state.get("admin_level", ADMIN_LEVEL_DISTRICT)
-    
+
     if old_level != level:
         session_state["admin_level"] = level
-        session_state["selected_district"] = "All"
-        session_state["selected_block"] = "All"
-        session_state["selected_basin"] = "All"
-        session_state["selected_subbasin"] = "All"
-        session_state["hydro_admin_context_level"] = "district"
-        
-        # Clear portfolio when switching levels (level-specific lists)
-        session_state["portfolio_districts"] = []
-        session_state["portfolio_blocks"] = []
-        session_state["portfolio_basins"] = []
-        session_state["portfolio_subbasins"] = []
-        session_state["portfolio_multiindex_df"] = None
-        session_state["portfolio_multiindex_context"] = None
-        
-        # Clear merged cache
-        session_state["_merged_cache"] = {}
+        reset_level_dependent_state(session_state)
 
 
 def get_unit_selection_key(level: AdminLevel) -> str:
     """Get the session state key for unit selection based on level."""
-    if level == "sub_basin":
-        return "selected_subbasin"
-    if level == "basin":
-        return "selected_basin"
     return "selected_block" if level == "block" else "selected_district"
 
 
 def get_level_display_name(level: AdminLevel) -> str:
     """Get display name for a level."""
-    if level == "sub_basin":
-        return "Sub-basin"
-    if level == "basin":
-        return "Basin"
     return "Block" if level == "block" else "District"
 
 
 def get_level_display_name_plural(level: AdminLevel) -> str:
     """Get plural display name for a level."""
-    if level == "sub_basin":
-        return "Sub-basins"
-    if level == "basin":
-        return "Basins"
     return "Blocks" if level == "block" else "Districts"

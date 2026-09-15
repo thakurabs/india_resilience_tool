@@ -121,58 +121,6 @@ _PAIR_CONFIG: dict[tuple[CrosswalkLevel, CrosswalkLevel], dict[str, object]] = {
         "highlight_action_label": "Highlight related basins",
         "open_action_label": "Open basin",
     },
-    ("sub_basin", "district"): {
-        "required_columns": DISTRICT_SUBBASIN_REQUIRED_COLUMNS,
-        "duplicate_subset": ["state_name", "district_name", "subbasin_id"],
-        "selected_fraction_col": "subbasin_area_fraction_in_district",
-        "counterpart_fraction_col": "district_area_fraction_in_subbasin",
-        "source_kind": "hydro",
-        "selected_section_title": "Administrative context",
-        "dominant_label": "District covering the largest share of this sub-basin",
-        "selected_fraction_label": "Share of sub-basin",
-        "counterpart_fraction_label": "Share of district in sub-basin",
-        "highlight_action_label": "Highlight related districts",
-        "open_action_label": "Open district",
-    },
-    ("sub_basin", "block"): {
-        "required_columns": BLOCK_SUBBASIN_REQUIRED_COLUMNS,
-        "duplicate_subset": ["state_name", "district_name", "block_name", "subbasin_id"],
-        "selected_fraction_col": "subbasin_area_fraction_in_block",
-        "counterpart_fraction_col": "block_area_fraction_in_subbasin",
-        "source_kind": "hydro",
-        "selected_section_title": "Administrative context",
-        "dominant_label": "Block covering the largest share of this sub-basin",
-        "selected_fraction_label": "Share of sub-basin",
-        "counterpart_fraction_label": "Share of block in sub-basin",
-        "highlight_action_label": "Highlight related blocks",
-        "open_action_label": "Open block",
-    },
-    ("basin", "district"): {
-        "required_columns": DISTRICT_BASIN_REQUIRED_COLUMNS,
-        "duplicate_subset": ["state_name", "district_name", "basin_id"],
-        "selected_fraction_col": "basin_area_fraction_in_district",
-        "counterpart_fraction_col": "district_area_fraction_in_basin",
-        "source_kind": "hydro",
-        "selected_section_title": "Administrative context",
-        "dominant_label": "District covering the largest share of this basin",
-        "selected_fraction_label": "Share of basin",
-        "counterpart_fraction_label": "Share of district in basin",
-        "highlight_action_label": "Highlight related districts",
-        "open_action_label": "Open district",
-    },
-    ("basin", "block"): {
-        "required_columns": BLOCK_BASIN_REQUIRED_COLUMNS,
-        "duplicate_subset": ["state_name", "district_name", "block_name", "basin_id"],
-        "selected_fraction_col": "basin_area_fraction_in_block",
-        "counterpart_fraction_col": "block_area_fraction_in_basin",
-        "source_kind": "hydro",
-        "selected_section_title": "Administrative context",
-        "dominant_label": "Block covering the largest share of this basin",
-        "selected_fraction_label": "Share of basin",
-        "counterpart_fraction_label": "Share of block in basin",
-        "highlight_action_label": "Highlight related blocks",
-        "open_action_label": "Open block",
-    },
 }
 
 
@@ -307,60 +255,6 @@ def build_block_hydro_context(
         rows,
         selected_level="block",
         counterpart_level=hydro_level,
-        top_n=top_n,
-    )
-
-
-def build_subbasin_admin_context(
-    crosswalk_df: pd.DataFrame,
-    *,
-    subbasin_id: Optional[str],
-    subbasin_name: Optional[str],
-    alias_fn: Callable[[str], str],
-    admin_level: Literal["district", "block"] = "district",
-    top_n: int = 3,
-) -> Optional[CrosswalkContext]:
-    """Build district or block context for a selected sub-basin."""
-    rows = _filter_hydro_rows(
-        crosswalk_df,
-        level="sub_basin",
-        alias_fn=alias_fn,
-        basin_id=None,
-        basin_name=None,
-        subbasin_id=subbasin_id,
-        subbasin_name=subbasin_name,
-    )
-    return _build_context(
-        rows,
-        selected_level="sub_basin",
-        counterpart_level=admin_level,
-        top_n=top_n,
-    )
-
-
-def build_basin_admin_context(
-    crosswalk_df: pd.DataFrame,
-    *,
-    basin_id: Optional[str],
-    basin_name: Optional[str],
-    alias_fn: Callable[[str], str],
-    admin_level: Literal["district", "block"] = "district",
-    top_n: int = 3,
-) -> Optional[CrosswalkContext]:
-    """Build district or block context for a selected basin."""
-    rows = _filter_hydro_rows(
-        crosswalk_df,
-        level="basin",
-        alias_fn=alias_fn,
-        basin_id=basin_id,
-        basin_name=basin_name,
-        subbasin_id=None,
-        subbasin_name=None,
-    )
-    return _build_context(
-        rows,
-        selected_level="basin",
-        counterpart_level=admin_level,
         top_n=top_n,
     )
 
@@ -583,52 +477,7 @@ def _filter_admin_rows(
     return crosswalk_df.loc[mask].copy()
 
 
-def _filter_hydro_rows(
-    crosswalk_df: pd.DataFrame,
-    *,
-    level: Literal["basin", "sub_basin"],
-    alias_fn: Callable[[str], str],
-    basin_id: Optional[str],
-    basin_name: Optional[str],
-    subbasin_id: Optional[str],
-    subbasin_name: Optional[str],
-) -> pd.DataFrame:
-    if crosswalk_df is None or crosswalk_df.empty:
-        return pd.DataFrame(columns=crosswalk_df.columns if crosswalk_df is not None else [])
-
-    if level == "basin":
-        basin_id_key = alias_fn(str(basin_id or "").strip())
-        if basin_id_key:
-            mask = crosswalk_df["basin_id"].astype(str).map(alias_fn) == basin_id_key
-            rows = crosswalk_df.loc[mask].copy()
-            if not rows.empty:
-                return rows
-
-        basin_name_key = alias_fn(str(basin_name or "").strip())
-        if not basin_name_key:
-            return pd.DataFrame(columns=crosswalk_df.columns)
-        mask = crosswalk_df["basin_name"].astype(str).map(alias_fn) == basin_name_key
-        return crosswalk_df.loc[mask].copy()
-
-    subbasin_id_key = alias_fn(str(subbasin_id or "").strip())
-    if subbasin_id_key:
-        mask = crosswalk_df["subbasin_id"].astype(str).map(alias_fn) == subbasin_id_key
-        rows = crosswalk_df.loc[mask].copy()
-        if not rows.empty:
-            return rows
-
-    subbasin_name_key = alias_fn(str(subbasin_name or "").strip())
-    if not subbasin_name_key:
-        return pd.DataFrame(columns=crosswalk_df.columns)
-    mask = crosswalk_df["subbasin_name"].astype(str).map(alias_fn) == subbasin_name_key
-    return crosswalk_df.loc[mask].copy()
-
-
 def _selected_name(row: pd.Series, *, selected_level: CrosswalkLevel) -> str:
-    if selected_level == "sub_basin":
-        return str(row.get("subbasin_name", "")).strip()
-    if selected_level == "basin":
-        return str(row.get("basin_name", "")).strip()
     if selected_level == "block":
         return str(row.get("block_name", "")).strip()
     return str(row.get("district_name", "")).strip()
@@ -684,10 +533,6 @@ def _primary_basin_for_rows(
     selected_level: CrosswalkLevel,
     counterpart_level: CrosswalkLevel,
 ) -> tuple[Optional[str], Optional[str]]:
-    if selected_level == "basin":
-        first = rows.iloc[0]
-        return str(first.get("basin_id", "")).strip() or None, str(first.get("basin_name", "")).strip() or None
-
     if counterpart_level == "basin":
         first = rows.iloc[0]
         return str(first.get("basin_id", "")).strip() or None, str(first.get("basin_name", "")).strip() or None
@@ -720,11 +565,7 @@ def _classify_pattern(
         if dominant_fraction >= 0.5:
             return f"mostly_one_{suffix}"
         return f"fragmented_across_{_plural_suffix(counterpart_level)}"
-    if dominant_fraction >= 0.75:
-        return f"concentrated_in_one_{suffix}"
-    if dominant_fraction >= 0.5:
-        return f"mostly_one_{suffix}"
-    return f"distributed_across_{_plural_suffix(counterpart_level)}"
+    raise ValueError(f"Unsupported crosswalk source kind: {source_kind!r}")
 
 
 def _classification_suffix(level: CrosswalkLevel) -> str:
@@ -766,29 +607,14 @@ def _explain_context(
             f"Most of {selected_name} lies in {dominant_name} ({pct}), "
             "so hydro signals there are likely the most relevant context."
         )
-    if classification.startswith("concentrated_in_one_"):
-        return (
-            f"Most of {selected_name} lies in {dominant_name} ({pct}), "
-            "so action there is likely especially consequential."
-        )
     if classification.startswith("mostly_one_"):
-        if source_kind == "admin":
-            return (
-                f"A majority of {selected_name} lies in {dominant_name} ({pct}), "
-                f"but other {counterpart_plural} also contribute to its hydro context."
-            )
         return (
             f"A majority of {selected_name} lies in {dominant_name} ({pct}), "
-            f"but meaningful consequence is still distributed across other {counterpart_plural}."
-        )
-    if source_kind == "admin":
-        return (
-            f"{selected_name} is split across {overlap_count} {counterpart_plural}, so its hydro context "
-            "is distributed rather than concentrated in one system."
+            f"but other {counterpart_plural} also contribute to its hydro context."
         )
     return (
-        f"{selected_name} spans {overlap_count} {counterpart_plural}, so action will likely require "
-        "coordination across multiple jurisdictions."
+        f"{selected_name} is split across {overlap_count} {counterpart_plural}, so its hydro context "
+        "is distributed rather than concentrated in one system."
     )
 
 
