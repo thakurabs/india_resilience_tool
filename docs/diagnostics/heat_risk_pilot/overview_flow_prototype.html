@@ -322,6 +322,39 @@
   #tip .t-go { color: #8fc4ff; margin-top: 4px; }
   #tip .t-off { color: #9aa7b4; margin-top: 4px; font-style: italic; }
 
+  /* ---- view toggle, ranked lists, table view, doorways ---- */
+  .maphead { display: flex; align-items: flex-start; justify-content: space-between;
+             gap: 12px; flex-wrap: wrap; }
+  .maphead-txt { min-width: 0; }
+  .viewtoggle { display: flex; flex: none; border: 1px solid var(--rule); border-radius: 7px;
+                overflow: hidden; }
+  .viewtoggle button { appearance: none; border: 0; background: #fff; color: var(--ink-2);
+                       font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer; }
+  .viewtoggle button + button { border-left: 1px solid var(--rule); }
+  .viewtoggle button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .tableview h2 { margin: 0 0 2px; }
+  .tv-scroll { max-height: 600px; overflow: auto; margin-top: 10px; }
+  .rl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+             margin: 14px 0 6px; font-weight: 650; font-size: 13px; color: var(--ink-2); }
+  .rl-head .rl-sub { font-weight: 400; font-size: 11.5px; color: var(--ink-3); }
+  .rl-item { display: flex; align-items: center; gap: 9px; padding: 6px 7px; border-radius: 6px;
+             cursor: pointer; border: 1px solid transparent; }
+  .rl-item:hover { background: #f2f7fb; border-color: #d9e4ee; }
+  .rl-item .rl-rk { flex: none; width: 22px; text-align: right; color: var(--ink-3);
+                    font-variant-numeric: tabular-nums; font-size: 12px; }
+  .rl-item .rl-nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                    white-space: nowrap; }
+  .rl-item .rl-sc { flex: none; font-variant-numeric: tabular-nums; font-weight: 650; }
+  .rl-low .rl-sc { font-weight: 500; color: var(--ink-2); }
+  .act-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .coord-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-top: 8px; }
+  .coord-form label { font-size: 11.5px; color: var(--ink-2); display: flex;
+                      flex-direction: column; gap: 3px; }
+  .coord-form input { font: inherit; font-size: 12.5px; padding: 5px 7px;
+                      border: 1px solid var(--rule); border-radius: 6px; width: 108px; }
+  .coord-out { margin: 8px 0 0; font-size: 12.5px; }
+  .report dt { font-weight: 650; }
+
   .method { font-size: 12px; color: var(--ink-2); }
   .method h3 { font-size: 12px; margin: 12px 0 4px; text-transform: uppercase;
                letter-spacing: .06em; color: var(--ink-3); }
@@ -378,8 +411,11 @@
     <div>
       <div class="card mapcard">
         <div class="maphead">
-          <h2 id="map-title">National view</h2>
-          <span class="sub" id="map-sub"></span>
+          <div class="maphead-txt">
+            <h2 id="map-title">National view</h2>
+            <span class="sub" id="map-sub"></span>
+          </div>
+          <div class="viewtoggle" id="viewtoggle" role="group" aria-label="View mode"></div>
         </div>
         <div class="mapwrap">
           <nav class="crumbs" id="crumbs" aria-label="Geography"></nav>
@@ -414,9 +450,12 @@
         </div>
       </div>
 
+      <div class="card tableview" id="tableview" hidden></div>
+
     </div>
 
     <div>
+      <div class="card" id="coord"></div>
       <div class="card headline" id="headline" hidden></div>
       <div class="card">
         <h2 id="hist-title">Distribution</h2>
@@ -468,6 +507,9 @@
     block: null,
     pinned: null,
     showAll: false,
+    mode: "map",           /* "map" | "table" — the ranked table is a view of the same cohort */
+    report: null,          /* the Download report stub: { level, key, name } */
+    coord: null,           /* the coordinate doorway result */
     local: false,          /* the local-contrast view; opt-in, never the landing state */
     ctxOpen: false,        /* Context and Evidence is collapsed on arrival, by contract */
     ctxLayer: null,        /* the active Context layer id, or null; off by default */
@@ -786,6 +828,56 @@
      its own -- blocks are painted but never ranked, because subdivision density
      reflects State administration rather than geography -- so it keeps ranking
      and binning its parent State/UT's districts. */
+  /* ---- the ranked cohort: always the units this view would open next ----
+     India -> State/UTs, a State/UT -> its districts, a district -> its blocks.
+     Blocks are ranked only WITHIN one district, where every unit was drawn by the
+     same administration; that is what the national block-ranking objection was about. */
+  function rankedBlocksIn(districtKey, sid) {
+    var scores = D.block_scores[sid] || {};
+    var rows = (blocksOfDistrict[districtKey] || []).map(function (b) {
+      return { key: b.k, name: b.n, score: scores[b.k] };
+    }).filter(function (r) {
+      return r.score !== undefined && r.score !== null && !isNaN(r.score);
+    });
+    rows.sort(function (a, b) { return b.score - a.score || a.name.localeCompare(b.name); });
+    var rank = 0, prev = null, seen = 0;
+    rows.forEach(function (r) {
+      seen += 1;
+      if (prev === null || r.score !== prev) { rank = seen; prev = r.score; }
+      r.rank = rank;
+    });
+    return rows;
+  }
+
+  function rankingCohort() {
+    if (S.view === "india") return rankedStates();
+    if (S.view === "state") return rankedDistricts(S.state);
+    return rankedBlocksIn(S.district, sliceId());
+  }
+
+  function rankingUnit(plural) {
+    return S.view === "india" ? (plural ? "State/UTs" : "State/UT")
+         : S.view === "state" ? (plural ? "districts" : "district")
+         : (plural ? "blocks" : "block");
+  }
+
+  function rankingScopeLabel() {
+    return S.view === "india" ? "India"
+         : S.view === "state" ? S.state
+         : byKey[S.district].n;
+  }
+
+  function rankingLevel() {
+    return S.view === "india" ? "State/UT" : S.view === "state" ? "District" : "Block";
+  }
+
+  /* One behaviour, two doors: a ranked row does exactly what a map click does. */
+  function openRankedUnit(key) {
+    if (S.view === "india") { selectState(key); return; }
+    if (S.view === "state") { openDistrict(key); return; }
+    S.block = key; S.da = null; S.report = null; render();
+  }
+
   function cohort() {
     return S.view === "india" ? rankedStates() : rankedDistricts(S.state);
   }
@@ -827,9 +919,10 @@
       label = "Tray full (4)";
       title = "The comparison tray holds at most four places.";
     } else {
-      label = present ? (compact ? "−" : "Remove") : (compact ? "+" : "Add");
+      label = present ? (compact ? "−" : "Remove from Analysis")
+                      : (compact ? "+" : "Add to Analysis");
       title = (present ? "Remove " : "Add ") + member.name +
-        (present ? " from" : " to") + " the comparison tray";
+        (present ? " from" : " to") + " your analysis — the shortlist the comparison uses";
     }
     return "<button type='button' class='" + (compact ? "cmp-mini" : "btn ghost") +
       " cmp-toggle' data-cmp-level='" + escAttr(member.level) + "' data-cmp-key='" +
@@ -1741,6 +1834,35 @@
      above the map rather than a card of prose. The national view has no
      selected unit and therefore no headline: the ranking and the distribution
      are the answer there. */
+  /* The two doorways. They are not steps at the end of the journey — they are
+     available wherever a unit is named, and they return you where you left. */
+  function unitActions(level, key, name) {
+    return "<div class='act-row'>" +
+      "<button type='button' class='btn' data-act='da' data-lvl='" + escAttr(level) +
+        "' data-unit='" + escAttr(name) + "'>Explore in Detailed Analysis</button>" +
+      "<button type='button' class='btn ghost' data-act='report' data-lvl='" + escAttr(level) +
+        "' data-key='" + escAttr(key) + "' data-unit='" + escAttr(name) +
+        "'>Download report</button>" +
+      "</div>";
+  }
+
+  function wireActions(host) {
+    var bs = host.querySelectorAll("[data-act]");
+    for (var i = 0; i < bs.length; i++) {
+      bs[i].addEventListener("click", function (ev) {
+        var b = ev.currentTarget;
+        if (b.dataset.act === "da") {
+          S.da = { level: b.dataset.lvl, unit: b.dataset.unit };
+          S.report = null;
+        } else {
+          S.report = { level: b.dataset.lvl, key: b.dataset.key, name: b.dataset.unit };
+          S.da = null;
+        }
+        render();
+      });
+    }
+  }
+
   function renderHeadline() {
     var host = document.getElementById("headline");
     if (S.view === "india") { host.hidden = true; host.innerHTML = ""; return; }
@@ -1766,9 +1888,11 @@
         "<p class='hl-scope'>The area-weighted average of its districts' national scores — " +
           "not a percentile among States. Hazard-only: no exposure, vulnerability or " +
           "resilience.</p>" +
-        driverList(drv, "State/UT", S.state);
+        driverList(drv, "State/UT", S.state) +
+        unitActions("State/UT", S.state, S.state);
       wireDrivers(host);
       wireCmpControls(host);
+      wireActions(host);
       return;
     }
 
@@ -1796,65 +1920,155 @@
         fmt(vals[0]) + "</b> to <b>" + fmt(vals[vals.length - 1]) + "</b>. Blocks are " +
         "scored from their own physical values on the same frozen ruler, so this " +
         "district's score is not their average.</p>" +
-      driverList(dDrivers()[S.district] || [], "District", d.n + ", " + S.state);
+      driverList(dDrivers()[S.district] || [], "District", d.n + ", " + S.state) +
+      unitActions("District", S.district, d.n);
     wireDrivers(host);
     wireCmpControls(host);
+    wireActions(host);
   }
 
   /* ================= ranking ================= */
+  /* The Resilience Profile list: the five highest- and five lowest-hazard units of
+     whatever this view would open next. Deliberately NOT "worst/best" — on a
+     hazard-only scale "lowest" means least hazard, not safe and not good. */
   function renderRanking() {
     var host = document.getElementById("ranking");
-    var rows = cohort();
+    var all = rankingCohort();
+    var rows = all;
     if (S.pinned !== null) {
       rows = rows.filter(function (r) { return binIndex(r.score) === S.pinned; });
     }
-    var shown = S.showAll ? rows : rows.slice(0, 10);
-    var isIndia = S.view === "india";
-    var shownScore = displayScores(shown);
+    var n = rows.length;
+    var level = rankingLevel();
+    var high = rows.slice(0, 5);
+    var low = n > 5 ? rows.slice(Math.max(5, n - 5)).slice().reverse() : [];
+    var shownScore = displayScores(rows);
+
+    function list(items, cls) {
+      return items.map(function (r) {
+        var member = makeCmpMember(level, r.key);
+        return "<div class='rl-item " + cls + "' data-key='" + escAttr(r.key) + "' " +
+          "role='button' tabindex='0' title='Open " + escAttr(r.name) + "'>" +
+          "<span class='rl-rk'>" + r.rank + "</span>" +
+          "<span class='rl-nm'>" + esc(r.name) + "</span>" +
+          "<span class='bandcell'>" + band(r.score) + "</span>" +
+          "<span class='rl-sc'>" + shownScore[r.key] + "</span>" +
+          "<span class='cmp-cell'>" + cmpControl(member, true) + "</span>" +
+          "</div>";
+      }).join("");
+    }
 
     var html =
-      "<h2>" + (isIndia ? "State/UT ranking" : "District ranking — " + esc(S.state)) + "</h2>" +
-      "<p class='sub'>" +
-        (isIndia
-          ? "Area-weighted mean district score, competition ranks over full precision. " +
-            "Select a row to open that State/UT."
-          : "Composite score on the frozen national scale, ranked within " + esc(S.state) +
-            ". Select a row to open that district's blocks.") +
-      "</p>" +
-      "<table class='rank'><thead><tr><th class='rk'>#</th><th>" +
-        (isIndia ? "State / UT" : "District") +
-        "</th><th class='num'>Score</th><th>Band</th><th class='cmp-cell'>Compare</th>" +
-        "</tr></thead><tbody>";
+      "<h2>Ranked " + rankingUnit(true) + " — " + esc(rankingScopeLabel()) + "</h2>" +
+      "<p class='sub'>Composite score on the frozen national scale. Select any row to open it.</p>";
+
+    if (!n) {
+      html += "<p class='sub'>No " + rankingUnit(true) + " in this filter.</p>";
+      host.innerHTML = html;
+      return;
+    }
+
+    html += "<div class='rl-head'>Highest hazard<span class='rl-sub'>" +
+      (high.length < n ? "top " + high.length + " of " + n : "all " + n) + "</span></div>" +
+      list(high, "rl-high");
+
+    if (low.length) {
+      html += "<div class='rl-head'>Lowest hazard<span class='rl-sub'>least hazard, " +
+        "not “safe”</span></div>" + list(low, "rl-low");
+    }
+
+    html += "<div class='filterbar'><button class='linkbtn' id='open-table'>" +
+      "View all " + n + " " + rankingUnit(true) + "</button></div>";
+
+    host.innerHTML = html;
+    wireCmpControls(host);
+    wireRankRows(host);
+    var ot = document.getElementById("open-table");
+    if (ot) ot.addEventListener("click", function () { S.mode = "table"; render(); });
+  }
+
+  function wireRankRows(host) {
+    var items = host.querySelectorAll("[data-key][role='button'], tr[data-key]");
+    for (var i = 0; i < items.length; i++) {
+      items[i].addEventListener("click", function (ev) {
+        if (ev.target.closest(".cmp-toggle")) return;
+        openRankedUnit(ev.currentTarget.dataset.key);
+      });
+      items[i].addEventListener("keydown", function (ev) {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        ev.preventDefault();
+        openRankedUnit(ev.currentTarget.dataset.key);
+      });
+    }
+  }
+
+  /* The full ranked table: the same cohort at working density, in place of the map.
+     This is the "View all" destination and the non-map path to every unit. */
+  function renderTableView() {
+    var host = document.getElementById("tableview");
+    if (S.mode !== "table") { host.hidden = true; host.innerHTML = ""; return; }
+    host.hidden = false;
+
+    var all = rankingCohort();
+    var rows = all;
+    if (S.pinned !== null) {
+      rows = rows.filter(function (r) { return binIndex(r.score) === S.pinned; });
+    }
+    var level = rankingLevel();
+    var shownScore = displayScores(rows);
     var tied = {};
-    shown.forEach(function (r) { tied[r.rank] = (tied[r.rank] || 0) + 1; });
-    shown.forEach(function (r) {
-      var selected = isIndia ? false : (r.key === S.district);
-      var member = makeCmpMember(isIndia ? "State/UT" : "District", r.key);
-      html += "<tr data-key='" + esc(r.key) + "'" + (selected ? " class='selected'" : "") + ">" +
+    rows.forEach(function (r) { tied[r.rank] = (tied[r.rank] || 0) + 1; });
+
+    var html =
+      "<h2>Ranked " + rankingUnit(true) + " — " + esc(rankingScopeLabel()) + "</h2>" +
+      "<p class='sub'>" + rows.length + " ranked " + rankingUnit(true) +
+        " on the frozen national scale, competition ranks over full precision" +
+        (S.pinned !== null ? " · filtered to one distribution bin, original ranks kept" : "") +
+        ". Select a row to open it." + (S.view === "district"
+          ? " Blocks are ranked here only because every block in a district is drawn by the " +
+            "same administration."
+          : "") +
+      "</p>" +
+      "<div class='tv-scroll'><table class='rank'><thead><tr>" +
+        "<th class='rk'>#</th><th>" + rankingUnit(false) + "</th>" +
+        "<th class='num'>Score</th><th>Band</th><th class='cmp-cell'>Analysis</th>" +
+        "</tr></thead><tbody>";
+
+    rows.forEach(function (r) {
+      var selected = (S.view === "state" && r.key === S.district) ||
+                     (S.view === "district" && r.key === S.block);
+      var member = makeCmpMember(level, r.key);
+      html += "<tr data-key='" + escAttr(r.key) + "'" + (selected ? " class='selected'" : "") + ">" +
         "<td class='rk'>" + r.rank + (tied[r.rank] > 1 ? "=" : "") + "</td>" +
         "<td>" + esc(r.name) + "</td>" +
         "<td class='num sc'>" + shownScore[r.key] + "</td>" +
         "<td class='bandcell'>" + band(r.score) + "</td>" +
         "<td class='cmp-cell'>" + cmpControl(member, true) + "</td></tr>";
     });
-    html += "</tbody></table>";
-    if (rows.length > 10) {
-      html += "<div class='filterbar'><button class='linkbtn' id='toggle-all'>" +
-        (S.showAll ? "Show top 10" : "View all " + rows.length) + "</button></div>";
-    }
-    if (!rows.length) html += "<p class='sub'>No units in this filter.</p>";
+    html += "</tbody></table></div>";
+    if (!rows.length) html = html.replace("</tbody></table></div>",
+      "</tbody></table><p class='sub'>No units in this filter.</p></div>");
+
     host.innerHTML = html;
     wireCmpControls(host);
+    wireRankRows(host);
+  }
 
-    var t = host.querySelector("tbody");
-    if (t) t.addEventListener("click", function (ev) {
-      if (ev.target.closest(".cmp-toggle")) return;
-      var tr = ev.target.closest("tr");
-      if (!tr) return;
-      if (isIndia) selectState(tr.dataset.key); else openDistrict(tr.dataset.key);
-    });
-    var ta = document.getElementById("toggle-all");
-    if (ta) ta.addEventListener("click", function () { S.showAll = !S.showAll; renderRanking(); });
+  /* Map and ranked table are two densities of one cohort, never two analyses. */
+  function renderViewToggle() {
+    var host = document.getElementById("viewtoggle");
+    host.innerHTML =
+      "<button type='button' data-mode='map' aria-pressed='" + (S.mode === "map") +
+        "'>Map</button>" +
+      "<button type='button' data-mode='table' aria-pressed='" + (S.mode === "table") +
+        "'>Ranked table</button>";
+    var bs = host.querySelectorAll("button");
+    for (var i = 0; i < bs.length; i++) {
+      bs[i].addEventListener("click", function (ev) {
+        S.mode = ev.currentTarget.dataset.mode;
+        render();
+      });
+    }
   }
 
   /* ================= block inspection + DA stub ================= */
@@ -1882,7 +2096,35 @@
           "<dt>Coverage</dt><dd>Complete — all 9 headline metrics valid</dd>" +
         "</dl>" +
         driverList(bDrivers()[b.k] || [], "Block", b.n + ", " + (parent ? parent.n : "")) +
+        unitActions("Block", b.k, b.n) +
         "</div>";
+    }
+
+    if (S.report) {
+      var rp = S.report;
+      html +=
+        "<div class='card report'>" +
+        "<button class='close' id='close-report' aria-label='Close report preview'>\u00d7</button>" +
+        "<h2>Download report</h2>" +
+        "<div class='stub'><h3>PDF · " + esc(rp.name) + " · " + esc(rp.level) + "</h3>" +
+        "<p style='margin:0 0 8px'>Not generated in this prototype. This is the doorway and " +
+        "the contract: what a one-place PDF carries, so the user leaves with something " +
+        "defensible rather than re-typing it.</p>" +
+        "<dl class='kv'>" +
+          "<dt>Cover</dt><dd>" + esc(rp.name) + " · " + esc(rp.level) + " · " +
+            esc(D.scenario_labels[S.scenario]) + " · " + esc(D.period_labels[S.period]) +
+            " · a live link back to this exact view</dd>" +
+          "<dt>The answer</dt><dd>Composite score, five-band classification, and rank with " +
+            "its cohort stated in words</dd>" +
+          "<dt>Why</dt><dd>Up to three metric drivers, named in plain language</dd>" +
+          "<dt>Where</dt><dd>A static map image at this scope, on the frozen scale, with " +
+            "the same colourbar the screen used</dd>" +
+          "<dt>Context</dt><dd>Exposure and hydrology at this scope, labelled contextual</dd>" +
+          "<dt>Caveats</dt><dd>Hazard-only; excludes exposure, vulnerability and resilience; " +
+            "not comparable across bundles</dd>" +
+          "<dt>Provenance</dt><dd>Bundle, scenario, period, ruler id, colour-scale id, " +
+            "roster version, build date</dd>" +
+        "</dl></div></div>";
     }
 
     if (S.da) {
@@ -1914,10 +2156,71 @@
     host.innerHTML = html;
     wireDrivers(host);
     wireCmpControls(host);
+    wireActions(host);
     var c = document.getElementById("close-insp");
     if (c) c.addEventListener("click", function () { S.block = null; S.da = null; render(); });
     var bo = document.getElementById("back-ov");
     if (bo) bo.addEventListener("click", function () { S.da = null; render(); });
+    var cr = document.getElementById("close-report");
+    if (cr) cr.addEventListener("click", function () { S.report = null; render(); });
+  }
+
+  /* ---- the coordinate doorway ----
+     "I know my place, not a region." It is a peer entry point, not a fourth
+     selector, so it stays subordinate to the geography-first path and lands the
+     user at the same panels a map click would. Resolution is a production
+     service; this prototype demonstrates the doorway with worked examples. */
+  var COORD_DEMO = [
+    { lat: 17.9784, lon: 79.5941, block: "telangana|warangal|geesugonda", label: "Warangal" },
+    { lat: 17.3850, lon: 78.4867, block: "telangana|hyderabad|amberpet", label: "Hyderabad" },
+    { lat: 19.6640, lon: 78.5320, block: "telangana|adilabad|adilabad urban", label: "Adilabad" }
+  ];
+
+  function renderCoord() {
+    var host = document.getElementById("coord");
+    var out = "";
+    if (S.coord) {
+      out = S.coord.ok
+        ? "<p class='coord-out'>Resolves to <b>" + esc(S.coord.block) + "</b>, " +
+          esc(S.coord.district) + " · " + esc(S.coord.state) + " — opened below.</p>"
+        : "<p class='coord-out'>Outside the scored area of this prototype. In production a " +
+          "reverse-geocode service resolves any coordinate in India to its block.</p>";
+    }
+    host.innerHTML =
+      "<details class='ctx'" + (S.coord ? " open" : "") + ">" +
+      "<summary>Analyse a custom location" +
+        "<span class='ctx-for'>a site, not a region</span></summary>" +
+      "<div class='ctx-body'>" +
+        "<p class='sub' style='margin:0'>Enter a coordinate to land on the block that " +
+        "contains it, with the same score, drivers and context any other unit gets. " +
+        "File upload of many sites belongs here too.</p>" +
+        "<div class='coord-form'>" +
+          "<label>Latitude<input id='coord-lat' type='text' placeholder='17.9784'></label>" +
+          "<label>Longitude<input id='coord-lon' type='text' placeholder='79.5941'></label>" +
+          "<button type='button' class='btn' id='coord-go'>Resolve</button>" +
+        "</div>" + out +
+        "<p class='ctx-prov'>Worked examples in this prototype: " +
+          COORD_DEMO.map(function (c) { return esc(c.label) + " " + c.lat + ", " + c.lon; })
+            .join(" · ") + ".</p>" +
+      "</div></details>";
+
+    var go = document.getElementById("coord-go");
+    if (!go) return;
+    go.addEventListener("click", function () {
+      var la = parseFloat(document.getElementById("coord-lat").value);
+      var lo = parseFloat(document.getElementById("coord-lon").value);
+      var hit = null;
+      COORD_DEMO.forEach(function (c) {
+        if (Math.abs(c.lat - la) < 0.25 && Math.abs(c.lon - lo) < 0.25) hit = c;
+      });
+      if (!hit || !blockByKey[hit.block]) { S.coord = { ok: false }; render(); return; }
+      var b = blockByKey[hit.block];
+      var parent = byKey[b.dk];
+      S.coord = { ok: true, block: b.n, district: parent ? parent.n : "", state: b.s };
+      S.view = "district"; S.state = b.s; S.district = b.dk; S.block = b.k;
+      S.mode = "map"; S.da = null; S.report = null; S.showAll = false;
+      render();
+    });
   }
 
   /* ================= Compare locations ================= */
@@ -2398,6 +2701,16 @@
 
   function renderMapHead() {
     var title, sub;
+    if (S.mode === "table") {
+      /* The toggle lives in this header, so the header stays; only its copy changes.
+         Map and ranked table are two densities of one cohort, never two analyses. */
+      document.getElementById("map-title").textContent =
+        "Ranked table — " + rankingScopeLabel();
+      document.getElementById("map-sub").textContent =
+        "The same " + rankingUnit(true) + " the map paints, at working density. " +
+        "Switch back to Map at any time; the selection is kept.";
+      return;
+    }
     if (S.view === "india") {
       title = "National view — districts painted";
       sub = "Thick State/UT boundary, thin district boundary. State/UT polygons are never " +
@@ -2428,13 +2741,18 @@
     LX.on = !!S.local && pv.vals.length > 1 && LX.hi > LX.lo;
 
     renderCrumbs();
+    renderViewToggle();
     renderMapHead();
+    document.querySelector(".mapwrap").hidden = S.mode === "table";
+    document.querySelector(".cbar").hidden = S.mode === "table";
     paintMap();
     renderContextLayer();
     renderHistogram(pv);
     renderColourbar(pv.vals);
+    renderCoord();
     renderHeadline();
     renderRanking();
+    renderTableView();
     renderInspection();
     renderContext();
     renderCompare();
