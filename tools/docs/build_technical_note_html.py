@@ -886,7 +886,7 @@ APP_CSS = APP_CSS.replace(
     ".lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}"
     ".lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}",
     ".lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}"
-    ".lightbox.open{display:flex}.lightbox-media{position:relative;display:inline-block;line-height:0;max-width:96vw;max-height:90vh}"
+    ".lightbox.open{display:flex}.lightbox-media{position:relative;display:inline-block;width:auto;line-height:0;max-width:96vw;max-height:90vh}"
     ".lightbox-media img{display:block;width:auto;max-width:96vw;max-height:90vh;object-fit:contain;background:#fff;border-radius:8px}",
 )
 

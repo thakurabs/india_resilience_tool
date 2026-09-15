@@ -54,17 +54,17 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <path class="arrow" d="M 895.0 186.0 L 930.0 186.0"/>
 <rect x="930" y="150" width="150" height="72" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
 <text x="1005.0" y="189.5" class="label" text-anchor="middle" data-box="930,150,150,72">Rule 1 score</text>
-<g class="math-label" data-math-tex="S_1,\ W_{r1}" data-math-x="1005" data-math-y="201" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="1005.0" y="201.0" class="small" text-anchor="middle">S_1, W_{r1}</text></g>
+<g class="math-label" data-math-tex="S_1,\ W_{r1}" data-math-x="1005" data-math-y="201" data-math-anchor="middle" data-math-size="14" data-math-display="0"><text x="1005.0" y="201.0" class="small" text-anchor="middle">S_1, W_{r1}</text></g>
 <path class="arrow" d="M 1080.0 186.0 L 1105.0 186.0"/>
 <path class="arrow" d="M 895.0 316.0 L 930.0 316.0"/>
 <rect x="930" y="280" width="150" height="72" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
 <text x="1005.0" y="319.5" class="label" text-anchor="middle" data-box="930,280,150,72">Rule 2 score</text>
-<g class="math-label" data-math-tex="S_2,\ W_{r2}" data-math-x="1005" data-math-y="331" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="1005.0" y="331.0" class="small" text-anchor="middle">S_2, W_{r2}</text></g>
+<g class="math-label" data-math-tex="S_2,\ W_{r2}" data-math-x="1005" data-math-y="331" data-math-anchor="middle" data-math-size="14" data-math-display="0"><text x="1005.0" y="331.0" class="small" text-anchor="middle">S_2, W_{r2}</text></g>
 <path class="arrow" d="M 1080.0 316.0 L 1105.0 316.0"/>
 <path class="arrow" d="M 895.0 446.0 L 930.0 446.0"/>
 <rect x="930" y="410" width="150" height="72" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
 <text x="1005.0" y="449.5" class="label" text-anchor="middle" data-box="930,410,150,72">Rule 3 score</text>
-<g class="math-label" data-math-tex="S_3,\ W_{r3}" data-math-x="1005" data-math-y="461" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="1005.0" y="461.0" class="small" text-anchor="middle">S_3, W_{r3}</text></g>
+<g class="math-label" data-math-tex="S_3,\ W_{r3}" data-math-x="1005" data-math-y="461" data-math-anchor="middle" data-math-size="14" data-math-display="0"><text x="1005.0" y="461.0" class="small" text-anchor="middle">S_3, W_{r3}</text></g>
 <path class="arrow" d="M 1080.0 446.0 L 1105.0 446.0"/>
 <line x1="1105" y1="186" x2="1105" y2="446" stroke="#52606d" stroke-width="2.0"/>
 <path class="arrow" d="M 1105.0 316.0 L 1130.0 316.0"/>

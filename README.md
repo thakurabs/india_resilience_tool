@@ -573,7 +573,11 @@ python -m tools.runs.prepare_dashboard --help
 
 For a single command reference, see [`docs/command_catalog.md`](docs/command_catalog.md).
 
-Regenerate the committed in-dashboard Technical Guidance Note asset after editing
+The Technical Guidance Note is also a standalone, offline HTML document: open
+`india_resilience_tool/app/assets/read_the_docs.html` directly in a browser;
+Streamlit is not required. It includes navigation, search, mathematics, and expandable figures.
+
+Regenerate the committed Technical Guidance Note HTML after editing
 `docs/technical_guidance_note.md` or its approved figures:
 
 ```bash

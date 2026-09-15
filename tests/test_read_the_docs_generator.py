@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import html as html_lib
+import json
 import re
 import shutil
 import subprocess
@@ -126,6 +127,30 @@ def test_svg_math_overlays_match_embedded_svg_metadata_counts() -> None:
         if metadata_count:
             assert 'class="figure-media"' in figure_html
             assert 'class="figure-math-layer"' in figure_html
+
+
+def test_all_figure_formulas_parse_with_vendored_katex() -> None:
+    """Reject unsupported TeX commands even when browser rendering suppresses errors."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is required to validate the bundled KaTeX renderer")
+    html_doc, _size_info = _generated_html()
+    formulas = [
+        html_lib.unescape(tex)
+        for tex in re.findall(r'data-tex="([^"]+)"', html_doc)
+    ]
+    assert formulas
+    script = (
+        "const katex = require(process.argv[1]);"
+        "const fs = require('fs');"
+        "for (const tex of JSON.parse(fs.readFileSync(0, 'utf8'))) {"
+        "katex.renderToString(tex, {throwOnError:true});}"
+    )
+    result = subprocess.run(
+        [node, "-e", script, str((builder.KATEX_ROOT / "katex.min.js").resolve())],
+        input=json.dumps(formulas), capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_svg_math_extraction_subtracts_nonzero_viewbox_origin_and_hides_only_math_groups() -> None:
@@ -387,7 +412,7 @@ def test_generated_html_renders_svg_math_overlays_explicitly() -> None:
     html_doc, _size_info = _generated_html()
 
     assert ".figure-media{position:relative;display:block;width:100%}" in html_doc
-    assert ".lightbox-media{position:relative;display:inline-block;line-height:0;max-width:96vw;max-height:90vh}" in html_doc
+    assert ".lightbox-media{position:relative;display:inline-block;width:auto;line-height:0;max-width:96vw;max-height:90vh}" in html_doc
     assert ".lightbox-media img{display:block;width:auto;max-width:96vw;max-height:90vh;object-fit:contain" in html_doc
     assert ".figure-math-layer{position:absolute;inset:0;pointer-events:none}" in html_doc
     assert ".figure-math-overlay .katex-display{margin:0}" in html_doc

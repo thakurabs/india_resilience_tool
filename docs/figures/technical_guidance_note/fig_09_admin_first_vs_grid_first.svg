@@ -43,7 +43,8 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <circle cx="366" cy="298.5" r="4.5" fill="#8b95a1"/>
 <circle cx="432" cy="314.25" r="4.5" fill="#8b95a1"/>
 <polyline points="168.0,314.2 234.0,298.5 300.0,282.8 366.0,298.5 432.0,314.2" fill="none" stroke="#8b95a1" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
-<text x="170.0" y="471.0" class="small" text-anchor="start">District average</text>
+<line x1="135" y1="459" x2="157" y2="459" stroke="#8b95a1" stroke-width="2.8"/>
+<text x="165.0" y="463.0" class="small" text-anchor="start">District average</text>
 <text x="168.0" y="415.0" class="tiny" text-anchor="middle">D1</text>
 <text x="234.0" y="415.0" class="tiny" text-anchor="middle">D2</text>
 <text x="300.0" y="415.0" class="tiny" text-anchor="middle">D3</text>
@@ -73,14 +74,16 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <circle cx="966" cy="235.5" r="4.5" fill="#b8324f"/>
 <circle cx="1032" cy="251.25" r="4.5" fill="#b8324f"/>
 <polyline points="768.0,251.2 834.0,235.5 900.0,219.8 966.0,235.5 1032.0,251.2" fill="none" stroke="#b8324f" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
-<text x="770.0" y="489.0" class="small" text-anchor="start">City cell</text>
+<line x1="735" y1="459" x2="757" y2="459" stroke="#b8324f" stroke-width="2.8"/>
+<text x="765.0" y="463.0" class="small" text-anchor="start">City cell</text>
 <circle cx="768" cy="377.25" r="4.5" fill="#2f80b7"/>
 <circle cx="834" cy="361.5" r="4.5" fill="#2f80b7"/>
 <circle cx="900" cy="345.75" r="4.5" fill="#2f80b7"/>
 <circle cx="966" cy="361.5" r="4.5" fill="#2f80b7"/>
 <circle cx="1032" cy="377.25" r="4.5" fill="#2f80b7"/>
 <polyline points="768.0,377.2 834.0,361.5 900.0,345.8 966.0,361.5 1032.0,377.2" fill="none" stroke="#2f80b7" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
-<text x="770.0" y="489.0" class="small" text-anchor="start">Valley cell</text>
+<line x1="905" y1="459" x2="927" y2="459" stroke="#2f80b7" stroke-width="2.8"/>
+<text x="935.0" y="463.0" class="small" text-anchor="start">Valley cell</text>
 <text x="768.0" y="415.0" class="tiny" text-anchor="middle">D1</text>
 <text x="834.0" y="415.0" class="tiny" text-anchor="middle">D2</text>
 <text x="900.0" y="415.0" class="tiny" text-anchor="middle">D3</text>

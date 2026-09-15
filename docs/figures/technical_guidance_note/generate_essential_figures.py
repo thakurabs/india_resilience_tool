@@ -363,6 +363,8 @@ def math_label(
     if anchor not in {"start", "middle", "end"}:
         raise ValueError(f"Unsupported math anchor: {anchor!r}")
     font_size = FONT_PX.get(cls.split()[0], FONT_PX["small"]) if size is None else size
+    # Keep mathematical annotations readable when a figure is expanded.
+    font_size = max(14.0, font_size)
     attrs = {
         "class": "math-label",
         "data-math-tex": tex,
@@ -589,7 +591,7 @@ def figure_01() -> str:
     bx = stage_xs[4]
     body.append(text(bx + w / 2, y - 14, "Bundle construction", "label", "middle"))
     branch_h = 64
-    body.extend(box(bx, y, w, branch_h, "#fff8e6", COLORS["hazard"], "Thematic", ["co-normalized metrics"], radius=5))
+    body.extend(box(bx, y, w, branch_h, "#fff8e6", COLORS["hazard"], "Thematic", ["frozen national rulers"], radius=5))
     body.extend(box(bx, y + h - branch_h, w, branch_h, "#fff8e6", COLORS["hazard"], "Sectoral", ["abs/chg/impact lenses"], radius=5))
     body.append(elbow_arrow([(stage_xs[3] + w + 2, y + h / 2), (bx - 20, y + h / 2), (bx - 20, y + branch_h / 2), (bx - 2, y + branch_h / 2)]))
     body.append(elbow_arrow([(stage_xs[3] + w + 2, y + h / 2), (bx - 20, y + h / 2), (bx - 20, y + h - branch_h / 2), (bx - 2, y + h - branch_h / 2)]))
@@ -873,7 +875,7 @@ def figure_09() -> str:
         yy35 = y0 + h - 42 - (35 - 27) / 12 * (h - 76)
         body.append(line(panel_x + 58, yy35, panel_x + w - 28, yy35, COLORS["hazard"], 2, "6 5"))
         body.append(text(panel_x + w - 125, yy35 - 8, "35 deg C threshold", "tiny"))
-        for name, vals, color in series:
+        for series_index, (name, vals, color) in enumerate(series):
             pts = []
             for i, v in enumerate(vals):
                 xx = panel_x + 78 + i * 66
@@ -881,7 +883,10 @@ def figure_09() -> str:
                 pts.append((xx, yy))
                 body.append(f'<circle cx="{xx}" cy="{yy}" r="4.5" fill="{color}"/>')
             body.append(polyline(pts, color, 2.8))
-            body.append(text(panel_x + 80, y0 + h + 18 + 18 * len(series), name, "small"))
+            legend_x = panel_x + 45 + series_index * 170
+            legend_y = y0 + h + 28
+            body.append(line(legend_x, legend_y - 4, legend_x + 22, legend_y - 4, color, 2.8))
+            body.append(text(legend_x + 30, legend_y, name, "small"))
         for i, day in enumerate(days):
             body.append(text(panel_x + 78 + i * 66, y0 + h - 20, f"D{day}", "tiny", "middle"))
     body.extend(box(115, 500, 345, 86, "#fff8e6", COLORS["hazard"], "Average first", ["32-34 deg C all days", "Hot days >35 deg C: 0"]))
@@ -1161,7 +1166,7 @@ def figure_14() -> str:
         math_label(
             x0 + 125,
             507,
-            r"q=\mathrm{zero\mbox{-}month\ probability}",
+            r"q=\text{zero-month probability}",
             "q = zero-month probability",
             "small",
             "middle",

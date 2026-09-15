@@ -65,6 +65,18 @@ def _background_rect(root: ET.Element) -> ET.Element:
     return backgrounds[0]
 
 
+def test_grid_first_series_legends_do_not_overlap() -> None:
+    """City and valley series must have separate readable legend positions."""
+    root = ET.fromstring(_load_generator().figure_09())
+    labels = {
+        "".join(node.itertext()): node
+        for node in _visible_text_nodes(root)
+        if "".join(node.itertext()) in {"City cell", "Valley cell"}
+    }
+    assert set(labels) == {"City cell", "Valley cell"}
+    assert abs(float(labels["City cell"].attrib["x"]) - float(labels["Valley cell"].attrib["x"])) >= 100
+
+
 def test_generated_svgs_keep_accessible_metadata_without_visible_chrome() -> None:
     generator = _load_generator()
 

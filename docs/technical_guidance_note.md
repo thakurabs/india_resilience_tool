@@ -105,7 +105,7 @@ IRT aggregates individual-year climate indices into the following multi-year win
 
 | Label | Period | Role |
 |-------|--------|------|
-| Historical baseline | 1990–2010 | Reference for per-period normalisation (→ §6.2) |
+| Historical baseline | 1990–2010 | Historical indicator reference; also included in the climate ruler fitting population (→ §6.2) |
 | Near-term | 2020–2040 | Near-term projection |
 | Mid-century | 2040–2060 | Mid-century projection |
 | End-century | 2060–2080 | End-of-century projection |
@@ -421,7 +421,7 @@ where PRCPTOT is the annual total precipitation on wet days (≥ 1 mm). Both ind
 
 ### 5.3 Drought Indices (SPI)
 
-Where §5.2 captures rainfall excess, drought is its slow, accumulated counterpart. The Drought Risk bundle uses the **Standardised Precipitation Index** (SPI; McKee et al. 1993), a dimensionless probabilistic drought index that expresses accumulated monthly precipitation as a standard-normal departure from the long-term fitted distribution. IRT computes SPI at three accumulation timescales — SPI-3 (seasonal), SPI-6 (meteorological), and SPI-12 (long-term) — all on the 0.25° grid before spatial aggregation. Longer timescales carry higher bundle weight, reflecting the greater agricultural and hydrological impact of sustained multi-month drought.
+Where §5.2 captures rainfall excess, drought concerns sustained dry conditions and rainfall deficits. The published Drought Risk composite uses consecutive dry days (CDD): the longest annual run with precipitation below 1 mm/day, averaged over the analysis period. IRT also computes the **Standardised Precipitation Index** (SPI; McKee et al. 1993), which expresses accumulated monthly precipitation relative to its locally fitted distribution. SPI-3, SPI-6, and SPI-12 describe deficits over different accumulation timescales; they remain available indicators but do not enter the current thematic composite (§6.4).
 
 **Derivation**
 
@@ -505,133 +505,115 @@ The six thematic bundles and the hazard dimension each captures:
 | Heat Risk | Daytime/nocturnal thermal extremes and background heat | Background means, absolute & percentile extremes, threshold-frequency, heatwave characteristics |
 | Heat Stress | Humid-heat physiological stress | Wet-bulb means/extremes and dry-heat persistence |
 | Cold Risk | Winter cold extremes and cold-spell persistence | Background cold, absolute extremes, cold-day thresholds, percentile-relative cold, cold-spell characteristics |
-| Drought Risk | Meteorological drought across timescales | SPI-3/6/12 event counts and maximum spell lengths |
+| Drought Risk | Dry-spell persistence | CDD contributes to the composite; SPI-3/6/12 describe rainfall deficits separately |
 | Extreme Rainfall \| Flash Flood Risk | Extreme precipitation and wet-spell persistence | Peak intensity, heavy-rain frequency, very-wet contribution, wet-spell persistence |
 | Riverine Flood | Static RP-100 inundation severity | Riverine flood severity, depth and extent|
 
-The grouping logic is consistent across bundles: the members of a bundle measure **complementary facets of one hazard** — magnitude (e.g. TXx), frequency (e.g. hot-day counts), persistence (e.g. WSDI), and percentile-relative shift (e.g. TX90p) — rather than redundant restatements of the same signal. Compositing these facets dampens any possible noise of a single index and yields a more stable hazard ranking. **Riverine Flood is the structural exception**: it carries a single scored metric (the JRC severity index, weight 1.0), so its "composite" is a pass-through of that one index; the two companion JRC fields (depth, extent) are retained as display attributes at weight 0 (§6.4).
+The indicator catalogue describes the available measures of each hazard; §6.4 identifies the indicators combined to calculate each thematic score. A bundle can contain indicators of magnitude, frequency, persistence, and departure from local climatic conditions without every indicator contributing to its composite. The contributing set is fixed for the published reference version.
 
-### 6.2 Normalization: Per-Period Spatial Scaling
+**Drought Risk** currently uses consecutive dry days (CDD) to describe dry-spell persistence on a common physical basis. SPI indicators describe rainfall deficits relative to local climatic conditions and remain part of the indicator catalogue, but do not contribute to this composite. The CDD score should therefore be read as dry-spell pressure, not as a comprehensive measure of drought or water availability. **Riverine Flood** also uses one contributing indicator: its published score is the JRC severity value transformed through the national ruler. Depth and extent provide additional context without contributing directly to the score.
 
-Every component metric is normalized **independently within each scenario–period column**, across the set of geographies in the computed frame — the districts, or the blocks, of one state at the chosen level. The shipped method is a cross-sectional **min–max rescaling** onto 0–100, oriented so that higher always means worse.
+### 6.2 Normalization: Frozen National Reference Distributions
 
-For a metric with finite values $v_i$ over the geography set $G$ in a given scenario–period:
+The six thematic composites described here use **fixed national reference distributions** to translate their contributing indicators into scores on a common 0–100 scale. Each indicator has its own mapping, called a *ruler*. The mapping is fitted once and applied unchanged across states, scenarios, periods, and administrative levels. Selecting a different state or period therefore changes the values being evaluated, not the scale against which they are evaluated.
 
-$$v_{\min} = \min_{i\in G} v_i, \qquad v_{\max} = \max_{i\in G} v_i$$
+For the climate bundles, the reference population pools district-level indicator values across India over the historical 1990–2010 window and the six future combinations of two scenarios and three periods. The Riverine Flood ruler uses the national district population for its single static snapshot. These are distributions of administrative-unit indicator values, not distributions of individual daily observations. Each finite district–slice observation contributes equally to an indicator's reference distribution; the fitting population is not weighted by district area or population.
 
-$$S_i = \operatorname{clip}\!\left(\frac{v_i - v_{\min}}{v_{\max} - v_{\min}},\; 0,\; 1\right)\times 100$$
+The mapping uses the **empirical mid-rank cumulative distribution**. At each distinct reference value $x_k$, its position on the scale is:
 
-For metrics whose directionality is *lower-is-worse* (e.g. winter-temperature means, where colder is the hazard), the numerator is replaced by $v_{\max}-v_i$ so that the worst tail still maps to 100. Two degenerate cases are handled explicitly: if every geography shares one finite value ($v_{\max}=v_{\min}$), all rows receive **50**; if no finite value exists, the score is NaN.
+$$R_m(x_k)=100\,\frac{b_k+c_k/2}{N_m}$$
 
-Few consequences follow from normalizing **per period**:
+Here, $b_k$ is the number of reference observations below $x_k$, $c_k$ is the number equal to it, and $N_m$ is the total number of reference observations for indicator $m$. Values between reference points are scored by linear interpolation. The direction is set so that higher scores always indicate greater hazard pressure:
 
-- A bundle score is **relative, not absolute**. A district scoring 90 is among the most exposed *of its state's districts for that scenario and period* — it is not a physical magnitude, and it is **not** a change-versus-history signal.
-- Because each scenario–period is rescaled on its own min/max, scores are comparable *within* a period across space; absolute score differences *between* periods reflect the shifting spatial spread, not only the change in the underlying hazard.
+$$S_m(x)=\begin{cases}R_m(x), & \text{higher values indicate greater hazard},\\100-R_m(x), & \text{lower values indicate greater hazard}.\end{cases}$$
 
-<!-- The **Riverine Flood** bundle is a static snapshot: the JRC RP-100 severity index has no scenario or future-period dimension, so it is normalized once over the geography set on the same min–max scale (higher severity → worse), with no period anchoring. -->
+For example, higher maximum temperatures increase a heat score, while lower winter temperatures increase a cold score. Both districts and blocks use the same district-fitted mapping: the same physical indicator value receives the same component score wherever it occurs.
+
+**Worked illustration.** Consider a synthetic higher-is-worse reference sample of 10, 20, 20, and 30 units. The stored scores are 12.5 at 10, 50 at 20, and 87.5 at 30. A value of 25 receives 68.75 by interpolation. A district and a block with that value both receive 68.75; if the district's value later rises from 20 to 25, its score rises from 50 to 68.75 on the unchanged reference scale.
+
+A component score describes position against this fixed reference, not a physical danger threshold or an event probability. The weighted composite in §6.3 is an average of component scores; it is not itself a percentile rank of composite hazard. A score difference is measured in score points, not degrees, millimetres, or expected loss.
+
+The committed reference version, currently `cdf_v1` for these six bundles, identifies the mappings, contributing indicators, weights, reference slices, and coverage requirements used to produce the scores. Comparisons require the same bundle definition and reference version. This reference population is distinct from the historical baseline used to derive an individual indicator: it includes future values as well as historical values, and is not refitted when a new geography or period is selected.
 
 ### 6.3 Weighted Composite Methodology
 
-Within a bundle the normalized component scores are combined as a **weighted mean**, renormalized per row over the components actually present:
+Within a bundle the component scores listed in §6.4 are combined as a **weighted mean**, with weights redistributed over available contributing indicators where partial coverage is permitted:
 
 $$\text{Composite}_g = \frac{\sum_{m \in A_g} w_m\, S_{g,m}}{\sum_{m \in A_g} w_m}$$
 
 where $A_g$ is the set of component metrics with a valid (non-NaN) normalized score for geography $g$, and $w_m$ are the fixed bundle weights (§6.4). Because each $S_{g,m}\in[0,100]$ and the weights are renormalized to sum to 1 over $A_g$, the composite is itself bounded in $[0,100]$ — no separate clipping is required. 
 <!-- The count of contributing metrics ($\lvert A_g\rvert$) is persisted alongside each score for transparency. -->
 
-<!-- Per-row renormalization means a geography missing one metric is scored on its remaining metrics rather than being penalized or dropped. The only completeness gate for the shipped per-period bundles is that **at least one** component must be present: a row with every component missing yields NaN. (The stricter "≥ 4 anchored components" floor applies *only* to the dormant baseline-anchored mode of §6.2 and is inactive for the shipped composites.) -->
+Scores are reported only when the required indicator coverage is available. Coverage is the share of the full configured contributing weight represented by valid component scores, rather than the fraction of indicator columns present. Heat Risk requires at least 70% coverage; the other five composites described here require 100%. Below the requirement, no composite score is reported. When comparing Heat Risk scores based on partial inputs, the contributing indicators should also be considered.
 
-Weights are organised into **weight groups** that gather related facets together, so the group subtotal encodes the relative emphasis placed on that facet of the hazard.
+The weights express the relative contribution of the selected indicators to each composite.
 
 ### 6.4 Bundle-by-Bundle Metric Weights
 
-The tables below give the full component weighting for each thematic bundle. Each metric's final weight is the product of its **group weight** (shown in the sub-header) and its **share of that group**:
-
-$$w_m = (\text{group weight}) \times (\text{share of group})$$
-
-<!-- In every bundle except Drought Risk the group is split *equally* among its members, so the share is simply $1/n$ for a group of $n$ metrics (e.g. each of the three metrics in Heat Risk's 0.200 "Mean & Background Heat" group takes a $1/3$ share → $0.200 \times \tfrac13 = 0.0667$). Drought Risk is the one exception, with an unequal $2/5$–$3/5$ split inside each timescale (below). Every bundle's final weights sum to 1.000. -->
+The tables give the effective weights of the indicators used in each composite when all contributing values are available. They are obtained by dividing each configured contributing weight by the total configured contributing weight for that bundle. Percentages are rounded for display; the calculations retain full precision. Indicators defined elsewhere in this note but absent from these tables do not contribute to these thematic scores.
 
 #### Heat Risk
 
-| Weight group | Metric | Share of group | Weight |
-|---|---|---|---|
-| **Mean & Background Heat (0.200)** | Annual Mean Temperature (TM) | 1/3 | 0.0667 |
-| | Summer Max Temperature (MAM) | 1/3 | 0.0667 |
-| | Summer Mean Temperature (MAM) | 1/3 | 0.0667 |
-| **Extremes (0.250)** | Annual Maximum Temperature (TXx) | 1/3 | 0.0833 |
-| | Warm Nights (TN90p) | 1/3 | 0.0833 |
-| | Heatwave Amplitude | 1/3 | 0.0833 |
-| **Threshold-based Frequency (0.200)** | Hot Days (TX ≥ 30°C) | 1/3 | 0.0667 |
-| | Extreme Heat Days (TX ≥ 35°C) | 1/3 | 0.0667 |
-| | Tropical Nights (TN > 25°C) | 1/3 | 0.0667 |
-| **Percentile Extremes (0.150)** | Heat Wave Frequency Index (days) | 1/2 | 0.0750 |
-| | Heat Wave Frequency (events) | 1/2 | 0.0750 |
-| **Heatwave Characteristics (0.200)** | Warm Spell Duration Index (WSDI) | 1/3 | 0.0667 |
-| | Warmest Night (TNx) | 1/3 | 0.0667 |
-| | Hot Days (TX90p) | 1/3 | 0.0667 |
+| Contributing indicator | Effective weight |
+|---|---:|
+| Annual Mean Temperature (TM) | 10.5263% |
+| Summer Max Temperature (MAM) | 10.5263% |
+| Summer Mean Temperature (MAM) | 10.5263% |
+| Annual Maximum Temperature (TXx) | 13.1579% |
+| Heatwave Amplitude | 13.1579% |
+| Hot Days (TX ≥ 30°C) | 10.5263% |
+| Extreme Heat Days (TX ≥ 35°C) | 10.5263% |
+| Tropical Nights (TN > 25°C) | 10.5263% |
+| Warmest Night (TNx) | 10.5263% |
 
 #### Heat Stress
 
-| Weight group | Metric | Share of group | Weight |
-|---|---|---|---|
-| **Background humid heat (0.200)** | Wet-Bulb Temperature (Annual Mean) | 1/2 | 0.1000 |
-| | Wet-Bulb Temperature (Summer Mean, MAM) | 1/2 | 0.1000 |
-| **Extreme / threshold humid heat (0.400)** | Wet-Bulb Temperature (Annual Max) | 1/3 | 0.1333 |
-| | Heat Stress Days (Twb ≥ 28°C) | 1/3 | 0.1333 |
-| | Wet-Bulb Days (Twb ≥ 30°C) | 1/3 | 0.1333 |
-| **Night-time recovery stress (0.200)** | Tropical Nights (TN > 28°C) | 1/2 | 0.1000 |
-| | Warm Nights (TN90p) | 1/2 | 0.1000 |
-| **Persistence (0.200)** | Warm Spell Duration Index (WSDI) | 1/1 | 0.2000 |
+| Contributing indicator | Effective weight |
+|---|---:|
+| Wet-Bulb Temperature (Annual Mean) | 14.2857% |
+| Wet-Bulb Temperature (Summer Mean, MAM) | 14.2857% |
+| Wet-Bulb Temperature (Annual Max) | 19.0476% |
+| Heat Stress Days (Twb ≥ 28°C) | 19.0476% |
+| Wet-Bulb Days (Twb ≥ 30°C) | 19.0476% |
+| Tropical Nights (TN > 28°C) | 14.2857% |
 
 #### Cold Risk
 
-| Weight group | Metric | Share of group | Weight |
-|---|---|---|---|
-| **Background Cold (0.200)** | Winter Mean Temperature (DJF) | 1/2 | 0.1000 |
-| | Winter Min Temperature (DJF) | 1/2 | 0.1000 |
-| **Absolute Extremes (0.200)** | Annual Minimum of Tmin (TNn) | 1/2 | 0.1000 |
-| | Winter Minimum Tmin (DJF) | 1/2 | 0.1000 |
-| **Threshold-based Cold Days (0.250)** | Cold Nights (TN ≤ 10°C) | 1/3 | 0.0833 |
-| | Severe Cold Nights (TN ≤ 5°C) | 1/3 | 0.0833 |
-| | Cold Days (TX ≤ 15°C) | 1/3 | 0.0833 |
-| **Relative Cold (0.150)** | Cool Days (TX10p) | 1/2 | 0.0750 |
-| | Cool Nights (TN10p) | 1/2 | 0.0750 |
-| **Cold Spell Characteristics (0.200)** | Cold Spell Duration Index (CSDI) | 1/2 | 0.1000 |
-| | Consecutive Cold Nights (TN ≤ 10°C) | 1/2 | 0.1000 |
+| Contributing indicator | Effective weight |
+|---|---:|
+| Winter Mean Temperature (DJF) | 13.3333% |
+| Winter Mean of Tmin (DJF) | 13.3333% |
+| Annual Minimum of Tmin (TNn) | 13.3333% |
+| Winter Minimum Tmin (DJF) | 13.3333% |
+| Cold Nights (TN ≤ 10°C) | 11.1111% |
+| Severe Cold Nights (TN ≤ 5°C) | 11.1111% |
+| Cold Days (TX ≤ 15°C) | 11.1111% |
+| Consecutive Cold Nights (TN ≤ 10°C) | 13.3333% |
 
 #### Drought Risk
 
-<!-- Drought Risk is the only bundle with an unequal within-group split: inside each SPI timescale the maximum-spell metric takes a **3/5** share and the event count **2/5**, so duration outweighs frequency. The group weights themselves rise with accumulation window (SPI-12 > SPI-6 > SPI-3), reflecting the greater impact of sustained, long-accumulation drought. -->
+| Contributing indicator | Effective weight |
+|---|---:|
+| Consecutive dry days (precipitation < 1 mm/day) | 100% |
 
-| Weight group | Metric | Share of group | Weight |
-|---|---|---|---|
-| **Seasonal Drought — SPI-3 (0.200)** | SPI-3 drought event count (SPI < −1) | 2/5 | 0.0800 |
-| | SPI-3 maximum drought spell | 3/5 | 0.1200 |
-| **Meteorological Drought — SPI-6 (0.300)** | SPI-6 drought event count (SPI < −1) | 2/5 | 0.1200 |
-| | SPI-6 maximum drought spell | 3/5 | 0.1800 |
-| **Long-term Drought — SPI-12 (0.500)** | SPI-12 drought event count (SPI < −1) | 2/5 | 0.2000 |
-| | SPI-12 maximum drought spell | 3/5 | 0.3000 |
+The published score is CDD transformed through its frozen national ruler. The SPI event and spell indicators do not enter this composite (§6.1).
 
 #### Extreme Rainfall | Flash Flood Risk
 
-| Weight group | Metric | Share of group | Weight |
-|---|---|---|---|
-| **Peak Intensity (0.250)** | Maximum 1-day Precipitation (Rx1day) | 1/2 | 0.1250 |
-| | Maximum 5-day Precipitation (Rx5day) | 1/2 | 0.1250 |
-| **Heavy Rain Frequency (0.250)** | Very Heavy Precipitation Days (R20mm) | 1/1 | 0.2500 |
-| **Very Wet Contribution (0.250)** | Very Wet Day Precipitation (R95p) | 1/2 | 0.1250 |
-| | Very Wet Day Contribution (R95pTOT) | 1/2 | 0.1250 |
-| **Wet-spell Persistence (0.250)** | Consecutive Wet Days (CWD) | 1/1 | 0.2500 |
+| Contributing indicator | Effective weight |
+|---|---:|
+| Maximum 1-day Precipitation (Rx1day) | 16.6667% |
+| Maximum 5-day Precipitation (Rx5day) | 16.6667% |
+| Very Heavy Precipitation Days (R20mm) | 33.3333% |
+| Consecutive Wet Days (CWD) | 33.3333% |
 
 #### Riverine Flood
 
-| Weight group | Metric | Share of group | Weight |
-|---|---|---|---|
-| **Inundation Severity (1.000)** | Flood Severity Index (RP-100) | 1/1 | 1.0000 |
-| **Inundation Depth** (display attribute) | RP-100 Flood Depth | — | 0.0000 |
-| **Inundation Extent** (display attribute) | RP-100 Flood Extent | — | 0.0000 |
+| Contributing indicator | Effective weight |
+|---|---:|
+| Flood Severity Index (RP-100) | 100% |
 
-The Riverine Flood composite is fully determined by the single JRC severity index (§5.5); the depth and extent fields are carried at weight 0 for display and drill-down only and do not affect the score.
+The Riverine Flood composite is the single JRC severity index (§5.5) transformed through its frozen national ruler. Depth and extent remain available for context and do not contribute directly to the score.
 
 ---
 
@@ -667,11 +649,11 @@ The three lenses are not an arbitrary decomposition: each answers a different, c
 
 The **cohort** for the two relative lenses is one `state × level × scenario × period` group: a district is scored against the other districts *of its state*, and a block against the other blocks *of its state* — not only the blocks of its own district, since a single district rarely holds enough blocks for stable deciles. The impact lens needs no cohort; it reads each value against a fixed band.
 
-**Absolute lens — $S_{\text{abs}}$.** The current-period metric value is scaled across the geography set $G$ (the districts, or blocks, of one state) by a **robust p10–p90 rescaling**, not the full min–max of §6. With $q_{10}, q_{90}$ the 10th and 90th percentiles of the finite values over $G$:
+**Absolute lens — $S_{\text{abs}}$.** The current-period metric value is scaled across the geography set $G$ (the districts, or blocks, of one state) by a **robust p10–p90 rescaling**. This sectoral lens uses a local cohort, unlike the frozen national mappings for the six thematic composites in §6. With $q_{10}, q_{90}$ the 10th and 90th percentiles of the finite values over $G$:
 
 $$S_{\text{abs},i} = \operatorname{clip}\!\left(\frac{v_i - q_{10}}{q_{90} - q_{10}},\; 0,\; 1\right)\times 100$$
 
-Clipping at the deciles damps the influence of single-cell outliers on the spatial scale. If $q_{90}\approx q_{10}$ (a spatially flat field) every valid row receives **50**; rows with no finite value are NaN. This robust-quantile choice is the chief normalization difference between the sectoral and thematic frameworks: §6 uses $p_0$–$p_{100}$ (min–max), §7 uses $p_{10}$–$p_{90}$.
+Clipping at the deciles damps the influence of outliers on this spatial scale. The sectoral absolute lens is relative to the selected cohort; the thematic reference in §6 remains fixed across states and periods.
 
 **Change lens — $S_{\text{chg}}$.** The lens first forms a per-geography change of the future value against its 1990–2010 baseline column, then scales those *change magnitudes* across $G$ with the same robust p10–p90 scaler. The change mode is metric-dependent:
 
@@ -698,7 +680,7 @@ so a rule whose change lens is unavailable is scored on absolute (+impact) alone
 
 $$\text{Composite}_b = \frac{\sum_{r\in R_b} W_r\, S_r}{\sum_{r\in R_b} W_r}, \qquad f_b = \!\!\sum_{r:\,S_r\text{ finite}}\!\! W_r$$
 
-where $f_b$ is the **available-rule-weight fraction** (the share of total rule weight that resolved to a valid score). A composite is published only if $f_b \ge 0.70$ **and** at least one rule is present; otherwise it is set to NaN. The 0.70 floor prevents a sector score from being asserted when nearly a third of its weighted evidence base is missing — a stricter posture than the thematic "≥ 1 component" gate of §6.3, appropriate because sectoral rules are fewer and individually more consequential. Both $f_b$ and the available-rule count are persisted with every composite. -->
+where $f_b$ is the available-rule-weight fraction. The sectoral coverage policy is separate from the thematic indicator-coverage requirements in §6.3. -->
 
 ### 7.3 Reading the Score: What Each Lens Lets You Compare
 
@@ -843,7 +825,7 @@ Captures the direct human-exposure hazards: extreme one- and five-day rainfall (
 
 The **composite score** is the published output of every bundle, thematic and sectoral alike: one 0–100 *higher-is-worse* number per admin unit, scenario, and period. The two construction methods of §6 and §7 differ internally but emit the same object, so a dashboard or export treats all bundle scores uniformly. It is a **hazard-pressure index, not a risk estimate** — that framing and its consequences are set out in §1 and §7 and not repeated here. For interpretation the 0–100 range is banded into three tiers — **low (0–33.3), moderate (33.3–66.6), high (66.6–100)** — used consistently wherever the score is classified. This section covers how to read the number across the scenario, period, and spatial-level dimensions.
 
-**Why two construction methods?** The two bundle families answer different questions from different inputs, so one recipe would serve neither well. A *thematic* bundle portrays a single hazard family: its metrics all measure facets of the same phenomenon (heat, or drought, or extreme rainfall), are physically kindred, and can be put on one relative scale and averaged (§6). Its purpose is breadth — a fast, purely relative screen of where a given hazard runs worst across a state. A *sectoral* bundle answers a narrower, decision-facing question — how much climate hazard pressure one sector faces — and to do so it deliberately draws metrics from *across* hazard families (for example extreme heat, dry spells, and one-day rainfall in the same bundle). Those metrics are not commensurable, so co-normalizing and averaging them the thematic way would blur unlike hazards into one indistinct number. A sector user also needs more than a ranking: whether a value has crossed a recognised danger threshold, and how fast it is worsening — signals a purely relative average discards by design. The sectoral method therefore scores each hazard through a blended rule that adds an absolute *impact* lens (distance into a fixed harm band) and a *change* lens (trajectory versus the 1990–2010 baseline) on top of the relative ranking (§7). The methods stay separate because the questions, the inputs, and the required readings genuinely differ; they converge only at the output, each emitting the same 0–100 number so everything downstream treats them alike.
+**Why two construction methods?** The thematic composites summarise selected indicators of one hazard family using fixed national mappings and a weighted mean (§6). This supports comparisons on a consistent reference scale. Sectoral bundles combine pressures from several hazard families and evaluate each through the absolute, change, and impact lenses described in §7. Both return a 0–100 hazard-pressure score, but their reference scales and interpretation differ; sharing a numeric range does not make scores from different bundles equivalent.
 
 ### 8.1 Scenario and Period Handling
 
@@ -859,9 +841,9 @@ The published combinations differ between the Thematic and Sectoral bundles:
 
 `Current` is **not** a modeled near-present period — it is the fixed label under which a single *static* snapshot is filed, and only the **Riverine Flood** bundle uses it: one `Snapshot` value with no scenario and no future-period dimension (§2.2, §5.5/§6.2). The climate (SSP) thematic bundles have no `Current` output; their scores exist only for the three future windows. The sectoral method likewise publishes no historical or `Current` period — for it, the 1990–2010 window enters only as the change-lens *baseline* (§7.2), never as an output column.
 
-**Comparability:** Both methods rescale each unit *within its cohort* — the other units at the same level, in the same state, for that scenario and period. Because the yardstick is the cohort and not a fixed physical scale, composite scores are **not** directly comparable across periods or states, despite sharing the 0–100 range:
+**Comparability:** The thematic and sectoral methods have different comparison rules:
 
-- **Thematic** composites are re-normalized on each period's own spatial min–max. A unit scoring 70 in `2040-2060` and 70 in `2060-2080` is "near the top of its state's spread *in each of those periods*" — it is **not** a statement that the hazard is unchanged between them, nor that the two 70s denote the same physical magnitude. Only the *within-period* ranking of units is strictly valid.
+- **Thematic** scores for the six frozen-ruler bundles share a fixed scale across states and periods when the bundle definition and reference version are unchanged. A change in score reflects a change in evaluated inputs or their availability, rather than a refitted state-level scale. Equal composite scores can arise from different combinations of indicators, and partial Heat Risk coverage should be considered (§6.3). A score of 80 in one bundle is not equivalent to 80 in another; neither denotes an event probability or expected loss.
 - **Sectoral** composites blend relative lenses (absolute, change) with the absolute impact lens, so only the **impact component** carries genuine cross-period and cross-state meaning; the blended number mixes ranking and danger and must be read with the lens decomposition (§7.3) when comparing across periods or states.
 
 ### 8.2 District vs Block Resolution Behaviour
@@ -871,13 +853,13 @@ Both district (ADM2) and block (ADM3) composites are computed **independently fr
 Two resolution effects follow:
 
 - **Grid coverage.** A district overlaps many 0.25° cells; a small block may overlap only one or two. Each grid point is treated as a 0.25° square *tile*, and these tiles cover the whole map with no gaps — so a block is never left "between" grid points and always receives a value. A block smaller than one cell sits entirely inside a single tile and simply **takes that one cell's value**; any other small blocks falling inside the same cell take the *same* value. Block-level scores therefore cannot resolve contrast finer than the ~25 km cell: they inherit more spatial variability, are more sensitive to individual grid-cell values, and are more exposed to distortions where a cell straddles a boundary and only partly covers the unit. This is a property of the native grid, not a defect of the aggregation.
-- **Cohort separation.** The normalization cohort (per-period for thematic, the absolute/change lens cohort for sectoral) is the set of units *at that level within the state* (§6.2/§7.2). District scores and block scores are thus normalized against **different cohorts**: a district scoring 80 and a block scoring 80 are not on the same scale, and the two levels should not be cross-compared unit-to-unit. Each level is internally consistent; they are parallel views, not a single nested hierarchy of scores.
+- **Scoring across levels.** For the six frozen-ruler thematic composites, districts and blocks use the same component mappings. Equal physical indicator values receive equal component scores. However, the mappings are nonlinear, so an area-weighted average of block scores generally does not reproduce the district score obtained from district-level physical inputs. The levels share a reference scale without their composite scores forming an additive hierarchy. Sectoral absolute/change lenses retain their separate state-and-level cohorts (§7.2).
 
 ---
 
 ## Appendix A: Complete Metric Reference
 
-The tables below list every metric that feeds a bundle. Sections A.1–A.5 cover the metrics that appear in a thematic bundle weight entry; **A.6** adds the source metrics used only by the sectoral bundles (§7). Metrics shared across bundles appear once with all bundles noted. Columns: **Slug** (canonical pipeline identifier), **Label** (display name), **Variable(s)** (NEX-GDDP-CMIP6 input or external source), **Definition** (how the annual value is computed), **Units**, **Baseline** (period for percentile/distribution fitting, where applicable), **Bundle(s)**.
+The tables below describe the available thematic and sectoral indicators. Inclusion in this catalogue does not imply contribution to a thematic composite: §6.4 defines those contributing sets. Sections A.1–A.5 cover the thematic indicator families; A.6 lists additional sectoral inputs, including CDD, which also determines the current thematic Drought Risk score. Metrics shared across bundles retain their uses in the Bundle(s) column.
 
 Abbreviations: DOY = day-of-year percentile threshold; MAM = March–May; DJF = December–January–February; MoM = Method of Moments.
 
@@ -964,7 +946,7 @@ These metrics feed the sectoral bundles (§7) but are not part of any thematic b
 
 | Label | Definition | Units | Baseline | Bundle(s) |
 |---|---|---|---|---|
-| Consecutive dry days (CDD) | Maximum run of consecutive days with precipitation < 1 mm in the year (a "dry day" is `pr` < 1 mm; Climdex CDD) | days | — | Industrial, Investment, Asset (Thermal), Asset (Hydropower), Life & Livelihood |
+| Consecutive dry days (CDD) | Maximum run of consecutive days with precipitation < 1 mm in the year (a dry day is `pr` < 1 mm; Climdex CDD) | days | — | Drought Risk; Industrial, Investment, Asset (Thermal), Asset (Hydropower), Life & Livelihood |
 | Extremely wet-day precipitation (R99p) | Annual total precipitation on days exceeding the 99th percentile of baseline wet-day precipitation (wet day ≥ 1 mm; ETCCDI R99p) | mm | 1990–2010 | Investment |
 | SPI-3 moderate-drought months | Annual count of calendar months with 3-month SPI below −1, period-mean rolled up. A persistence/low-flow proxy, distinct from the SPI-3 *event-count* and *max-spell* metrics in A.3 | months | 1990–2010 (SPI calibration) | Asset (Thermal) |
 | R95p inter-annual variability (CV) | Coefficient of variation (σ ⁄ μ) of annual R95p very-wet-day totals across the years within the selected future period; an inflow-predictability proxy. The R95p p95 threshold uses the baseline distribution, but the CV itself is computed across the future-period years, not against the baseline | ratio (dimensionless) | 1990–2010 (R95p threshold) | Asset (Hydropower) |

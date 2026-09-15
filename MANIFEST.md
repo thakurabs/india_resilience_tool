@@ -239,7 +239,7 @@ Aqueduct methodology note:
 | `landing_runtime.py` | Climate-hazard landing/discovery orchestrator that loads persisted optimized Glance view models only, plus state transitions and Deep Dive handoff |
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
 | `main.py` | Package Streamlit entrypoint |
-| `assets/` | Packaged committed HTML assets, including `read_the_docs.html` for the top-level Read the Docs dashboard view |
+| `assets/` | Packaged committed HTML assets, including self-contained `read_the_docs.html`, which opens directly in a browser offline and also backs the Read the Docs dashboard view |
 | `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
 | `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline, including fine-grain drill-down guards and rankings-only fast paths |
 | `master_cache.py` | Streamlit session-state cache for master CSV + schema loading |

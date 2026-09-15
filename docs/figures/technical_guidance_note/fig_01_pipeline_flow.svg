@@ -54,7 +54,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="989.0" y="136.0" class="label" text-anchor="middle">Bundle construction</text>
 <rect x="900" y="150" width="178" height="64" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
 <text x="989.0" y="174.0" class="label" text-anchor="middle" data-box="900,150,178,64">Thematic</text>
-<text x="989.0" y="197.0" class="small" text-anchor="middle" data-box="900,150,178,64">co-normalized metrics</text>
+<text x="989.0" y="197.0" class="small" text-anchor="middle" data-box="900,150,178,64">frozen national rulers</text>
 <rect x="900" y="226" width="178" height="64" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
 <text x="989.0" y="250.0" class="label" text-anchor="middle" data-box="900,226,178,64">Sectoral</text>
 <text x="989.0" y="273.0" class="small" text-anchor="middle" data-box="900,226,178,64">abs/chg/impact lenses</text>
