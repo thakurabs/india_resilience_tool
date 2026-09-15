@@ -153,6 +153,30 @@
   .crumb-sep { color: var(--ink-3); }
   .crumb-note { flex-basis: 100%; font-size: 11px; color: var(--ink-3); line-height: 1.35; }
 
+  /* ---------- map navigation ----------
+     IRT's MapLibre canvas already pans and zooms. The SVG stand-in must not be
+     shown to the vendor having LOST a capability their product already has, so
+     this is parity, not a departure -- and therefore carries no change marker. */
+  .mapnav { position: absolute; right: 16px; top: 12px; z-index: 7;
+            display: flex; flex-direction: column; gap: 6px; }
+  .mapnav button { width: 32px; height: 32px; display: flex; align-items: center;
+                   justify-content: center; padding: 0; cursor: pointer;
+                   background: rgba(255,255,255,.96); border: 1px solid var(--rule);
+                   border-radius: 7px; color: var(--head); font: inherit;
+                   font-size: 17px; line-height: 1;
+                   box-shadow: 0 2px 10px rgba(16,40,61,.12); }
+  .mapnav button:hover:not(:disabled) { background: #fff; border-color: var(--accent);
+                                        color: var(--accent); }
+  .mapnav button:disabled { color: var(--ink-3); opacity: .55; cursor: default; }
+  .mapnav .navfit { font-size: 14px; margin-top: 2px; }
+  .mapnav .navzoom { font-size: 10.5px; color: var(--ink-3); text-align: center;
+                     background: rgba(255,255,255,.96); border: 1px solid var(--rule);
+                     border-radius: 7px; padding: 3px 0;
+                     box-shadow: 0 2px 10px rgba(16,40,61,.12); }
+  svg.map { cursor: grab; }
+  .mapwrap.panning svg.map, .mapwrap.panning svg.map path { cursor: grabbing; }
+  svg.map:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
   /* ---------- legend, floating bottom-left like IRT's ---------- */
   .cbar { position: absolute; left: 16px; bottom: 16px; z-index: 6;
           background: rgba(255,255,255,.96);
@@ -601,7 +625,17 @@
 
     <div class="mapwrap">
       <svg class="map" id="map" preserveAspectRatio="xMidYMid meet" role="img"
-           aria-label="Choropleth of district bundle scores"></svg>
+           tabindex="0" aria-label="Choropleth of district bundle scores"></svg>
+      <div class="mapnav" role="group" aria-label="Map navigation">
+        <button type="button" id="nav-in" title="Zoom in (+)" aria-label="Zoom in">&#43;</button>
+        <button type="button" id="nav-out" title="Zoom out (−)" aria-label="Zoom out">&#8722;</button>
+        <div class="navzoom" id="nav-zoom">1.0&#215;</div>
+        <button type="button" class="navfit" id="nav-fit"
+                title="Fit the selected geography back into view (0)"
+                aria-label="Fit selection to view"><svg width="15" height="15" viewBox="0 0 16 16"
+                aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round"><path d="M1.6 5.2V1.6h3.6M10.8 1.6h3.6v3.6M14.4 10.8v3.6h-3.6M5.2 14.4H1.6v-3.6"/><rect x="5.6" y="5.6" width="4.8" height="4.8" rx="1"/></svg></button>
+      </div>
       <div class="map-ctxbar" data-delta="1">
         <div class="maphead">
           <h2 id="map-title">National view</h2>
@@ -1357,7 +1391,7 @@
     built = true;
   }
 
-  function viewBox() {
+  function baseViewBox() {
     if (S.view === "india") return [0, 0, D.width, D.height];
     var ds = S.view === "district"
       ? (byKey[S.district] ? [byKey[S.district]] : [])
@@ -1375,6 +1409,139 @@
     if (w / h > ar) { var nh = w / ar; y0 -= (nh - h) / 2; h = nh; }
     else { var nw = h * ar; x0 -= (nw - w) / 2; w = nw; }
     return [x0, y0, w, h];
+  }
+
+  /* ---------- pan / zoom ----------
+     The selection-derived extent above stays the BASE: NAV is a transform laid
+     over it. So "fit" is always exactly the geography the user selected, and
+     changing geography drops the transform rather than stranding the reader in
+     an extent that no longer exists. Everything that compensates for map zoom
+     (context circles, stipple grain) reads viewBox(), so it follows for free. */
+  var NAV = { z: 1, ox: 0, oy: 0, sig: "", drag: null, moved: false };
+  var NAV_MIN = 0.5, NAV_MAX = 16;
+
+  function viewBox() {
+    var b = baseViewBox(), sig = b.join(",");
+    if (sig !== NAV.sig) { NAV.sig = sig; NAV.z = 1; NAV.ox = 0; NAV.oy = 0; }
+    var w = b[2] / NAV.z, h = b[3] / NAV.z;
+    var mx = b[2] / 2, my = b[3] / 2;
+    /* pan is bounded by the base extent's own half-width: you can look past the
+       edge of the selection, never lose it off-screen entirely */
+    if (NAV.ox > mx) NAV.ox = mx;
+    if (NAV.ox < -mx) NAV.ox = -mx;
+    if (NAV.oy > my) NAV.oy = my;
+    if (NAV.oy < -my) NAV.oy = -my;
+    return [b[0] + mx + NAV.ox - w / 2, b[1] + my + NAV.oy - h / 2, w, h];
+  }
+
+  /* preserveAspectRatio="xMidYMid meet" letterboxes the viewBox inside the
+     element, so screen<->user conversion must use the FITTED scale, not the
+     element width, or a drag runs away from the pointer. */
+  function mapScale(vb, rect) {
+    return Math.min(rect.width / vb[2], rect.height / vb[3]);
+  }
+
+  function clientToUser(cx, cy) {
+    var rect = svg.getBoundingClientRect(), vb = viewBox(), s = mapScale(vb, rect);
+    if (!(s > 0)) return null;
+    return { x: vb[0] + (cx - rect.left - (rect.width - vb[2] * s) / 2) / s,
+             y: vb[1] + (cy - rect.top - (rect.height - vb[3] * s) / 2) / s };
+  }
+
+  function syncNavButtons() {
+    var zin = document.getElementById("nav-in");
+    if (!zin) return;
+    zin.disabled = NAV.z >= NAV_MAX - 1e-9;
+    document.getElementById("nav-out").disabled = NAV.z <= NAV_MIN + 1e-9;
+    document.getElementById("nav-fit").disabled = NAV.z === 1 && !NAV.ox && !NAV.oy;
+    document.getElementById("nav-zoom").textContent =
+      (Math.round(NAV.z * 10) / 10).toFixed(1) + "\u00d7";
+  }
+
+  /* rescaled=true only on zoom: panning cannot change ctxZoom(), so it must not
+     pay for a full repaint of the overlay on every pointermove */
+  function applyNav(rescaled) {
+    svg.setAttribute("viewBox", viewBox().join(" "));
+    if (rescaled && S.ctxLayer) { paintMap(); renderContextLayer(); }
+    syncNavButtons();
+  }
+
+  function navZoom(factor, pt) {
+    var b = baseViewBox(), vb = viewBox(), z = NAV.z * factor;
+    if (z > NAV_MAX) z = NAV_MAX;
+    if (z < NAV_MIN) z = NAV_MIN;
+    if (Math.abs(z - NAV.z) < 1e-9) return;
+    var cx = vb[0] + vb[2] / 2, cy = vb[1] + vb[3] / 2, k = NAV.z / z;
+    /* hold the pointed-at place still under the cursor */
+    if (pt) { cx = pt.x + (cx - pt.x) * k; cy = pt.y + (cy - pt.y) * k; }
+    NAV.z = z;
+    NAV.ox = cx - (b[0] + b[2] / 2);
+    NAV.oy = cy - (b[1] + b[3] / 2);
+    applyNav(true);
+  }
+
+  function navFit() { NAV.z = 1; NAV.ox = 0; NAV.oy = 0; applyNav(true); }
+
+  function buildMapNav() {
+    var wrap = document.querySelector(".mapwrap");
+    document.getElementById("nav-in").addEventListener("click", function () { navZoom(1.5, null); });
+    document.getElementById("nav-out").addEventListener("click", function () { navZoom(1 / 1.5, null); });
+    document.getElementById("nav-fit").addEventListener("click", navFit);
+
+    svg.addEventListener("wheel", function (ev) {
+      ev.preventDefault();
+      navZoom(ev.deltaY < 0 ? 1.18 : 1 / 1.18, clientToUser(ev.clientX, ev.clientY));
+    }, { passive: false });
+
+    svg.addEventListener("pointerdown", function (ev) {
+      if (ev.button !== 0) return;
+      NAV.drag = { x: ev.clientX, y: ev.clientY, ox: NAV.ox, oy: NAV.oy, id: ev.pointerId };
+      NAV.moved = false;
+      if (svg.setPointerCapture) svg.setPointerCapture(ev.pointerId);
+      wrap.classList.add("panning");
+    });
+
+    svg.addEventListener("pointermove", function (ev) {
+      if (!NAV.drag) return;
+      var dx = ev.clientX - NAV.drag.x, dy = ev.clientY - NAV.drag.y;
+      if (!NAV.moved && Math.abs(dx) + Math.abs(dy) <= 3) return;
+      NAV.moved = true;
+      var s = mapScale(viewBox(), svg.getBoundingClientRect());
+      if (!(s > 0)) return;
+      NAV.ox = NAV.drag.ox - dx / s;
+      NAV.oy = NAV.drag.oy - dy / s;
+      hideTip();
+      applyNav(false);
+    });
+
+    function endDrag(ev) {
+      if (!NAV.drag) return;
+      var id = NAV.drag.id;
+      NAV.drag = null;
+      wrap.classList.remove("panning");
+      if (svg.hasPointerCapture && svg.hasPointerCapture(id)) svg.releasePointerCapture(id);
+      /* the click fires AFTER pointerup, so the suppression flag must outlive
+         this handler by one task or a pan would land as a selection */
+      if (NAV.moved) setTimeout(function () { NAV.moved = false; }, 0);
+    }
+    svg.addEventListener("pointerup", endDrag);
+    svg.addEventListener("pointercancel", endDrag);
+
+    svg.addEventListener("keydown", function (ev) {
+      var step = viewBox()[2] * 0.15, k = ev.key;
+      if (k === "+" || k === "=") { navZoom(1.5, null); ev.preventDefault(); return; }
+      if (k === "-" || k === "_") { navZoom(1 / 1.5, null); ev.preventDefault(); return; }
+      if (k === "0") { navFit(); ev.preventDefault(); return; }
+      if (k === "ArrowLeft") NAV.ox -= step;
+      else if (k === "ArrowRight") NAV.ox += step;
+      else if (k === "ArrowUp") NAV.oy -= step;
+      else if (k === "ArrowDown") NAV.oy += step;
+      else return;
+      ev.preventDefault();
+      applyNav(false);
+    });
+
+    syncNavButtons();
   }
 
   function paintMap() {
@@ -1676,6 +1843,7 @@
   }
 
   function onMapClick(ev) {
+    if (NAV.moved) return;
     var t = ev.target;
     if (!t.dataset || !t.dataset.key || S.view !== "india") return;
     var d = byKey[t.dataset.key];
@@ -1684,6 +1852,7 @@
   }
 
   function onBlockClick(ev) {
+    if (NAV.moved) return;
     var t = ev.target;
     if (!t.dataset || !t.dataset.block || S.view === "india") return;
     var b = blockByKey[t.dataset.block];
@@ -3157,6 +3326,7 @@
     renderContext();
     renderCompare();
     renderGeoPanel();
+    syncNavButtons();
   }
 
   /* ---------- selectors ---------- */
@@ -3236,6 +3406,7 @@
 
   buildSelectors();
   buildGeoPanel();
+  buildMapNav();
   renderDefaultsNote();
   renderMethod();
   render();
