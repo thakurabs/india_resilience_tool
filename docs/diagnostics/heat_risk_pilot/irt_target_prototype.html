@@ -546,6 +546,8 @@
             District</label>
           <label id="lab-block"><input type="radio" name="admlvl" id="lvl-block"> Block</label>
         </div>
+        <label for="geo-parent" id="geo-parent-lab" hidden>Select District</label>
+        <select id="geo-parent" hidden></select>
         <label for="geo-unit" id="geo-unit-lab">Select District</label>
         <select id="geo-unit"></select>
       </div>
@@ -1495,17 +1497,24 @@
 
     svg.addEventListener("pointerdown", function (ev) {
       if (ev.button !== 0) return;
+      /* NO pointer capture here: capturing on pointerdown re-targets the
+         subsequent click to the <svg> itself, and the map's own click handlers
+         read ev.target.dataset.key off the district path. Capture is taken in
+         pointermove, once the movement threshold proves this is a drag and the
+         click is going to be suppressed anyway. */
       NAV.drag = { x: ev.clientX, y: ev.clientY, ox: NAV.ox, oy: NAV.oy, id: ev.pointerId };
       NAV.moved = false;
-      if (svg.setPointerCapture) svg.setPointerCapture(ev.pointerId);
-      wrap.classList.add("panning");
     });
 
     svg.addEventListener("pointermove", function (ev) {
       if (!NAV.drag) return;
       var dx = ev.clientX - NAV.drag.x, dy = ev.clientY - NAV.drag.y;
       if (!NAV.moved && Math.abs(dx) + Math.abs(dy) <= 3) return;
-      NAV.moved = true;
+      if (!NAV.moved) {
+        NAV.moved = true;
+        if (svg.setPointerCapture) svg.setPointerCapture(NAV.drag.id);
+        wrap.classList.add("panning");
+      }
       var s = mapScale(viewBox(), svg.getBoundingClientRect());
       if (!(s > 0)) return;
       NAV.ox = NAV.drag.ox - dx / s;
@@ -3151,6 +3160,14 @@
       else openDistrict(v);
     });
 
+    /* At block level the district picker above it is the parent, not a
+       destination: picking one opens that district so its blocks can be listed. */
+    document.getElementById("geo-parent").addEventListener("change", function (ev) {
+      var v = ev.target.value;
+      if (!v) { goState(); return; }
+      openDistrict(v);
+    });
+
     ["lvl-district", "lvl-block"].forEach(function (id) {
       document.getElementById(id).addEventListener("change", function () {
         if (admLevel() === "district") { S.block = null; S.da = null; }
@@ -3233,20 +3250,42 @@
     document.getElementById("geo-unit-lab").textContent =
       lvl === "block" ? "Select Block" : "Select District";
 
+    /* Blocks are chosen WITHIN a district -- the same administration that the
+       ranked list uses -- so block level exposes its parent district first
+       rather than a flat state-wide list of every block. */
+    var par = document.getElementById("geo-parent");
+    var parLab = document.getElementById("geo-parent-lab");
+    var showParent = lvl === "block" && !!S.state;
+    par.hidden = !showParent;
+    parLab.hidden = !showParent;
+    if (showParent) {
+      var popts = "<option value=''>Select District</option>";
+      (statesOf[S.state] || []).slice()
+        .sort(function (a, b) { return a.n < b.n ? -1 : a.n > b.n ? 1 : 0; })
+        .forEach(function (d) {
+          popts += "<option value=\"" + escAttr(d.k) + "\">" + esc(d.n) + "</option>";
+        });
+      par.innerHTML = popts;
+      par.value = S.district || "";
+    }
+
     var opts;
     if (!S.state) {
       opts = "<option value=''>Select a State/UT first</option>";
       un.disabled = true;
     } else if (lvl === "block") {
-      opts = "<option value=''>Select Block</option>";
-      D.blocks.filter(function (b) { return b.s === S.state; })
-        .slice().sort(function (a, b) { return a.n < b.n ? -1 : a.n > b.n ? 1 : 0; })
-        .forEach(function (b) {
-          var p = byKey[b.dk];
-          opts += "<option value=\"" + escAttr(b.k) + "\">" + esc(b.n) +
-            (p ? " — " + esc(p.n) : "") + "</option>";
-        });
-      un.disabled = false;
+      if (!S.district) {
+        opts = "<option value=''>Select a district first</option>";
+        un.disabled = true;
+      } else {
+        opts = "<option value=''>Select Block</option>";
+        (blocksOfDistrict[S.district] || []).slice()
+          .sort(function (a, b) { return a.n < b.n ? -1 : a.n > b.n ? 1 : 0; })
+          .forEach(function (b) {
+            opts += "<option value=\"" + escAttr(b.k) + "\">" + esc(b.n) + "</option>";
+          });
+        un.disabled = false;
+      }
     } else {
       opts = "<option value=''>Select District</option>";
       (statesOf[S.state] || []).slice()
@@ -3266,8 +3305,9 @@
       hint.textContent = "India is open. Pick a State/UT to go down a level — " +
         "or click the map.";
     } else if (S.view === "state") {
-      hint.textContent = S.state + " is open at district level. Pick a district to open " +
-        "its blocks.";
+      hint.textContent = lvl === "block"
+        ? S.state + " is open. Pick the district first — blocks are listed within it."
+        : S.state + " is open at district level. Pick a district to open its blocks.";
     } else if (S.block) {
       hint.textContent = "A block is selected. Its profile is on the right.";
     } else {
