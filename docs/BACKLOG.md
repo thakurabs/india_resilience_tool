@@ -41,6 +41,18 @@ Entry fields:
 
 ## Next
 
+### BL-0028 — Reconcile Read the Docs coverage (review Finding 2)
+- `Area`: documentation, thematic bundles
+- `Why deferred`: resolve Finding 1 (thematic scoring methodology) first.
+- `Dependency / trigger`: resume after the Finding 1 guidance text and figures are approved and reconciled; include standalone HTML in the review.
+- `Done when`: Section 8.1 matches the supported historical/future/static outputs, includes static Water Risk alongside Riverine Flood, and states Water Risk's district-only scope; claims that all bundles support both administrative levels are corrected. Verify against current configuration and published slice contracts.
+
+### BL-0029 — Verify and correct narrow-screen documentation navigation (review Finding 3)
+- `Area`: Read the Docs HTML, responsive navigation
+- `Why deferred`: resolve Finding 1 first; the scrolling-container mismatch remains a suspected browser behavior, not a confirmed reproduction.
+- `Dependency / trigger`: resume after Finding 1; test standalone HTML below and above the 760px breakpoint.
+- `Done when`: browser checks confirm subsection links, citation jumps, search-result navigation, and Back to top use the actual scrolling container at each width. Correct the mismatch if reproduced: narrow-screen CSS scrolls `.doc-shell` while JavaScript currently targets `.content-scroll`.
+
 ### BL-0004 — Build the weighted admin ↔ hydro translation engine
 - `Area`: crosswalk, analytics
 - `Why deferred`: current crosswalks are intentionally read-optimized and explanatory, not analytical transfer engines.
