@@ -1035,6 +1035,42 @@ discard the Detailed Analysis configuration, which is restored on the next cross
 Overview's one-axis rule governs what may be shown side by side on the screening surface, never
 what the user is allowed to have collected.
 
+#### One feature, three selection shapes
+
+IRT's deployed `Compare Portfolio` and the Overview's comparison are **the same feature**, not two.
+Both are fed by the same act, `Add to Analysis` into `My Portfolio`, and both read that one
+collection. What differs is only how many axes are allowed to vary at once:
+
+```text
+Overview, places     place varies (up to 4 columns); scenario and period pinned to the header
+Overview, futures    scenario-and-period varies (up to 4 columns); the place pinned to one member
+Detailed Analysis    place, scenario and period all vary — IRT's existing flat table, unchanged
+```
+
+The Overview form is IRT's table with two of its three selectors pinned. It is the same data path
+and the same request, over a narrower choice. The vendor does not build a second comparison
+screen; the existing one gains a constrained front. Columns rather than rows follow from the cap,
+not from a design disagreement: at four or fewer, columns read side by side; past four, a flat
+table is right, and that is where Detailed Analysis takes over.
+
+The one-axis rule binds the **screening surface only**. The wide form, in which a row can differ
+from its neighbour in two ways at once, stays available in Detailed Analysis, where the user has
+chosen multivariate work and the surface can label it.
+
+Three things the deployed feature must change to meet this contract:
+
+- **A selection change never removes a member, on any surface.** Today the deployed portfolio is
+  discarded on an Administrative-to-Coordinate switch (QA finding B4) — the same fault this
+  section's separation of portfolio from comparison configuration removes. The stable identifier
+  is what de-duplicates a member; the site name is a label, which settles QA finding C4 (one
+  coordinate under two names became two rows).
+- **Every column carries the band and the scoped rank string** (`18 of 33 districts in
+  Telangana`), never a bare or sortable rank number. Neither the band nor the rank denominator is
+  in the table endpoint's response today; either the table gains both, or the vendor derives the
+  band from the shipped ruler artifact. This must be stated to the vendor explicitly.
+- **Scores come from the frozen national ruler**, so the same place is the same number on every
+  surface. Under the deployed per-State normalization it is not.
+
 Adding a member is one control, `Add to Analysis`, wherever a unit is already named — the State/UT
 headline, the district and block panels, a ranked row, the Ranking Table, and geography search. No
 separate picker is introduced. The set it adds to is `My Portfolio`. That `Add to Analysis` feeds
