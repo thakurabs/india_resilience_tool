@@ -1207,7 +1207,7 @@
      shortlist of nine places is an ordinary thing to have, and the Overview's
      job is to say which four of them are on screen, not to refuse the other
      five. */
-  function cmpIdentity(member) { return member.level + ":" + member.key; }
+  function cmpIdentity(member) { return member.site_id ? "site:" + member.site_id : member.level + ":" + member.key; }
   function pfIndex(member) {
     var id = cmpIdentity(member);
     for (var i = 0; i < S.portfolio.length; i++) {
@@ -2510,7 +2510,7 @@
 
   function daComparisonHtml() {
     var a = S.advanced;
-    var places = S.portfolio.map(function (m) { return [cmpIdentity(m), m.name + " (" + m.level + ")"]; });
+    var places = S.portfolio.map(function (m) { return [cmpIdentity(m), m.name + " (" + siteBasis(m) + ")"]; });
     var metrics = [["", "Composite hazard score"]].concat(Object.keys(D.metric_labels).map(function (k) { return [k, metricLabel(k)]; }));
     var futures = [];
     Object.keys(D.scenario_labels).forEach(function (sc) {
@@ -3072,51 +3072,125 @@
     { lat: 19.6640, lon: 78.5320, block: "telangana|adilabad|adilabad urban", label: "Adilabad" }
   ];
 
+  var siteDraft = null;
+  var siteCsvDraft = "";
+  var siteSequence = 0;
+  var SITE_EXAMPLE = "name,latitude,longitude\nFactory A,17.9784,79.5941\nFactory B,17.9784,79.5941\nDepot,17.3850,78.4867\nFactory A,17.9784,79.5941\nInvalid site,NaN,79.5";
+
+  /* Exact fixture matching only: this is not a spatial boundary lookup. */
+  function siteBlock(lat, lon) {
+    return COORD_DEMO.find(function (c) { return c.lat === lat && c.lon === lon; });
+  }
+  function siteFingerprint(name, lat, lon) {
+    return JSON.stringify([name.trim().replace(/\s+/g, " ").toLowerCase(), lat, lon]);
+  }
+  function siteBasis(m) {
+    return m.site_id ? "Site · " + m.coord.lat + ", " + m.coord.lon +
+      " · Block assessment: " + (blockByKey[m.key] ? blockByKey[m.key].n : m.key) + " · " + m.parent
+      : m.level + " · " + m.parent;
+  }
+  /* CSV accepts quoted fields, escaped quotes and CRLF. Malformed quoting fails
+     the review without altering the working portfolio. */
+  function siteCsv(text) {
+    var rows = [], row = [], field = "", quoted = false, closed = false;
+    text = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+    for (var i = 0; i <= text.length; i++) {
+      var c = i === text.length ? "\n" : text[i];
+      if (quoted) {
+        if (i === text.length) throw new Error("Unclosed quoted field.");
+        if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+        else if (c === '"') { quoted = false; closed = true; }
+        else field += c;
+      } else if (c === ',' || c === '\n') {
+        row.push(field); field = ""; closed = false;
+        if (c === '\n') { if (row.some(function (x) { return x.trim(); })) rows.push(row); row = []; }
+      } else if (c === '"' && !field && !closed) quoted = true;
+      else { if (closed || c === '"') throw new Error("Malformed quoted field."); field += c; }
+    }
+    return rows;
+  }
+  function siteReview(text) {
+    var rows;
+    try { rows = siteCsv(text); } catch (e) { return { rows: [], error: e.message }; }
+    if (!rows.length || rows[0].map(function (x) { return x.trim().toLowerCase(); }).join(",") !== "name,latitude,longitude") {
+      return { rows: [], error: "Use the header name,latitude,longitude followed by at least one site." };
+    }
+    var seen = {};
+    S.portfolio.forEach(function (m) {
+      if (m.site_id) seen[siteFingerprint(m.name, m.coord.lat, m.coord.lon)] = m.name;
+    });
+    var out = rows.slice(1).map(function (r, i) {
+      var name = (r[0] || "").trim(), la = Number(r[1]), lo = Number(r[2]);
+      var x = { row: i + 2, name: name, status: "error", reason: "" };
+      if (r.length !== 3 || !name || !r[1].trim() || !r[2].trim() || !Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) {
+        x.reason = "Supply a name and finite WGS84 latitude (−90 to 90) / longitude (−180 to 180)."; return x;
+      }
+      var hit = siteBlock(la, lo);
+      if (!hit || !blockByKey[hit.block]) { x.reason = "No worked block resolution for this coordinate in the prototype; no geography substituted."; return x; }
+      var fingerprint = siteFingerprint(name, la, lo);
+      if (seen[fingerprint]) { x.status = "duplicate"; x.reason = "Repeated name and coordinates: " + seen[fingerprint] + ". Skipped; existing site retained."; return x; }
+      seen[fingerprint] = name;
+      var m = makeCmpMember("Block", hit.block);
+      m.site_id = "local-" + Date.now() + "-" + (++siteSequence);
+      m.name = name; m.coord = { lat: la, lon: lo, site: name };
+      x.member = m; x.status = "ready"; x.reason = siteBasis(m);
+      return x;
+    });
+    out.forEach(function (x) {
+      if (x.status !== "ready") return;
+      var shared = S.portfolio.some(function (m) { return m.key === x.member.key; }) || out.some(function (y) { return y !== x && y.member && y.member.key === x.member.key; });
+      if (shared) x.reason += " · Shares a block with another member: same block-level results, distinct site.";
+    });
+    return { rows: out, error: out.length ? "" : "No site rows. Add at least one site." };
+  }
+  function siteImport() {
+    if (!siteDraft) return;
+    siteDraft.rows.forEach(function (r) {
+      if (r.status !== "ready") return;
+      var exists = S.portfolio.some(function (m) { return m.site_id && siteFingerprint(m.name, m.coord.lat, m.coord.lon) === siteFingerprint(r.member.name, r.member.coord.lat, r.member.coord.lon); });
+      if (exists) { r.status = "duplicate"; r.reason = "Already collected; skipped."; return; }
+      /* Import collects only. The user chooses Overview columns explicitly. */
+      S.portfolio.push(r.member); r.status = "added";
+    });
+    render();
+  }
   function renderCoord() {
     var host = document.getElementById("coord");
-    var out = "";
-    if (S.coord) {
-      out = S.coord.ok
-        ? "<p class='coord-out'>Resolves to <b>" + esc(S.coord.block) + "</b>, " +
-          esc(S.coord.district) + " · " + esc(S.coord.state) + " — opened below.</p>"
-        : "<p class='coord-out'>Outside the scored area of this prototype. In production a " +
-          "reverse-geocode service resolves any coordinate in India to its block.</p>";
+    var h = "<details class='ctx'" + (siteDraft || S.coord ? " open" : "") + "><summary>Analyse a custom location<span class='ctx-for'>named sites and CSV import</span></summary><div class='ctx-body'>" +
+      "<p>Sites stay distinct even when they share a block. Scores, metrics and ranks describe the containing block, not conditions measured at the point. Adding sites collects them without selecting comparison columns.</p>" +
+      "<div class='coord-form'><label>Site name<input id='coord-name' placeholder='Factory A'></label><label>Latitude<input id='coord-lat' placeholder='17.9784'></label><label>Longitude<input id='coord-lon' placeholder='79.5941'></label><button class='btn' id='coord-go'>Review site</button></div>" +
+      "<p><label>Upload CSV <input id='site-file' type='file' accept='.csv,text/csv'></label></p><label>Or paste CSV (name,latitude,longitude)<textarea id='site-csv' rows='6' style='width:100%'></textarea></label><div class='btn-row'><button class='btn ghost' id='site-example'>Load five-row example</button><button class='btn' id='site-review'>Review CSV</button></div>" +
+      "<p class='ctx-prov'>Resolution fixtures only; enter these exact coordinates. Production uses the published block boundaries and flags outside, boundary-ambiguous and unresolved points. " + COORD_DEMO.map(function (c) { return esc(c.label) + " " + c.lat + ", " + c.lon; }).join(" · ") + ".</p>";
+    if (S.coord && S.coord.site) h += "<p role='status'>Inspecting the block assessment for <b>" + esc(S.coord.site) + "</b> · " + esc(S.coord.block) + ". Adding this block from its profile collects the administrative area separately from the site.</p>";
+    if (siteDraft) {
+      h += "<div role='status'><h3>Import review</h3><p>Repeated normalized name and coordinates are skipped. A different name at the same coordinates remains a distinct site. No deduplication by block.</p>";
+      if (siteDraft.error) h += "<p>" + esc(siteDraft.error) + "</p>";
+      h += "<ul>" + siteDraft.rows.map(function (r) { return "<li><b>Row " + r.row + ": " + esc(r.name || "Unnamed") + " — " + esc(r.status) + "</b><br>" + esc(r.reason) + (r.member ? " <button class='btn ghost' data-site-inspect='" + escAttr(r.member.site_id) + "'>Inspect block assessment</button>" : "") + "</li>"; }).join("") + "</ul>";
+      var ready = siteDraft.rows.filter(function (r) { return r.status === "ready"; }).length;
+      h += "<button class='btn' id='site-import'" + (ready ? "" : " disabled") + ">Add " + ready + " ready sites to portfolio</button><p>Review errors remain here. Correct the CSV and review again; previously added sites are skipped. Choose Show in My Portfolio to compare, then Save this analysis to keep the sites.</p></div>";
     }
-    host.innerHTML =
-      "<details class='ctx'" + (S.coord ? " open" : "") + ">" +
-      "<summary>Analyse a custom location" +
-        "<span class='ctx-for'>a site, not a region</span></summary>" +
-      "<div class='ctx-body'>" +
-        "<p class='sub' style='margin:0'>Enter a coordinate to land on the block that " +
-        "contains it, with the same score, metrics and context any other unit gets. " +
-        "File upload of many sites belongs here too.</p>" +
-        "<div class='coord-form'>" +
-          "<label>Latitude<input id='coord-lat' type='text' placeholder='17.9784'></label>" +
-          "<label>Longitude<input id='coord-lon' type='text' placeholder='79.5941'></label>" +
-          "<button type='button' class='btn' id='coord-go'>Resolve</button>" +
-        "</div>" + out +
-        "<p class='ctx-prov'>Worked examples in this prototype: " +
-          COORD_DEMO.map(function (c) { return esc(c.label) + " " + c.lat + ", " + c.lon; })
-            .join(" · ") + ".</p>" +
-      "</div></details>";
-
-    var go = document.getElementById("coord-go");
-    if (!go) return;
-    go.addEventListener("click", function () {
-      var la = parseFloat(document.getElementById("coord-lat").value);
-      var lo = parseFloat(document.getElementById("coord-lon").value);
-      var hit = null;
-      COORD_DEMO.forEach(function (c) {
-        if (Math.abs(c.lat - la) < 0.25 && Math.abs(c.lon - lo) < 0.25) hit = c;
-      });
-      if (!hit || !blockByKey[hit.block]) { S.coord = { ok: false }; render(); return; }
-      var b = blockByKey[hit.block];
-      var parent = byKey[b.dk];
-      S.coord = { ok: true, block: b.n, district: parent ? parent.n : "", state: b.s };
-      S.view = "district"; S.state = b.s; S.district = b.dk; S.block = b.k;
-      S.mode = "map"; S.da = null; S.report = null; S.showAll = false;
+    host.innerHTML = h + "</div></details>";
+    document.getElementById("site-csv").value = siteCsvDraft;
+    document.getElementById("site-example").onclick = function () { siteCsvDraft = SITE_EXAMPLE; document.getElementById("site-csv").value = siteCsvDraft; };
+    document.getElementById("site-review").onclick = function () { siteCsvDraft = document.getElementById("site-csv").value; siteDraft = siteReview(siteCsvDraft); render(); };
+    document.getElementById("coord-go").onclick = function () {
+      var fields = ["coord-name", "coord-lat", "coord-lon"].map(function (id) { return '"' + document.getElementById(id).value.replace(/"/g, '""') + '"'; });
+      siteCsvDraft = "name,latitude,longitude\n" + fields.join(","); siteDraft = siteReview(siteCsvDraft); render();
+    };
+    document.getElementById("site-file").onchange = async function (ev) {
+      var file = ev.target.files[0]; if (!file) return;
+      try { siteCsvDraft = await file.text(); siteDraft = siteReview(siteCsvDraft); }
+      catch (e) { siteDraft = { rows: [], error: "Could not read this file. Select it again or paste CSV." }; }
       render();
-    });
+    };
+    var add = document.getElementById("site-import"); if (add) add.onclick = siteImport;
+    host.querySelectorAll("[data-site-inspect]").forEach(function (el) { el.onclick = function () {
+      var m = siteDraft.rows.find(function (r) { return r.member && r.member.site_id === el.dataset.siteInspect; }).member;
+      var b = blockByKey[m.key];
+      S.coord = { ok: true, block: b.n, site: m.name, lat: m.coord.lat, lon: m.coord.lon };
+      S.view = "district"; S.state = b.s; S.district = b.dk; S.block = b.k;
+      S.mode = "map"; S.da = null; S.report = null; S.showAll = false; render();
+    }; });
   }
 
   /* ================= Compare locations ================= */
@@ -3131,10 +3205,10 @@
       ? facts.rank + " of " + facts.total + " in India"
       : facts.rank + " of " + facts.total + " in " + member.parent;
     if (!compareToBase || !baseFacts || baseFacts.rank === null || baseFacts.rank === undefined) {
-      return scope;
+      return (member.site_id ? "Containing block rank: " : "") + scope;
     }
     var move = facts.rank - baseFacts.rank;
-    return scope + (move < 0 ? " · up " + Math.abs(move)
+    return (member.site_id ? "Containing block rank: " : "") + scope + (move < 0 ? " · up " + Math.abs(move)
       : move > 0 ? " · down " + move : " · unchanged from column 1");
   }
   function cmpBlocksText(member, facts) {
@@ -3155,7 +3229,7 @@
     if (shown.length) {
       return "Places at " + D.scenario_labels[S.scenario] + " " + D.period_labels[S.period] +
         ": " + shown.map(function (m) {
-          return m.name + " (" + m.level + ")";
+          return m.name + " (" + siteBasis(m) + ")";
         }).join("; ") +
         (S.portfolio.length > shown.length
           ? " · " + (S.portfolio.length - shown.length) + " more collected, not displayed"
@@ -3308,6 +3382,17 @@
           options: [] });
         return;
       }
+      if (g.coord) {
+        var resolved = siteBlock(g.coord.lat, g.coord.lon);
+        if (!resolved || resolved.block !== g.key) {
+          unresolved.push({ saved: g.coord.site || g.name_at_save, key: g.key,
+            reason: "Saved site coordinates no longer resolve to the saved block in this release. Review the boundary resolution before comparing this site.",
+            offer: "Review site resolution", options: resolved ? [resolved.block] : [] });
+          return;
+        }
+        member.site_id = g.site_id || "legacy-" + siteFingerprint(g.coord.site || g.name_at_save, g.coord.lat, g.coord.lon);
+        member.coord = daCopy(g.coord); member.name = g.coord.site || g.name_at_save;
+      }
       ok.push({ member: member, renamedFrom:
         member.name !== g.name_at_save ? g.name_at_save : null, coord: g.coord || null });
     });
@@ -3341,10 +3426,31 @@
 
   function svOpen(entry, how) {
     var res = svResolve(entry);
+    if (how === "merge") {
+      res.ok = res.ok.filter(function (r) {
+        var existing = S.portfolio.find(function (m) { return cmpIdentity(m) === cmpIdentity(r.member); });
+        if (existing && existing.site_id && (existing.coord.lat !== r.member.coord.lat || existing.coord.lon !== r.member.coord.lon || existing.key !== r.member.key)) {
+          res.unresolved.push({ saved: r.member.name, key: r.member.key,
+            reason: "This site ID already exists with a different working location. The working site was kept. Open with Replace only if you intend to restore the saved working set.",
+            offer: "Review conflicting site", options: [siteBasis(existing), siteBasis(r.member)] });
+          return false;
+        }
+        return true;
+      });
+    }
     if (how === "replace") { S.portfolio = []; S.cmp.display = []; }
     S.cmp.mode = "places"; S.cmp.subject = null; S.cmp.slices = []; S.cmp.prevDisplay = [];
     res.ok.forEach(function (r) { pfAdd(r.member); });
 
+    if (entry.comparison.display) {
+      var ids = res.ok.map(function (r) { return cmpIdentity(r.member); });
+      S.cmp.display = entry.comparison.display.filter(function (id) { return ids.indexOf(id) >= 0; });
+      S.cmp.prevDisplay = (entry.comparison.prevDisplay || []).filter(function (id) { return ids.indexOf(id) >= 0; });
+      var subject = S.portfolio.find(function (m) { return cmpIdentity(m) === entry.comparison.subject; });
+      if (entry.comparison.kind === "futures" && subject) {
+        S.cmp.mode = "futures"; S.cmp.subject = subject; S.cmp.slices = (entry.comparison.slices || []).slice();
+      }
+    }
     /* Scenario and period come back from the definition, and the header
        selectors come back with them -- a map painting one future under a
        control naming another is the desync this prototype keeps ruling out. */
@@ -3380,9 +3486,11 @@
       slices: S.cmp.mode === "futures" && S.cmp.slices.length ? S.cmp.slices.slice()
                                                               : [sliceId()],
       geography: S.portfolio.map(function (m) {
-        return { key: m.key, level: m.level, name_at_save: m.name };
+        return { key: m.key, level: m.level, name_at_save: m.name, site_id: m.site_id || null, coord: m.coord ? daCopy(m.coord) : null };
       }),
-      comparison: { kind: S.cmp.mode,
+      comparison: { kind: S.cmp.mode, display: S.cmp.display.slice(),
+                    subject: S.cmp.subject ? cmpIdentity(S.cmp.subject) : null,
+                    slices: S.cmp.slices.slice(), prevDisplay: S.cmp.prevDisplay.slice(),
                     note: S.cmp.mode === "futures"
                       ? "one place × " + S.cmp.slices.length + " futures"
                       : Object.keys(shown).length + " of " + S.portfolio.length +
@@ -3410,7 +3518,7 @@
           (full && S.portfolio.length > 4
             ? " — four is the cap on columns, not on the collection. Untick one to swap."
             : ".")) +
-      "</p><ul class='pf-list'>";
+      "</p><p class='sub'>Sites sharing a block share its assessment for the same domain and future. They remain distinct portfolio members; these are block results, not point measurements.</p><ul class='pf-list'>";
     S.portfolio.forEach(function (m) {
       var id = cmpIdentity(m);
       var on = !!shown[id];
@@ -3420,7 +3528,7 @@
           escAttr(id) + "'" + (on ? " checked" : "") + (disabled ? " disabled" : "") +
           "><span>Show</span></label>" +
         "<span class='pf-body'><span class='pf-name'>" + esc(m.name) + "</span>" +
-        "<span class='pf-sub'>" + esc(m.level) + " · " + esc(m.parent) +
+        "<span class='pf-sub'>" + esc(siteBasis(m)) +
           " · <code>" + esc(m.key) + "</code></span></span>" +
         "<span class='pf-acts'>" +
         "<button type='button' class='btn ghost cmp-remove-member' data-cmp-id='" +
@@ -3637,7 +3745,7 @@
       S.period = D.default_period;
       S.view = "india"; S.state = null; S.district = null; S.block = null;
       S.pinned = null; S.showAll = false; S.mode = "map";
-      S.report = null; S.coord = null; S.local = false;
+      S.report = null; S.coord = null; siteDraft = null; siteCsvDraft = ""; S.local = false;
       S.ctxOpen = false; S.ctxLayer = null;
       S.portfolio = [];
       S.cmp = { mode: "places", display: [], subject: null, slices: [], prevDisplay: [] };
@@ -3782,10 +3890,10 @@
             esc(label.scenario) + "</span><span class='cmp-parent'>" + esc(label.period) + "</span>";
         }
         return "<span class='lab'>Column " + (i + 1) + "</span><span class='cmp-place'>" +
-          esc(slot.member.name) + "</span><span class='cmp-parent'>" + esc(slot.member.parent) + "</span>";
+          esc(slot.member.name) + "</span><span class='cmp-parent'>" + esc(siteBasis(slot.member)) + "</span>";
       });
       html += row("", function (slot) {
-        return "<span class='lab'>Level</span><span class='val'>" + esc(slot.member.level) + "</span>";
+        return "<span class='lab'>Level</span><span class='val'>" + (slot.member.site_id ? "Site · block assessment" : esc(slot.member.level)) + "</span>";
       });
       html += row("", function (slot, f) {
         return "<span class='lab'>Score + band</span><span class='val'><strong>" +
@@ -4553,7 +4661,7 @@
       target: "Every place a unit appears — map, ranked lists, ranked table, block inspection, coordinate result — can put it in the tray, and one compare surface serves both places and futures." },
     { n: 10, what: "A coordinate lands in the same profile",
       today: "Coordinate Analysis is a separate path with its own result.",
-      target: "A coordinate resolves to the block that contains it and is then an ordinary unit: same score, metrics, context, ranking position and doorways." },
+      target: "A named site keeps its own identity and coordinates in the portfolio; its containing block supplies the assessment. CSV review retains separate sites in one block, skips repeated sites and shows unresolved rows." },
     { n: 11, what: "Two doorways at every named unit",
       today: "There is no report, and no explicit route from a screening result into a deeper analysis.",
       target: "Detailed Analysis and Download report are offered wherever a unit is named. Detailed Analysis carries roster keys rather than display names, opens already showing the score the Overview just gave, refuses the signals it has no surface for, and Back restores the previous Overview context and clears temporary emphasis. Advanced comparison keeps its independently edited places, metrics and futures for the next crossing." },

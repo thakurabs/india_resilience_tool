@@ -862,6 +862,61 @@ coordinate and file-upload controls when needed, resolves an input to the block 
 states that geographic basis on screen. It is a doorway rather than a step: it rejoins the spine at
 step 5, because a user arriving with a coordinate already knows where and is asking why.
 
+### Coordinate sites and portfolio identity
+
+The portfolio accepts **administrative areas and named sites**. A site has an immutable
+`site_id`, user name, entered WGS84 latitude/longitude (decimal degrees), and a separately
+resolved block identifier with the boundary/roster release. Its identity is never the block ID.
+An administrative block and two sites inside it are three distinct members. Names may be edited
+without changing identity; editing coordinates requires a new resolution and explicit confirmation
+before replacing the working site's location. Named analyses change only on explicit save/update.
+
+Site scores, metrics, bands, context and ranks use the containing block's published assessment;
+there is no point-level interpolation or additional site ranking. Show the site name, coordinates
+and containing block together. Where two columns share a block, explain that their block-level
+results are identical for the same domain and future. Each site occupies its own Overview column
+and can be the futures subject or an advanced-comparison member. No score is invented for a
+resolved block lacking data; it remains collectable with unavailable analytical results.
+
+**Import is review, then collect, then choose comparison columns.** Manual entry and upload use
+the same validation and membership rules. A review lists each input row, its name, resolution and
+ready/duplicate/error status. Only an explicit `Add ready sites` action changes the portfolio;
+it never changes the displayed comparison, advanced matrix, current geography or named analyses.
+Errors remain visible after valid rows are added and can be corrected and resubmitted.
+
+- Require a nonblank name and finite numeric latitude in [−90, 90] and longitude in [−180, 180].
+  Blank, NaN and infinite values are invalid, never zero. Use WGS84 longitude/latitude for spatial
+  resolution; label entry fields to avoid axis ambiguity.
+- On import without an existing site ID, a repeated name (trimmed, case-insensitive, collapsed
+  whitespace) plus exactly equal numeric coordinates is a duplicate, within the file or against
+  collected sites. Skip it with the matching site's name. Never deduplicate by block or proximity.
+  Different names at identical coordinates remain distinct, with a shared-location notice. To
+  distinguish otherwise identical sites, the user supplies distinct names before import.
+- Saved definitions restore by immutable site ID. A merge must not overwrite different coordinates
+  under an existing site ID: show a conflict and require an explicit choice. Legacy coordinate
+  members get stable migrated site identities; retain their original name and coordinates.
+- Outside-boundary and ambiguous boundary intersections are unresolved; never choose a nearby
+  block. A changed block assignment on reopening is also unresolved until explicitly accepted.
+  Show saved and proposed geography where available. The valid remainder may open; unresolved
+  sites stay listed, excluded from results until resolved.
+
+The prototype supports CSV (`name,latitude,longitude`, including quoted fields) and manual entry,
+using exact, labelled coordinate fixtures rather than pretending to perform a national spatial
+lookup. Other deployed upload formats retain this review contract; production parsing and boundary
+resolution use the existing web implementation. The prototype's named analyses last for the page
+session, consistent with its existing persistence demonstration.
+
+**Vendor acceptance journey:** load two differently named sites at the same worked coordinate,
+one at a second coordinate, one repeated name/coordinate and one invalid coordinate. Review shows
+three ready sites, one duplicate and one error. Adding collects three without displaying columns.
+Select the two co-located sites and verify identical block assessments with distinct names; enter
+futures for either and return; open advanced comparison and verify distinct selectable identities.
+Save, remove one working site, and reopen using Replace: both identities, coordinates and the saved
+Overview configuration return. Reimport skips the three existing sites. Also test an empty file,
+all-invalid rows, one valid row, quoted names, out-of-range coordinates, an unresolved coordinate,
+and a saved site whose boundary assignment changed. A saved-ID merge conflict must never overwrite
+working coordinates silently.
+
 Supported Risk Domain x Scenario x Period combinations come from the deployed artifact manifest.
 Normal selectors must not offer unsupported combinations. An obsolete or invalid deep-linked
 combination should fall back to a valid configured selection with a concise explanation. By
