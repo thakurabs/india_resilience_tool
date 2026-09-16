@@ -616,10 +616,9 @@
           </select>
         </div>
         <div class="fld" data-delta="5">
-          <label for="f-mapmode">Map Mode <i class="info" title="Absolute value paints the score on the frozen national ruler and is the landing state. Local contrast stretches the ramp to the units in view only; the scores never change and the colours stop being comparable.">i</i></label>
-          <select id="f-mapmode">
-            <option value="absolute">Absolute value</option>
-            <option value="local">Local contrast</option>
+          <label for="f-mapmode">Map Mode <i class="info" title="The map always paints the absolute score on the frozen national ruler. There is no per-selection rescale to switch to.">i</i></label>
+          <select id="f-mapmode" disabled>
+            <option>Absolute value</option>
           </select>
         </div>
       </div>
@@ -656,6 +655,9 @@
         <span><span class="swatch" style="background:#d5d8dc"></span>No data</span>
         <span id="cbar-range"></span>
         <span id="cbar-domain">Domain fixed 0–100 · never rescaled by selection</span>
+        <label class="lc" id="lc-label" for="lc-toggle">
+          <input type="checkbox" id="lc-toggle"> Local contrast
+        </label>
       </div>
       <div class="ctxl-row" id="ctxl-row" hidden>
         <label class="ctxl" for="ctx-layer">Context layer
@@ -2042,14 +2044,14 @@
       : "Domain fixed 0–100 · never rescaled by selection";
     dom.className = LX.on ? "lc-on" : "";
 
-    /* Local contrast lives in IRT's own Map Mode control. Absolute value is the
-       landing state; the second option is only offered when the view actually
-       has a spread to stretch. */
+    /* Local contrast sits with the colourbar, because the colourbar is the only
+       thing it changes. It is offered only when the view has a spread to stretch. */
     var span = vals.length ? vals[vals.length - 1] - vals[0] : 0;
-    var mm = document.getElementById("f-mapmode");
-    mm.value = S.local ? "local" : "absolute";
-    mm.options[1].disabled = !(vals.length > 1 && span > 0);
-    if (mm.options[1].disabled && S.local) { S.local = false; mm.value = "absolute"; }
+    var lc = document.getElementById("lc-toggle");
+    lc.checked = !!S.local;
+    lc.disabled = !(vals.length > 1 && span > 0);
+    document.getElementById("lc-label").className = "lc" + (lc.disabled ? " off" : "");
+    if (lc.disabled && S.local) { S.local = false; lc.checked = false; }
 
     var warn = document.getElementById("cbar-warn");
     warn.hidden = !LX.on;
@@ -3442,8 +3444,8 @@
     S.pinned = null; render();
   });
 
-  document.getElementById("f-mapmode").addEventListener("change", function (ev) {
-    S.local = ev.target.value === "local"; render();
+  document.getElementById("lc-toggle").addEventListener("change", function (ev) {
+    S.local = ev.target.checked; render();
   });
 
   document.getElementById("ctx-layer").addEventListener("change", function (ev) {
@@ -3486,9 +3488,9 @@
     { n: 4, what: "Statistic is fixed to the mean",
       today: "A free choice of statistic (Mean, and others) sits in the cascade.",
       target: "Fixed by the scale contract — the mean, weighted by area — so two units are always aggregated the same way. Other statistics belong in Detailed Analysis." },
-    { n: 5, what: "Map Mode lands on Absolute value",
+    { n: 5, what: "Map Mode is fixed to Absolute value",
       today: "Map Mode is a free user choice, and on the composite path it is auto-filled and disabled.",
-      target: "The control is live again with two honest options. Absolute value on the frozen ruler is the landing state; Local contrast stretches the ramp to the units in view, is never the default, and says on screen that the colours have stopped being comparable." },
+      target: "The ruler is frozen, so there is no per-selection rescale to switch to. The control stays visible, and preset, so the vendor can see it did not simply disappear. Local contrast is not folded in here — it belongs with the colourbar, which is the only thing it changes." },
     { n: 6, what: "One frozen 0–100 ruler, never rescaled by the selection",
       today: "The legend fits itself to whatever is on screen — 21.99–76.39 for a single district — so the same colour means a different score in two sessions.",
       target: "The domain is 0–100 for every unit, Risk Domain, scenario and period. The bracket shows where the painted units fall inside it; Local contrast is an opt-in view and never the landing state." },

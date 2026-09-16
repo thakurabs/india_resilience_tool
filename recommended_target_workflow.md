@@ -149,8 +149,8 @@ These hold at every step and inside every doorway.
 - **Geography is navigation, not a selector.** India → State/UT → District are breadcrumb levels;
   a block is an inspection state. Administrative level is never a fourth analysis control.
 - **Three primary controls only.** Risk Domain, scenario, period. Everything else is in Detailed
-  Analysis, with one exception: `Map Mode`, which offers `Absolute value` as the landing state
-  and `Local contrast` as a view extent.
+  Analysis. The one control that is neither is `Local contrast`, and it does not sit with the
+  three: it lives with the colourbar, because the colourbar is the only thing it changes.
 - **The ranked list ranks what you would click next.** India ranks State/UTs, a State/UT ranks its
   districts, a district ranks its blocks. Blocks are ranked only within their own district, where
   one administration drew them all.
@@ -526,12 +526,24 @@ hue rather than a fourth grey weight, so it cannot be mistaken for another admin
 
 A bracket on the colourbar marks the score range present in the current view, with a numeric
 readout beside it — a State/UT whose blocks genuinely span two points should read as narrow, not
-as broken. `Local contrast` is the second option of IRT's own `Map Mode` control, whose first
-option and landing state is `Absolute value`. It stretches the ramp to the extent of the units in
-view; the scores themselves never change. It is never the default, says on screen that the colours
-have stopped being comparable, and is offered only when the view has a spread to stretch.
-Its extent is computed from the visible scores at render time and is never a stored normalization
+as broken. `Local contrast` is an opt-in toggle **placed with the colourbar**, not among the
+analysis selectors. It stretches the ramp to the extent of the units in view; the scores
+themselves never change. It is never the landing state, says on the legend itself that the colours
+have stopped being comparable, and is offered only when the view has a spread to stretch. Its
+extent is computed from the visible scores at render time and is never a stored normalization
 parameter.
+
+The placement is a contract, not a layout preference. A control that changes what the colours mean
+belongs against the legend that declares their meaning, where it cannot be hidden while the legend
+it governs stays on screen. It was briefly folded into IRT's `Map Mode` selector and moved back for
+exactly that reason.
+
+`Map Mode` itself stays as IRT ships it — auto-filled to `Absolute value` and disabled on the
+composite path — because the frozen ruler leaves it nothing to switch to. Its other as-built
+option, a change-from-baseline view, is **not** adopted here: `baseline` and `delta_vs_baseline`
+are null on the composite path in the deployed API, no historical composite slice is published, and
+a signed change needs its own diverging ruler and legend rather than the `0-100` hazard ramp. It is
+deferred, not declined.
 
 `#d5d8dc` identifies missing composite data and carries its own legend swatch. A compact
 persistent method note should explain the frozen scale, the boundary grammar,
@@ -807,10 +819,10 @@ The Overview should expose only three primary analysis selectors:
 2. Scenario
 3. Period
 
-Constituent metric, model controls, and detailed chart options belong in Detailed Analysis. Two
-IRT controls stay in the Overview and stay live: `Statistic`, fixed at `Mean`, and `Map Mode`,
-offering `Absolute value` and `Local contrast`. A control that is visible but permanently disabled
-teaches the user that the interface is broken.
+Constituent metric, statistic, map mode, model controls, and detailed chart options belong in
+Detailed Analysis. `Statistic` is fixed at `Mean` and `Map Mode` at `Absolute value`, both shown
+preset rather than removed, so the vendor can see they did not silently disappear. `Local
+contrast` is not one of these selectors; it sits with the colourbar, per section 1.
 
 Administrative level should appear contextually through the geographic drill-down:
 
@@ -1355,7 +1367,8 @@ control the vendor already ships costs them a rename and costs the user a relear
 | The control that adds a place to it | `Add to Analysis` | — |
 | The full ranked table | `Ranking Table` | View all N |
 | The statistic control | `Mean` | Area-weighted mean |
-| The map colour control | `Map Mode`, options `Absolute value` / `Local contrast` | a separate Local contrast checkbox |
+| The view-extent toggle | `Local contrast`, a checkbox at the colourbar | — |
+| The map colour selector | `Map Mode`, preset to `Absolute value` | — |
 | The panels and filter groups | `Spatial Panel`, `Administrative Analysis`, `Coordinate Analysis`, `Select your views`, `Select Resilience Filters` | — |
 
 `Add to Analysis` adding to `My Portfolio` is a mismatch, and it is IRT's own. Inheriting it beats
