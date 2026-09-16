@@ -725,6 +725,7 @@
       <button type="button" class="dpin inline" data-delta-for="8" title="What changed here">8</button>
     </div>
 
+    <div id="detailed-analysis" aria-live="polite"></div>
     <div id="pane-profile">
       <div class="card headline" id="headline" data-delta="11" hidden></div>
       <div class="card">
@@ -801,6 +802,7 @@
     saved: null,          /* named analysis definitions; seeded below */
     savedNote: null,      /* what opening one did, stated in words */
     savedAsk: null,       /* the id awaiting an explicit replace-or-merge answer */
+    advanced: null,       /* independent, uncapped comparison definition */
     da: null,
     daNote: null          /* what a refinement inside Detailed Analysis did on the way back */
   };
@@ -1228,12 +1230,13 @@
     /* A newly collected place is shown if there is a free column, and simply
        collected if there is not. In futures mode nothing enters the display,
        because one place is being held fixed. */
-    if (S.cmp.mode === "places" && S.cmp.display.length < 4) {
+    if (!S.da && S.cmp.mode === "places" && S.cmp.display.length < 4) {
       S.cmp.display.push(cmpIdentity(member));
     }
   }
   function pfRemove(id) {
     S.portfolio = S.portfolio.filter(function (m) { return cmpIdentity(m) !== id; });
+    if (S.advanced) S.advanced.places = S.advanced.places.filter(function (x) { return x !== id; });
     S.cmp.display = S.cmp.display.filter(function (x) { return x !== id; });
     S.cmp.prevDisplay = S.cmp.prevDisplay.filter(function (x) { return x !== id; });
     if (S.cmp.subject && cmpIdentity(S.cmp.subject) === id) leaveFutures();
@@ -2414,9 +2417,22 @@
              scope: "blocks of " + br.district, n: null, nWhat: "" };
   }
 
+  function daCopy(value) { return JSON.parse(JSON.stringify(value)); }
+
+  function daSnapshot() {
+    var from = {};
+    ["view", "state", "district", "block", "bundle", "scenario", "period", "showAll",
+     "mode", "local", "ctxOpen", "ctxLayer", "coord", "cmp"].forEach(function (k) {
+      from[k] = daCopy(S[k]);
+    });
+    from.nav = { z: NAV.z, ox: NAV.ox, oy: NAV.oy, sig: NAV.sig };
+    return from;
+  }
+
   function daOpen(level, key, name, metric) {
     var route = daRoute(metric);
     S.da = {
+      intent: metric ? "metric" : "result",
       level: level, key: daGeoKey(level, key), name: name,
       requested: metric || null,
       metric: route.ok ? (metric || null) : null,
@@ -2425,11 +2441,9 @@
       arrival: daArrival(level, key),
       /* what the user changes INSIDE Detailed Analysis, which is the half of the
          doorway the prototype never used to show */
-      refine: { scenario: S.scenario, period: S.period, metric: "", stat: "mean", geo: "" },
+      refine: { scenario: S.scenario, period: S.period, metric: route.ok ? (metric || "") : "", stat: "mean", geo: "" },
       /* where to put them back, exactly */
-      from: { view: S.view, state: S.state, district: S.district, block: S.block,
-              scenario: S.scenario, period: S.period, pinned: S.pinned,
-              showAll: S.showAll, mode: S.mode }
+      from: daSnapshot()
     };
     S.report = null;
     S.daNote = null;
@@ -2444,71 +2458,101 @@
     return h + "</select></div>";
   }
 
-  /* What a refinement made inside Detailed Analysis does on the way back.
-     Scenario and period are axes of the whole screen: send the user back to a map
-     of 2040-2060 after they have just been reading 2060-2080 and the screen is
-     lying to them, so those return. Geography returns whenever the Overview can
-     show it. Metric and statistic do not return: screening always paints the
-     composite on the area-weighted mean, and swapping either one behind an
-     unchanged colourbar would change what the colours mean without saying so. */
+  /* Back restores the origin; it never applies refinements implicitly. */
   function daBack() {
-    var da = S.da, f = da.from, r = da.refine, notes = [], refused = null;
-    S.view = f.view; S.state = f.state; S.district = f.district; S.block = f.block;
-    S.pinned = f.pinned; S.showAll = f.showAll; S.mode = f.mode;
-    S.scenario = f.scenario; S.period = f.period;
-
-    if (r.scenario !== f.scenario || r.period !== f.period) {
-      S.scenario = r.scenario; S.period = r.period;
-      notes.push("the future you moved to came back with you (" +
-        esc(D.scenario_labels[r.scenario]) + " \u00b7 " + esc(D.period_labels[r.period]) +
-        "), so the map is showing what you were just reading");
+    var da = S.da, f = da.from, notes = [], live = {};
+    S.portfolio.forEach(function (m) { live[cmpIdentity(m)] = true; });
+    Object.keys(f).forEach(function (k) { if (k !== "nav") S[k] = daCopy(f[k]); });
+    Object.keys(f.nav).forEach(function (k) { NAV[k] = f.nav[k]; });
+    NAV.drag = null; NAV.moved = false;
+    var removed = S.cmp.display.filter(function (id) { return !live[id]; });
+    S.cmp.display = S.cmp.display.filter(function (id) { return live[id]; });
+    S.cmp.prevDisplay = S.cmp.prevDisplay.filter(function (id) { return live[id]; });
+    if (removed.length) notes.push("removed portfolio members no longer have Overview columns; no replacement columns were selected");
+    if (S.cmp.subject && !live[cmpIdentity(S.cmp.subject)]) {
+      S.cmp.mode = "places"; S.cmp.subject = null; S.cmp.slices = [];
+      S.cmp.display = S.cmp.prevDisplay.slice(); S.cmp.prevDisplay = [];
+      notes.push("the futures subject was removed from the portfolio, so futures comparison closed and the remaining previous place columns were restored");
     }
-
-    if (r.geo === "up") {
-      if (da.level === "Block" && blockByKey[da.lookupKey]) {
-        var b = blockByKey[da.lookupKey];
-        S.view = "district"; S.state = b.s; S.district = b.dk; S.block = null;
-        notes.push("you moved up from the block to " +
-          esc(byKey[b.dk] ? byKey[b.dk].n : b.dk) + ", and the Overview came back open on " +
-          "that district");
-      } else if (da.level === "District" && byKey[da.lookupKey]) {
-        S.view = "state"; S.state = byKey[da.lookupKey].s; S.district = null; S.block = null;
-        notes.push("you moved up from the district to " + esc(byKey[da.lookupKey].s) +
-          ", and the Overview came back open on that State/UT");
-      } else {
-        S.view = "india"; S.state = null; S.district = null; S.block = null;
-        notes.push("you moved up from the State/UT to India, and the Overview came back at " +
-          "the national level");
-      }
-      S.pinned = null; S.showAll = false;
-    } else if (r.geo === "offmap") {
-      refused = "Inside Detailed Analysis you moved to a block in a State/UT whose blocks are " +
-        "not scored in this build. The Overview cannot open it, so it came back exactly where " +
-        "you left it rather than landing you on an empty view. Nothing was lost: the geography " +
-        "you had is still selected.";
-    }
-
-    if (r.metric) {
-      notes.push("the metric you switched to (" + esc(metricLabel(r.metric)) + ") stayed " +
-        "behind, because the screening surface always paints the composite hazard score");
-    }
-    if (r.stat !== "mean") {
-      notes.push("the statistic you switched to (Median) stayed behind, because screening is " +
-        "fixed to the area-weighted mean so that two units are always aggregated the same way");
-    }
-
-    /* The header selectors are the visible statement of which future is on
-       screen. Moving S.scenario without moving them would leave the map painting
-       one future while the control names another -- precisely the desync this
-       doorway exists to rule out. They are built once, so they are set here. */
-    var scEl = document.getElementById("sel-scenario");
-    var peEl = document.getElementById("sel-period");
-    if (scEl) scEl.value = S.scenario;
-    if (peEl) peEl.value = S.period;
-
-    S.daNote = { unit: da.name, level: da.level, notes: notes, refused: refused,
-                 moved: r.geo === "up" };
+    notes.push("your previous Overview context is restored; refinements were not applied to it");
+    if (da.intent === "comparison") notes.push("the edited advanced comparison is retained; reopen it to continue, including every selected place, metric and future");
+    S.pinned = null;
+    hideTip();
+    [["sel-bundle", S.bundle], ["sel-scenario", S.scenario], ["sel-period", S.period]].forEach(function (pair) {
+      var el = document.getElementById(pair[0]); if (el) el.value = pair[1];
+    });
+    S.daNote = { unit: da.name, level: da.level, notes: notes, refused: null, moved: false };
     S.da = null;
+  }
+
+  function daOpenComparison(fresh) {
+    var from = S.da ? S.da.from : daSnapshot();
+    if (fresh || !S.advanced) {
+      S.advanced = {
+        bundle: S.bundle, statistic: "mean", metrics: [""],
+        places: S.cmp.mode === "futures" && S.cmp.subject
+          ? [cmpIdentity(S.cmp.subject)] : S.cmp.display.slice(),
+        slices: S.cmp.mode === "futures" ? S.cmp.slices.slice() : [sliceId()],
+        release: daCopy(RELEASE)
+      };
+    }
+    S.da = { intent: "comparison", name: "Advanced comparison", level: "Portfolio", from: from };
+    S.report = null; S.daNote = null;
+  }
+
+  function daCheckList(kind, choices, selected) {
+    return choices.map(function (x) {
+      return "<label style='display:block'><input type='checkbox' data-da-axis='" + kind +
+        "' value='" + escAttr(x[0]) + "'" + (selected.indexOf(x[0]) >= 0 ? " checked" : "") +
+        "> " + esc(x[1]) + "</label>";
+    }).join("");
+  }
+
+  function daComparisonHtml() {
+    var a = S.advanced;
+    var places = S.portfolio.map(function (m) { return [cmpIdentity(m), m.name + " (" + m.level + ")"]; });
+    var metrics = [["", "Composite hazard score"]].concat(Object.keys(D.metric_labels).map(function (k) { return [k, metricLabel(k)]; }));
+    var futures = [];
+    Object.keys(D.scenario_labels).forEach(function (sc) {
+      Object.keys(D.period_labels).forEach(function (pe) { futures.push([sc + "|" + pe, D.scenario_labels[sc] + " · " + D.period_labels[pe]]); });
+    });
+    var h = "<div class='card'><h2>Detailed Analysis · Advanced comparison</h2>" +
+      "<p>Edit places, metrics and futures together. This demonstrates the configuration of IRT’s existing matrix; its analytical charts and report generation remain vendor work.</p>" +
+      "<p><b>" + esc(a.bundle) + "</b> · Mean · " + esc(a.release.ruler) + " · " + esc(a.release.build) + "</p>" +
+      "<p>Unchecking a place changes this matrix only. Remove from portfolio also affects the restored Overview. Adding a place does not create an Overview column. Named analyses are unchanged.</p>" +
+      "<div class='da-refine'><fieldset><legend>Matrix places</legend>" + daCheckList("places", places, a.places) +
+      "</fieldset><fieldset><legend>Metrics</legend>" + daCheckList("metrics", metrics, a.metrics) +
+      "</fieldset><fieldset><legend>Futures</legend>" + daCheckList("slices", futures, a.slices) + "</fieldset></div>";
+    var opts = {};
+    D.districts.forEach(function (d) { if (pfIndex(makeCmpMember("District", d.k)) < 0) opts[d.k] = d.n + " · " + d.s; });
+    h += "<div class='da-refine'>" + daSel("da-add-place", "Add a district to the portfolio and matrix", opts, Object.keys(opts)[0]) +
+      "<button class='btn ghost' id='da-add'>Add place</button></div>";
+    S.portfolio.forEach(function (m) {
+      h += "<button class='btn ghost' data-da-remove='" + escAttr(cmpIdentity(m)) + "'>Remove " + esc(m.name) + " from portfolio</button> ";
+    });
+    h += "<h3>Matrix configuration · " + a.places.length + " places × " + a.metrics.length + " metrics × " + a.slices.length + " futures</h3>";
+    if (!a.places.length || !a.metrics.length || !a.slices.length) h += "<p class='cmp-alert'>Select at least one place, metric and future. The incomplete configuration is retained; no results are implied.</p>";
+    else h += "<p>All selected combinations are retained, including more than four places. Missing published values must show No data, never a substituted slice.</p>";
+    return h + "<p>Back restores the previous Overview mode, columns, subject, futures and map. Reopening advanced comparison restores these edits.</p>" +
+      "<div class='btn-row'><button class='btn' id='back-ov'>Back to Overview</button></div></div>";
+  }
+
+  function wireDaComparison(host) {
+    host.querySelectorAll("[data-da-axis]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        var a = S.advanced[el.dataset.daAxis], i = a.indexOf(el.value);
+        if (el.checked && i < 0) a.push(el.value); else if (!el.checked && i >= 0) a.splice(i, 1);
+        render();
+      });
+    });
+    host.querySelectorAll("[data-da-remove]").forEach(function (el) {
+      el.addEventListener("click", function () { pfRemove(el.dataset.daRemove); render(); });
+    });
+    var add = host.querySelector("#da-add");
+    if (add) add.addEventListener("click", function () {
+      var m = makeCmpMember("District", host.querySelector("#da-add-place").value);
+      if (m) { pfAdd(m); S.advanced.places.push(cmpIdentity(m)); } render();
+    });
   }
 
   function daCapFirst(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -2795,7 +2839,10 @@
 
   /* ================= block inspection + DA stub ================= */
   function renderInspection() {
-    var host = document.getElementById("inspection");
+    var overviewHost = document.getElementById("inspection");
+    var detailHost = document.getElementById("detailed-analysis");
+    overviewHost.innerHTML = ""; detailHost.innerHTML = "";
+    var host = S.da || S.daNote ? detailHost : overviewHost;
     var html = "";
 
     /* Coming back is half the doorway. The Overview reopens exactly where it was
@@ -2804,9 +2851,9 @@
     if (S.daNote) {
       html += "<div class='card'><h2>Back from Detailed Analysis</h2>" +
         (S.daNote.refused ? "<p class='cmp-alert'>" + S.daNote.refused + "</p>" : "") +
-        "<p class='sub' style='margin:0'>You left the Overview on <b>" +
+        "<p class='sub' style='margin:0'>Returned from <b>" +
           esc(S.daNote.unit) + "</b> (" + esc(S.daNote.level) + ")" +
-          (S.daNote.moved ? "." : " and it is open there again.") + (S.daNote.notes.length
+          "." + (S.daNote.notes.length
             ? " " + daCapFirst(S.daNote.notes.join("; ")) + "."
             : " Nothing you did inside changed it.") +
         "</p>" +
@@ -2814,7 +2861,7 @@
         "</button></div></div>";
     }
 
-    if (S.view === "district" && S.block && blockByKey[S.block]) {
+    if (!S.da && S.view === "district" && S.block && blockByKey[S.block]) {
       var b = blockByKey[S.block];
       var v = bScores()[b.k];
       var parent = byKey[b.dk];
@@ -2873,16 +2920,16 @@
         "</dl></div></div>";
     }
 
-    if (S.da) {
+    if (S.da && S.da.intent === "comparison") html += daComparisonHtml();
+    if (S.da && S.da.intent !== "comparison") {
       var da = S.da, ar = da.arrival, rf = da.refine;
       var bid = DA_BUNDLE_ID[S.bundle] || null;
 
       html +=
         "<div class='card'><h2>Detailed Analysis</h2>" +
         "<div class='stub'><h3>1 &middot; What crosses the seam</h3>" +
-        "<p style='margin:0 0 8px'>Detailed Analysis is not designed in this prototype. " +
-        "Everything on this screen is real: the identifiers that cross, the answer the " +
-        "destination has to reproduce, and what a refinement made here does on the way back." +
+        "<p style='margin:0 0 8px'>This prototype demonstrates entry context and return behaviour. " +
+        "Arrival composite values are published data; metric charts and refined results are not rendered here." +
         "</p>" +
         "<dl class='kv'>" +
           "<dt>Risk Domain</dt><dd><code>" + (bid ? esc(bid) : "&mdash; none published") +
@@ -2903,7 +2950,7 @@
           "<dt>Statistic</dt><dd><code>mean</code> &middot; area-weighted, fixed by the scale " +
             "contract</dd>" +
           "<dt>Ruler</dt><dd><code>cdf_v1</code> &middot; <code>colour_scale.json</code></dd>" +
-          "<dt>Comparison context</dt><dd>" + esc(cmpContextText()) + "</dd>" +
+          "<dt>Comparison context</dt><dd>" + esc("Single " + da.intent + "; portfolio remains available but is not opened as a comparison") + "</dd>" +
         "</dl>" +
         "<p style='margin:10px 0 0'>The key is what crosses; the display name travels beside it " +
         "to write the heading and nothing else. Two different units can share a name &mdash; " +
@@ -2919,15 +2966,14 @@
       }
 
       html +=
-        "<div class='stub'><h3>2 &middot; The screen it must land on</h3>" +
+        "<div class='stub'><h3>2 &middot; " + (da.metric ? "Selected metric: " + esc(metricLabel(da.metric)) : "The screen it must land on") + "</h3>" +
+        (da.metric ? "<p>The selected metric is initialized below. Metric values and trends are not rendered in this demonstration. The composite figures below are context only, not this metric’s result.</p>" : "") +
         (ar
-          ? "<p style='margin:0 0 8px'>Detailed Analysis opens already showing the answer the " +
-            "Overview just gave &mdash; same unit, same slice, same ruler &mdash; not a blank " +
-            "cascade to fill in again:</p>" +
+          ? "<p style='margin:0 0 8px'>" + (da.metric ? "Composite context captured on arrival" : "The selected composite result captured on arrival") + ": same unit, slice and ruler as Overview. These arrival figures do not change when the demonstration controls below are refined.</p>" +
             "<dl class='kv'>" +
-              "<dt>Hazard score</dt><dd><b>" + fmt(ar.score) + "</b> &middot; " +
+              "<dt>Composite hazard score" + (da.metric ? " (context)" : "") + "</dt><dd><b>" + fmt(ar.score) + "</b> &middot; " +
                 bandPill(ar.score) + "</dd>" +
-              "<dt>Rank</dt><dd>" + ar.rank + " of " + ar.total + " " + esc(ar.scope) +
+              "<dt>Composite rank" + (da.metric ? " (context)" : "") + "</dt><dd>" + ar.rank + " of " + ar.total + " " + esc(ar.scope) +
                 "</dd>" +
               (ar.n === null || ar.n === undefined ? ""
                 : "<dt>With data</dt><dd>" + ar.n + " " + esc(ar.nWhat) + "</dd>") +
@@ -2959,9 +3005,7 @@
 
       html +=
         "<div class='stub'><h3>3 &middot; Refine here, then go back</h3>" +
-        "<p style='margin:0 0 8px'>Change anything below, then press Back to Overview. Part of " +
-        "it follows you back and part of it must not, and which is which is the contract the " +
-        "vendor has to build:</p>" +
+        "<p style='margin:0 0 8px'>Change the refinement controls, then press Back to Overview. Back restores the Overview you left; these refinements do not change it.</p>" +
         "<div class='da-refine'>" +
           daSel("da-scn", "Scenario", D.scenario_labels, rf.scenario) +
           daSel("da-per", "Period", D.period_labels, rf.period) +
@@ -2984,13 +3028,8 @@
             "and call it a median.</p>"
           : "") +
         "<dl class='kv' style='margin-top:10px'>" +
-          "<dt>Comes back</dt><dd><b>Scenario and period.</b> They are axes of the whole " +
-            "screen, and returning the user to a map of a different future than the one they " +
-            "were just reading would be a lie. <b>Geography</b> too, whenever the Overview can " +
-            "show it.</dd>" +
-          "<dt>Stays here</dt><dd><b>Metric and statistic.</b> Screening always paints the " +
-            "composite on the area-weighted mean. Carrying either one back would change what " +
-            "the colours mean while the colourbar still said hazard score.</dd>" +
+          "<dt>Back restores</dt><dd>The previous Overview geography, domain, future, map/table mode, map extent, panels and comparison configuration.</dd>" +
+          "<dt>Refinements</dt><dd>Scenario, period, geography, metric and statistic do not transfer through Back. An unsupported selection never blocks returning.</dd>" +
           "<dt>Never crosses</dt><dd>Hover, the pinned distribution bin and temporary map " +
             "emphasis. Those are gestures, not state.</dd>" +
         "</dl></div>" +
@@ -2999,6 +3038,7 @@
     }
 
     host.innerHTML = html;
+    wireDaComparison(host);
     wireDrivers(host);
     wireCmpControls(host);
     wireActions(host);
@@ -3317,6 +3357,9 @@
       if (peEl) peEl.value = S.period;
     }
     S.pinned = null; S.showAll = false; S.da = null; S.report = null; S.daNote = null;
+    S.advanced = { bundle: entry.bundle_id, statistic: entry.statistic,
+      metrics: entry.metrics.length ? entry.metrics.slice() : [""], slices: entry.slices.slice(),
+      places: res.ok.map(function (r) { return cmpIdentity(r.member); }), release: daCopy(RELEASE) };
     S.savedAsk = null;
     S.savedNote = { entry: entry, how: how, res: res, changes: svChanges(entry),
                     shown: cmpDisplayed().length };
@@ -3583,6 +3626,7 @@
     var cp = document.getElementById("btn-clear-pf");
     if (cp) cp.addEventListener("click", function () {
       S.portfolio = [];
+      if (S.advanced) S.advanced.places = [];
       S.cmp = { mode: "places", display: [], subject: null, slices: [], prevDisplay: [] };
       render();
     });
@@ -3597,6 +3641,7 @@
       S.ctxOpen = false; S.ctxLayer = null;
       S.portfolio = [];
       S.cmp = { mode: "places", display: [], subject: null, slices: [], prevDisplay: [] };
+      S.advanced = null;
       S.da = null; S.daNote = null; S.savedNote = null; S.savedAsk = null;
       /* the header selectors are built once and are the source of truth, so a
          state reset that does not write them leaves the map on one future under
@@ -3615,7 +3660,7 @@
 
   function renderCompare() {
     var host = document.getElementById("compare");
-    if (S.cmp.mode === "places" && !S.portfolio.length) {
+    if (S.cmp.mode === "places" && !S.portfolio.length && !S.advanced) {
       host.innerHTML = "";
       return;
     }
@@ -3675,6 +3720,9 @@
        explicitly. A portfolio larger than four is an ordinary thing to have and
        the panel's job is to say which four are on screen -- never to pick them
        silently, and never to drop the rest to make the table fit. */
+    html += "<div class='btn-row'><button class='btn' id='da-compare'>" +
+      (S.advanced ? "Resume advanced comparison" : "Explore comparison in Detailed Analysis") + "</button>" +
+      (S.advanced ? "<button class='btn ghost' id='da-compare-current'>Start new advanced comparison from Overview</button>" : "") + "</div>";
     html += pfListHtml();
 
     var nvalid = facts.map(function (f) { return f.nvalid; })
@@ -3793,6 +3841,10 @@
       host.innerHTML = html;
     }
 
+    var daCmp = host.querySelector("#da-compare");
+    if (daCmp) daCmp.addEventListener("click", function () { daOpenComparison(false); render(); });
+    var daNew = host.querySelector("#da-compare-current");
+    if (daNew) daNew.addEventListener("click", function () { daOpenComparison(true); render(); });
     wirePfList(host);
     var removeMembers = host.querySelectorAll(".cmp-remove-member");
     for (var i = 0; i < removeMembers.length; i++) {
@@ -4504,7 +4556,7 @@
       target: "A coordinate resolves to the block that contains it and is then an ordinary unit: same score, metrics, context, ranking position and doorways." },
     { n: 11, what: "Two doorways at every named unit",
       today: "There is no report, and no explicit route from a screening result into a deeper analysis.",
-      target: "Detailed Analysis and Download report are offered wherever a unit is named. Detailed Analysis carries roster keys rather than display names, opens already showing the score the Overview just gave, refuses the signals it has no surface for, and on the way back returns scenario, period and geography while leaving metric and statistic behind \u2014 each with its reason stated on screen." },
+      target: "Detailed Analysis and Download report are offered wherever a unit is named. Detailed Analysis carries roster keys rather than display names, opens already showing the score the Overview just gave, refuses the signals it has no surface for, and Back restores the previous Overview context and clears temporary emphasis. Advanced comparison keeps its independently edited places, metrics and futures for the next crossing." },
     { n: 12, what: "A saved analysis is a question, not an answer",
       today: "Saved Analysis holds named records with Rename and Delete, and the portfolio is the same four-place object the comparison uses — so a comparison control can empty a collection.",
       target: "The portfolio and the comparison are separate: the collection has no cap, the comparison shows four columns chosen explicitly, and no mode switch removes a member. A saved analysis stores places, metrics, futures, statistic and layout but no scores; opening it resolves against the published release, states that release, says what changed since, and never prints a score measured on the old ruler. Renamed places restore; split, retired and ambiguous ones stay listed with their reason rather than being substituted or dropped." }

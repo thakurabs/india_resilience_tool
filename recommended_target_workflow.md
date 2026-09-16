@@ -974,8 +974,8 @@ fixed. Returning to places mode restores the previously displayed selection, not
 alone. Neither transition leaves the Overview, extends the breadcrumb, or removes a member.
 
 Detailed Analysis reads the same portfolio and keeps its own, broader comparison configuration —
-several metrics, several futures and several places at once. Returning to the Overview narrows the
-*display* to one axis and at most four columns; it does not narrow the portfolio, and it does not
+several metrics, several futures and several places at once. Returning to the Overview restores its previous
+one-axis display and explicitly selected columns; it does not narrow the portfolio, and it does not
 discard the Detailed Analysis configuration, which is restored on the next crossing. The
 Overview's one-axis rule governs what may be shown side by side on the screening surface, never
 what the user is allowed to have collected.
@@ -1205,6 +1205,17 @@ The selected result should expose one prominent action:
 
 `Explore in Detailed Analysis`
 
+Entry intent is explicit:
+
+- A place action opens that place's domain composite, even when a portfolio exists.
+- A metric action opens that metric and initializes its refinement selector accordingly. Composite
+  score and rank may accompany it only as labelled context, never as the metric result.
+- A comparison action opens the existing advanced matrix, seeded with Overview's displayed places
+  and current future, or its fixed subject and selected future pairs. Other portfolio members remain
+  available to select. Once edited, `Resume advanced comparison` restores that separate configuration;
+  `Start new advanced comparison from Overview` explicitly replaces it with the current Overview
+  selection. Opening a single result must never overwrite the advanced configuration.
+
 The transition should preserve:
 
 - geography and administrative level;
@@ -1223,7 +1234,7 @@ Do not infer destinations from labels or names. Preserve geography exactly where
 not substitute another administrative level unless the registry explicitly defines that fallback.
 If no valid route exists, do not show an active Detailed Analysis action.
 
-Detailed Analysis should open on the composite metric corresponding to the selected Risk Domain. It
+A place-originated Detailed Analysis action should open on the composite metric corresponding to the selected Risk Domain. It
 should not open with `Metric = All`, because `All` does not clearly communicate whether the user
 is still viewing the same score.
 
@@ -1278,14 +1289,50 @@ canonical metric/rule-to-Detailed-Analysis route registry controls clickability.
 - scenario;
 - period;
 - the selected District navigation level and Block inspection state, where applicable;
+- map/table mode and the Overview comparison mode, displayed places, fixed subject, future pairs,
+  and the previous places selection held during futures mode;
 - map extent; and
 - major panel expansion state where technically supported.
+
+Back is restoration, not an implicit apply action. Changes to geography, domain, scenario, period,
+metric or statistic inside Detailed Analysis do not overwrite the saved Overview context. No
+`Show this selection in Overview` action is required for this prototype; a future implementation
+must make such a transfer explicit and validate the complete selection before applying any part.
+
+The advanced matrix retains its independently editable places, metrics and future pairs, including
+more than four places and multiple varying axes. Back never chooses four columns, simplifies the
+matrix, or blocks return because the matrix cannot fit Overview. Incomplete configurations remain
+editable and show which axis needs a selection; missing published values show `No data`.
+
+Portfolio membership is shared, with these explicit exceptions to exact restoration:
+
+- Adding a place in Detailed Analysis adds it to the portfolio without adding an Overview column.
+- Unchecking a matrix place changes only the matrix selection. Removing it from the portfolio also
+  removes it from both comparison configurations.
+- A removed displayed place leaves its column absent on return, with a notice and no replacement.
+- Removing the futures subject exits futures mode, restores the remaining previous place columns,
+  and explains why futures comparison closed.
+- Named analysis definitions change only through an explicit save/update action. Working edits
+  must not mutate the definition from which a comparison was opened.
 
 Do not restore hover, tooltip, bin-filter, or other temporary emphasis state.
 
 If a Detailed Analysis selection cannot map directly to an Overview Risk Domain, returning should
 restore the last valid Overview context rather than clearing or partially reconstructing the
 analysis.
+
+Vendor acceptance walkthrough for this transition:
+
+1. Open the six-place saved example, retain its advanced definition, and note Overview's displayed
+   columns, geography, future, map/table mode, extent and panel state.
+2. Resume advanced comparison. Add a place, another metric and another future; Back must restore
+   the original Overview with the new place collected but not displayed. Resume must retain all edits.
+3. Remove a displayed member inside Detailed Analysis and return: its column is absent, with a
+   notice and no substitute. Repeat with the futures subject: futures mode closes with an explanation.
+4. Open a block metric: the requested metric is selected and composite facts are labelled context.
+   Change the future and choose an unsupported geography; Back still restores the complete origin.
+5. Clear an advanced axis, return and resume: the incomplete selection is retained with a useful
+   message. Repeat with a single place and with all places removed. Named definitions remain intact.
 
 Browser controls are outside the dashboard analytical-state model. Breadcrumbs and in-application
 navigation must provide the complete reversible path without depending on Browser Back.
