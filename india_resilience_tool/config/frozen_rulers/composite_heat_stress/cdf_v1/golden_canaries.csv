@@ -1,0 +1,169 @@
+level,state,district,block,district_key,block_key,scenario,period,expected_score,expected_hex
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,historical,1990-2010,0.277228,#e2f4fd
+block,Gujarat,Sabar Kantha,Khedbrahma,,gujarat|sabar kantha|khedbrahma,historical,1990-2010,13.675082,#89c9ec
+block,Telangana,Sangareddy,Sangareddy,,telangana|sangareddy|sangareddy,historical,1990-2010,21.920077,#5c9fd5
+block,Madhya Pradesh,Chhatarpur,Chhatarpur,,madhya pradesh|chhatarpur|chhatarpur,historical,1990-2010,26.695505,#4892ba
+block,Haryana,Kurukshetra,Pehowa,,haryana|kurukshetra|pehowa,historical,1990-2010,31.986534,#489f90
+block,Odisha,Sundargarh,Lahunipara,,odisha|sundargarh|lahunipara,historical,1990-2010,36.182956,#49a96c
+block,Odisha,Mayurbhanj,Bijatala,,odisha|mayurbhanj|bijatala,historical,1990-2010,40.953776,#54b847
+block,Gujarat,Rajkot,Jetpur,,gujarat|rajkot|jetpur,historical,1990-2010,45.825241,#8cc84e
+block,Uttar Pradesh,Hardoi,Madhoganj,,uttar pradesh|hardoi|madhoganj,historical,1990-2010,50.879662,#cada56
+block,Odisha,Cuttack,Salepur,,odisha|cuttack|salepur,historical,1990-2010,57.356416,#f9db56
+block,Bihar,Kaimur (Bhabua),Nuaon,,bihar|kaimur bhabua|nuaon,historical,1990-2010,64.712613,#f7973b
+block,West Bengal,Hooghly,Pursurah,,west bengal|hooghly|pursurah,historical,1990-2010,76.758206,#e64929
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,ssp245,2020-2040,0.277228,#e2f4fd
+block,Manipur,Tamenglong,Tousem,,manipur|tamenglong|tousem,ssp245,2020-2040,17.43129,#77b8e3
+block,Karnataka,Davangere,Channagiri,,karnataka|davangere|channagiri,ssp245,2020-2040,26.97695,#4892ba
+block,Assam,Cachar,Palonghat,,assam|cachar|palonghat,ssp245,2020-2040,33.31876,#49a285
+block,Haryana,Mahendragarh,Kanina,,haryana|mahendragarh|kanina,ssp245,2020-2040,39.237121,#49b153
+block,Maharashtra,Amravati,Dhamangaon Ril,,maharashtra|amravati|dhamangaon ril,ssp245,2020-2040,44.465055,#79c34c
+block,Tamil Nadu,Tuticorin,Vilathikulam,,tamil nadu|tuticorin|vilathikulam,ssp245,2020-2040,49.485345,#b2d353
+block,Uttar Pradesh,Bareilly,Bithiri Chainpur,,uttar pradesh|bareilly|bithiri chainpur,ssp245,2020-2040,54.196046,#ebe45a
+block,Andhra Pradesh,East Godavari,Undrajavaram,,andhra pradesh|east godavari|undrajavaram,ssp245,2020-2040,59.391918,#f9ca50
+block,Tamil Nadu,Thanjavur,Thiruvonam,,tamil nadu|thanjavur|thiruvonam,ssp245,2020-2040,64.948995,#f7973b
+block,Bihar,Madhubani,Kaluahi,,bihar|madhubani|kaluahi,ssp245,2020-2040,71.392724,#f26529
+block,West Bengal,Hooghly,Pursurah,,west bengal|hooghly|pursurah,ssp245,2020-2040,82.54284,#d92a28
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,ssp245,2040-2060,0.28263,#e2f4fd
+block,Meghalaya,West Khasi Hills,Mawshynrut,,meghalaya|west khasi hills|mawshynrut,ssp245,2040-2060,22.025446,#5c9fd5
+block,Maharashtra,Sangli,Valva-Islampur,,maharashtra|sangli|valva islampur,ssp245,2040-2060,33.690079,#49a47e
+block,Madhya Pradesh,Seoni,Keolari,,madhya pradesh|seoni|keolari,ssp245,2040-2060,42.087201,#62bc49
+block,Telangana,Nizamabad,Mendora,,telangana|nizamabad|mendora,ssp245,2040-2060,49.338083,#b2d353
+block,Maharashtra,Dhule,Shirpur,,maharashtra|dhule|shirpur,ssp245,2040-2060,55.290308,#f4e75b
+block,Chhattisgarh,Raigarh,Pussore,,chhattisgarh|raigarh|pussore,ssp245,2040-2060,60.352866,#f8c04b
+block,Gujarat,Surat,Mahuva,,gujarat|surat|mahuva,ssp245,2040-2060,65.103349,#f7973b
+block,Andhra Pradesh,West Godavari,Iragavaram,,andhra pradesh|west godavari|iragavaram,ssp245,2040-2060,70.153609,#f56d2a
+block,Uttar Pradesh,Prayagraj,Kaurihar,,uttar pradesh|prayagraj|kaurihar,ssp245,2040-2060,75.29043,#eb5329
+block,Odisha,Bhadrak,Bonth,,odisha|bhadrak|bonth,ssp245,2040-2060,80.713133,#dd3428
+block,West Bengal,Howrah,Amta-Ii,,west bengal|howrah|amta ii,ssp245,2040-2060,90.543881,#ba1b22
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp245,2060-2080,0.353954,#e2f4fd
+block,Chhattisgarh,Surguja,Mainpat,,chhattisgarh|surguja|mainpat,ssp245,2060-2080,26.647491,#4892ba
+block,Madhya Pradesh,Dhar,Dhar,,madhya pradesh|dhar|dhar,ssp245,2060-2080,40.165062,#4ab546
+block,Mizoram,Lunglei,Bunghmun,,mizoram|lunglei|bunghmun,ssp245,2060-2080,49.308454,#b2d353
+block,Andhra Pradesh,Anakapalli,Ravikamatham,,andhra pradesh|anakapalli|ravikamatham,ssp245,2060-2080,57.602228,#f9d152
+block,Maharashtra,Solapur,Solapur North,,maharashtra|solapur|solapur north,ssp245,2060-2080,63.672799,#f7a13f
+block,Arunachal Pradesh,Lower Dibang Valley,Roing,,arunachal pradesh|lower dibang valley|roing,ssp245,2060-2080,68.548118,#f5762e
+block,Andhra Pradesh,Palnadu,Edlapadu,,andhra pradesh|palnadu|edlapadu,ssp245,2060-2080,73.091016,#ef5d29
+block,Uttar Pradesh,Lucknow,Gosaiganj,,uttar pradesh|lucknow|gosaiganj,ssp245,2060-2080,77.260581,#e64929
+block,West Bengal,Purulia,Purulia-I,,west bengal|purulia|purulia i,ssp245,2060-2080,81.607789,#db3028
+block,Bihar,Samastipur,Kalyanpur,,bihar|samastipur|kalyanpur,ssp245,2060-2080,86.348905,#cf1e27
+block,West Bengal,Hooghly,Khanakul-I,,west bengal|hooghly|khanakul i,ssp245,2060-2080,94.847705,#a9191e
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp585,2020-2040,0.292797,#e2f4fd
+block,Himachal Pradesh,Mandi,Dharmpur,,himachal pradesh|mandi|dharmpur,ssp585,2020-2040,18.272819,#72b4e0
+block,Rajasthan,Barmer,Barmer Rural,,rajasthan|barmer|barmer rural,ssp585,2020-2040,27.781046,#4894b3
+block,Meghalaya,North Garo Hills,Kharkutta,,meghalaya|north garo hills|kharkutta,ssp585,2020-2040,34.587049,#49a773
+block,Chhattisgarh,Raigarh,Gharghoda,,chhattisgarh|raigarh|gharghoda,ssp585,2020-2040,40.648403,#54b847
+block,Gujarat,Devbhumi Dwarka,Okhamandal,,gujarat|devbhumi dwarka|okhamandal,ssp585,2020-2040,46.108981,#8cc84e
+block,Andhra Pradesh,Nandyal,Gadivemula,,andhra pradesh|nandyal|gadivemula,ssp585,2020-2040,51.106753,#cada56
+block,Andhra Pradesh,Y.S.R,Badvel,,andhra pradesh|ysr|badvel,ssp585,2020-2040,56.09541,#fae259
+block,Andhra Pradesh,West Godavari,Palakoderu,,andhra pradesh|west godavari|palakoderu,ssp585,2020-2040,61.182288,#f8b949
+block,Bihar,Rohtas,Chenari,,bihar|rohtas|chenari,ssp585,2020-2040,66.785913,#f68634
+block,Bihar,Samastipur,Mohiuddinagar,,bihar|samastipur|mohiuddinagar,ssp585,2020-2040,72.897655,#ef5d29
+block,West Bengal,Hooghly,Pursurah,,west bengal|hooghly|pursurah,ssp585,2020-2040,82.931557,#d92a28
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp585,2040-2060,0.345689,#e2f4fd
+block,Arunachal Pradesh,Changlang,Khagam-Miao,,arunachal pradesh|changlang|khagam miao,ssp585,2040-2060,26.32482,#4890c1
+block,Chhattisgarh,Surajpur,Surajpur,,chhattisgarh|surajpur|surajpur,ssp585,2040-2060,39.824164,#4ab546
+block,Telangana,Nagarkurnool,Vangoor,,telangana|nagarkurnool|vangoor,ssp585,2040-2060,49.190067,#b2d353
+block,Tamil Nadu,Tuticorin,Tiruchendur,,tamil nadu|tuticorin|tiruchendur,ssp585,2040-2060,57.112414,#f9db56
+block,Haryana,Hisar,Hisar-Ii,,haryana|hisar|hisar ii,ssp585,2040-2060,63.310722,#f7a842
+block,Delhi,South East,South East,,delhi|south east|south east,ssp585,2040-2060,68.28535,#f68032
+block,Andhra Pradesh,Nandyal,Kolimigundla,,andhra pradesh|nandyal|kolimigundla,ssp585,2040-2060,72.712253,#ef5d29
+block,Andhra Pradesh,Kakinada,Thondangi,,andhra pradesh|kakinada|thondangi,ssp585,2040-2060,77.053931,#e64929
+block,Andhra Pradesh,Konaseema,Ramachandrapuram,,andhra pradesh|konaseema|ramachandrapuram,ssp585,2040-2060,81.369074,#dd3428
+block,Jharkhand,Dumka,Sikaripara,,jharkhand|dumka|sikaripara,ssp585,2040-2060,86.097029,#cf1e27
+block,West Bengal,Hooghly,Pursurah,,west bengal|hooghly|pursurah,ssp585,2040-2060,94.648635,#a9191e
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp585,2060-2080,0.419324,#e2f4fd
+block,Karnataka,Bengaluru Urban,Bengaluru North,,karnataka|bengaluru urban|bengaluru north,ssp585,2060-2080,37.362551,#49ac65
+block,Telangana,Medchal Malkajgiri,Balanagar,,telangana|medchal malkajgiri|balanagar,ssp585,2060-2080,57.795857,#f9d152
+block,Telangana,Nizamabad,Indalwai,,telangana|nizamabad|indalwai,ssp585,2060-2080,67.313725,#f68634
+block,Andhra Pradesh,Kurnool,Peddakadabur,,andhra pradesh|kurnool|peddakadabur,ssp585,2060-2080,74.646963,#eb5329
+block,Nagaland,Niuland,Aghunaqa,,nagaland|niuland|aghunaqa,ssp585,2060-2080,79.113303,#e23e28
+block,Andhra Pradesh,Anantapur,Peddavadugur,,andhra pradesh|anantapur|peddavadugur,ssp585,2060-2080,82.594066,#d92a28
+block,Uttar Pradesh,Rae Bareli,Harchandpur,,uttar pradesh|rae bareli|harchandpur,ssp585,2060-2080,86.35283,#cf1e27
+block,Tripura,Khowai,Khowai,,tripura|khowai|khowai,ssp585,2060-2080,89.636322,#be1c23
+block,Uttar Pradesh,Shravasti,Hariharpur Rani,,uttar pradesh|shravasti|hariharpur rani,ssp585,2060-2080,92.553382,#b21a20
+block,Uttar Pradesh,Kushi Nagar,Kasaya,,uttar pradesh|kushi nagar|kasaya,ssp585,2060-2080,95.108803,#a9191e
+block,West Bengal,Hooghly,Pursurah,,west bengal|hooghly|pursurah,ssp585,2060-2080,98.636956,#97161a
+district,Himachal Pradesh,Lahul and Spiti,,himachal pradesh|lahul and spiti,,historical,1990-2010,0.298053,#e2f4fd
+district,Mizoram,Hnahthial,,mizoram|hnahthial,,historical,1990-2010,8.365872,#aee0f8
+district,Madhya Pradesh,Shajapur,,madhya pradesh|shajapur,,historical,1990-2010,19.110527,#6eb0de
+district,Odisha,Rayagada,,odisha|rayagada,,historical,1990-2010,23.380449,#579bd2
+district,Chhattisgarh,Mungeli,,chhattisgarh|mungeli,,historical,1990-2010,27.600913,#4894b3
+district,Haryana,Jhajjar,,haryana|jhajjar,,historical,1990-2010,32.201426,#489f90
+district,Uttar Pradesh,Baghpat,,uttar pradesh|baghpat,,historical,1990-2010,35.547255,#49a96c
+district,Punjab,Gurdaspur,,punjab|gurdaspur,,historical,1990-2010,40.014143,#4ab546
+district,Uttar Pradesh,Rampur,,uttar pradesh|rampur,,historical,1990-2010,44.985162,#82c64d
+district,Puducherry,Yanam,,puducherry|yanam,,historical,1990-2010,51.350566,#cada56
+district,Uttar Pradesh,Pratapgarh,,uttar pradesh|pratapgarh,,historical,1990-2010,60.026638,#f8c04b
+district,West Bengal,Hooghly,,west bengal|hooghly,,historical,1990-2010,75.234711,#eb5329
+district,Himachal Pradesh,Lahul and Spiti,,himachal pradesh|lahul and spiti,,ssp245,2020-2040,0.336231,#e2f4fd
+district,Meghalaya,West Jaintia Hills,,meghalaya|west jaintia hills,,ssp245,2020-2040,10.538578,#99d7f5
+district,Mizoram,Lawngtlai,,mizoram|lawngtlai,,ssp245,2020-2040,23.914081,#5095cf
+district,Maharashtra,Washim,,maharashtra|washim,,ssp245,2020-2040,30.031324,#489aa2
+district,Assam,Cachar,,assam|cachar,,ssp245,2020-2040,34.696047,#49a773
+district,Telangana,Jogulamba Gadwal,,telangana|jogulamba gadwal,,ssp245,2020-2040,40.265775,#4ab546
+district,Rajasthan,Sawai Madhopur,,rajasthan|sawai madhopur,,ssp245,2020-2040,44.724854,#82c64d
+district,Rajasthan,Hanumangarh,,rajasthan|hanumangarh,,ssp245,2020-2040,49.343589,#b2d353
+district,Andhra Pradesh,Y.S.R,,andhra pradesh|ysr,,ssp245,2020-2040,54.516781,#f4e75b
+district,West Bengal,Alipurduar,,west bengal|alipurduar,,ssp245,2020-2040,59.824466,#f8c04b
+district,Assam,Sivasagar,,assam|sivasagar,,ssp245,2020-2040,66.914393,#f68634
+district,West Bengal,Hooghly,,west bengal|hooghly,,ssp245,2020-2040,81.24436,#dd3428
+district,Himachal Pradesh,Lahul and Spiti,,himachal pradesh|lahul and spiti,,ssp245,2040-2060,0.379616,#e2f4fd
+district,Manipur,Tamenglong,,manipur|tamenglong,,ssp245,2040-2060,13.849698,#89c9ec
+district,Chhattisgarh,Bastar,,chhattisgarh|bastar,,ssp245,2040-2060,30.635239,#489d97
+district,Telangana,Mahabubnagar,,telangana|mahabubnagar,,ssp245,2040-2060,37.971592,#49af5a
+district,Andaman & Nicobar Islands,Nicobars,,andaman nicobar islands|nicobars,,ssp245,2040-2060,43.779935,#79c34c
+district,Andhra Pradesh,Srikakulam,,andhra pradesh|srikakulam,,ssp245,2040-2060,50.521918,#cada56
+district,Jharkhand,Ramgarh,,jharkhand|ramgarh,,ssp245,2040-2060,55.716802,#fae259
+district,Haryana,Palwal,,haryana|palwal,,ssp245,2040-2060,59.95462,#f8c04b
+district,Tripura,South Tripura,,tripura|south tripura,,ssp245,2040-2060,65.502655,#f69039
+district,Tamil Nadu,Sivaganga,,tamil nadu|sivaganga,,ssp245,2040-2060,70.960451,#f26529
+district,Bihar,Rohtas,,bihar|rohtas,,ssp245,2040-2060,76.735822,#e64929
+district,West Bengal,Howrah,,west bengal|howrah,,ssp245,2040-2060,90.134753,#be1c23
+district,Himachal Pradesh,Lahul and Spiti,,himachal pradesh|lahul and spiti,,ssp245,2060-2080,0.701097,#ddf2fc
+district,Manipur,Tamenglong,,manipur|tamenglong,,ssp245,2060-2080,17.346505,#77b8e3
+district,Karnataka,Haveri,,karnataka|haveri,,ssp245,2060-2080,36.18848,#49a96c
+district,Rajasthan,Jaipur Gramin,,rajasthan|jaipur gramin,,ssp245,2060-2080,44.634614,#82c64d
+district,Maharashtra,Buldhana,,maharashtra|buldhana,,ssp245,2060-2080,51.564018,#d4dd57
+district,Maharashtra,Ratnagiri,,maharashtra|ratnagiri,,ssp245,2060-2080,58.512512,#f9ca50
+district,Uttar Pradesh,Shamli,,uttar pradesh|shamli,,ssp245,2060-2080,63.959027,#f7a13f
+district,Telangana,Mulugu,,telangana|mulugu,,ssp245,2060-2080,67.793367,#f68032
+district,Uttar Pradesh,Auraiya,,uttar pradesh|auraiya,,ssp245,2060-2080,73.286738,#ef5d29
+district,Assam,Chirang,,assam|chirang,,ssp245,2060-2080,78.308951,#e44228
+district,Jharkhand,Jamtara,,jharkhand|jamtara,,ssp245,2060-2080,83.244395,#d92a28
+district,West Bengal,Howrah,,west bengal|howrah,,ssp245,2060-2080,94.441118,#ac191f
+district,Himachal Pradesh,Lahul and Spiti,,himachal pradesh|lahul and spiti,,ssp585,2020-2040,0.344908,#e2f4fd
+district,Mizoram,Hnahthial,,mizoram|hnahthial,,ssp585,2020-2040,10.883052,#99d7f5
+district,Karnataka,Chikkaballapura,,karnataka|chikkaballapura,,ssp585,2020-2040,24.882427,#4b90cb
+district,"Dadra, Nagar Haveli, Daman & Diu",Diu,,dadra nagar haveli daman diu|diu,,ssp585,2020-2040,31.168871,#489d97
+district,Madhya Pradesh,Barwani,,madhya pradesh|barwani,,ssp585,2020-2040,35.789341,#49a96c
+district,Jharkhand,Simdega,,jharkhand|simdega,,ssp585,2020-2040,41.671439,#62bc49
+district,Gujarat,Panch Mahals,,gujarat|panch mahals,,ssp585,2020-2040,46.572175,#9acc50
+district,Uttar Pradesh,Amroha,,uttar pradesh|amroha,,ssp585,2020-2040,51.231692,#cada56
+district,Uttar Pradesh,Farrukhabad,,uttar pradesh|farrukhabad,,ssp585,2020-2040,56.173209,#fae259
+district,Uttar Pradesh,Chitrakoot,,uttar pradesh|chitrakoot,,ssp585,2020-2040,61.578943,#f8af45
+district,Assam,Jorhat,,assam|jorhat,,ssp585,2020-2040,68.80076,#f5762e
+district,West Bengal,Howrah,,west bengal|howrah,,ssp585,2020-2040,81.653044,#db3028
+district,Himachal Pradesh,Lahul and Spiti,,himachal pradesh|lahul and spiti,,ssp585,2040-2060,0.417795,#e2f4fd
+district,Manipur,Tamenglong,,manipur|tamenglong,,ssp585,2040-2060,16.338244,#7ebee6
+district,Karnataka,Haveri,,karnataka|haveri,,ssp585,2040-2060,35.955071,#49a96c
+district,Mizoram,Lunglei,,mizoram|lunglei,,ssp585,2040-2060,44.407278,#79c34c
+district,Andhra Pradesh,Chittoor,,andhra pradesh|chittoor,,ssp585,2040-2060,51.306313,#cada56
+district,Rajasthan,Baran,,rajasthan|baran,,ssp585,2040-2060,58.286044,#f9d152
+district,Haryana,Hisar,,haryana|hisar,,ssp585,2040-2060,63.55555,#f7a13f
+district,Gujarat,Gir Somnath,,gujarat|gir somnath,,ssp585,2040-2060,67.533059,#f68032
+district,Jharkhand,Palamu,,jharkhand|palamu,,ssp585,2040-2060,72.795623,#ef5d29
+district,Tamil Nadu,Ramanathapuram,,tamil nadu|ramanathapuram,,ssp585,2040-2060,78.190077,#e44228
+district,Assam,Marigaon,,assam|marigaon,,ssp585,2040-2060,82.973674,#d92a28
+district,West Bengal,Howrah,,west bengal|howrah,,ssp585,2040-2060,94.166927,#ac191f
+district,Himachal Pradesh,Lahul and Spiti,,himachal pradesh|lahul and spiti,,ssp585,2060-2080,0.543176,#ddf2fc
+district,Arunachal Pradesh,West Kameng,,arunachal pradesh|west kameng,,ssp585,2060-2080,26.056417,#4890c1
+district,Chhattisgarh,Narayanpur,,chhattisgarh|narayanpur,,ssp585,2060-2080,51.432997,#cada56
+district,Nagaland,Chumoukedima,,nagaland|chumoukedima,,ssp585,2060-2080,61.738599,#f8af45
+district,Rajasthan,Banswara,,rajasthan|banswara,,ssp585,2060-2080,69.138293,#f5762e
+district,Karnataka,Raichur,,karnataka|raichur,,ssp585,2060-2080,74.544894,#eb5329
+district,Haryana,Faridabad,,haryana|faridabad,,ssp585,2060-2080,78.853863,#e23e28
+district,Odisha,Kendujhar,,odisha|kendujhar,,ssp585,2060-2080,82.057389,#db3028
+district,Gujarat,Gir Somnath,,gujarat|gir somnath,,ssp585,2060-2080,85.941188,#cf1e27
+district,"Dadra, Nagar Haveli, Daman & Diu",Daman,,dadra nagar haveli daman diu|daman,,ssp585,2060-2080,90.543437,#ba1b22
+district,Tamil Nadu,Karur,,tamil nadu|karur,,ssp585,2060-2080,93.513553,#ac191f
+district,West Bengal,Hooghly,,west bengal|hooghly,,ssp585,2060-2080,98.498456,#9b161b

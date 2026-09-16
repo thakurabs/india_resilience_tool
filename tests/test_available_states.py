@@ -51,7 +51,7 @@ def test_available_states_missing_or_empty_root(tmp_path: Path) -> None:
     assert list_available_states_from_processed_root(str(tmp_path)) == []
 
 
-def test_jrc_metric_supports_only_telangana_in_geography_controls(monkeypatch) -> None:
+def test_jrc_metric_has_no_hard_coded_state_restriction_in_geography_controls(monkeypatch) -> None:
     from india_resilience_tool.app import geography_controls
 
     monkeypatch.setattr(
@@ -59,4 +59,4 @@ def test_jrc_metric_supports_only_telangana_in_geography_controls(monkeypatch) -
         "st",
         types.SimpleNamespace(session_state={"selected_var": "jrc_flood_depth_rp100"}),
     )
-    assert geography_controls._supported_admin_states_for_selected_metric() == ["Telangana"]
+    assert geography_controls._supported_admin_states_for_selected_metric() == []

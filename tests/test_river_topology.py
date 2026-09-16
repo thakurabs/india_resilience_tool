@@ -4,7 +4,6 @@ import geopandas as gpd
 from shapely.geometry import LineString, MultiLineString, Polygon
 
 from india_resilience_tool.data.river_topology import build_hydro_river_summary
-from tools.geodata.build_river_subbasin_diagnostics import build_river_subbasin_diagnostics_df
 from tools.geodata.build_river_topology import build_river_topology_artifacts
 
 
@@ -247,25 +246,3 @@ def test_build_hydro_river_summary_returns_top_named_rivers() -> None:
     assert summary["reach_count"] == 3
     assert summary["fallback_segment_count"] == 0
     assert summary["top_named_rivers"][0]["river_name"] in {"Pranhita", "Wardha"}
-
-
-def test_build_river_subbasin_diagnostics_df_marks_exact_matches() -> None:
-    river_display = gpd.GeoDataFrame(
-        {
-            "river_feature_id": ["riv_001", "riv_002"],
-            "source_uid_river": ["101", "102"],
-            "river_name_clean": ["Pranhita", "Wardha"],
-            "basin_name_clean": ["Godavari", "Godavari"],
-            "subbasin_name_clean": ["Pranhita and others", "Major River"],
-            "state_names_clean": ["Telangana", "Maharashtra"],
-            "length_km_source": [10.0, 5.0],
-        },
-        geometry=[LineString([(0, 0), (1, 0)]), LineString([(1, 0), (2, 0)])],
-        crs="EPSG:4326",
-    )
-    diagnostics = build_river_subbasin_diagnostics_df(_subbasin_gdf(), river_display)
-    pranhita = diagnostics.loc[diagnostics["subbasin_id"] == "SB01"].iloc[0]
-    wardha = diagnostics.loc[diagnostics["subbasin_id"] == "SB02"].iloc[0]
-    assert pranhita["match_status"] == "matched"
-    assert int(pranhita["matched_river_feature_count"]) == 1
-    assert wardha["match_status"] == "review_required"

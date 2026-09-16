@@ -1,0 +1,59 @@
+{
+  "bundle_domain": "Heat Stress",
+  "colour_scale_id": "whbgyr-101-floor045-v1",
+  "composite_slug": "composite_heat_stress",
+  "configured_weight": 0.7,
+  "coverage_failure_rate": 0.0,
+  "coverage_gate": 1.0,
+  "data_snapshot_hash": "e49b14cd94b56b8e7e9891b09a91f0278ddbd62bb855deff30e9110d56abf286",
+  "fitted_utc": "2026-09-12T21:22:44Z",
+  "headline_metric_count": 6,
+  "level_fitted": "district",
+  "n_below_coverage_gate": 0,
+  "n_districts": 784,
+  "n_fit_rows": 5488,
+  "n_source_masters": 216,
+  "n_states": 36,
+  "pooled_n": 5488,
+  "ruler_id": "composite_heat_stress_cdf_v1",
+  "ruler_kind": "cdf",
+  "ruler_sha256": "cc4da9609ca2b1d8ceeff9b47128cdccc20ad78f1492af206b39c4e626902293",
+  "slices": [
+    [
+      "historical",
+      "1990-2010"
+    ],
+    [
+      "ssp245",
+      "2020-2040"
+    ],
+    [
+      "ssp245",
+      "2040-2060"
+    ],
+    [
+      "ssp245",
+      "2060-2080"
+    ],
+    [
+      "ssp585",
+      "2020-2040"
+    ],
+    [
+      "ssp585",
+      "2040-2060"
+    ],
+    [
+      "ssp585",
+      "2060-2080"
+    ]
+  ],
+  "weights": {
+    "tasmin_tropical_nights_gt28": 0.1,
+    "twb_annual_max": 0.13333333333333333,
+    "twb_annual_mean": 0.1,
+    "twb_days_ge_28": 0.13333333333333333,
+    "twb_days_ge_30": 0.13333333333333333,
+    "twb_summer_mean": 0.1
+  }
+}
