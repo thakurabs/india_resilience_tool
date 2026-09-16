@@ -998,7 +998,7 @@ than presenting the movement as clean.
 Differences are expressed in scale points. The ruler is rank-based, so a gap of 12.3 is a
 difference in **position among India's districts** and must be labelled in those terms on screen —
 never as a physical difference, a percentage, or a multiple, and not as a "percentile" in
-user-facing copy. Blocks carry no rank at any scope, in either mode.
+user-facing copy.
 
 Mixed administrative levels are permitted and must be labelled. A district and a block may share a
 tray, because both are scored on the same ruler and a district and a block holding the same
