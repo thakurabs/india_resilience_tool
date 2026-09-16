@@ -355,6 +355,13 @@
   .stub { background: #f6f9fc; border: 1px dashed #c6cfd8; border-radius: 8px;
           padding: 12px 14px; font-size: 12.5px; color: var(--ink-2); }
   .stub h3 { margin: 0 0 8px; font-size: 13px; }
+  .da-refine { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+               gap: 8px 10px; }
+  .da-refine label { display: block; font-size: 11px; color: var(--ink-3); margin: 0 0 3px; }
+  .da-refine select { width: 100%; font: inherit; font-size: 12px; padding: 4px 6px;
+                      border: 1px solid #c6cfd8; border-radius: 5px; background: #fff; }
+  .drv button.no-route { color: var(--ink-3); }
+  .drv button.no-route .drv-go { opacity: .45; }
 
   /* ---------- coordinate doorway ---------- */
   .coord-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-top: 10px; }
@@ -574,8 +581,11 @@
         frozen ruler and painted for real. Every other State/UT hovers normally &mdash; whole-state
         highlight, State-level tooltip &mdash; but is not selectable, because no block outside
         Telangana has been scored. One worked State/UT demonstrates the workflow.</p>
-      <p><b>2. Detailed Analysis is a stub.</b> The action and the state it carries are real,
-        including which driver metric was selected; the destination only displays that state.</p>
+      <p><b>2. Detailed Analysis is a stub &mdash; but the whole seam is not.</b> The
+        destination is undesigned. What the doorway carries, the answer the destination must
+        reproduce on arrival, the signals that have nowhere to go, and what a refinement made
+        inside does on the way back are all real and all demonstrated. One metric in every
+        list is marked as a demonstration of a signal with no destination.</p>
       <p>Context and Evidence carries no basin or river map overlay and no basin context at
         State/UT scope; the card and the method note say why.</p>
     </details>
@@ -751,7 +761,8 @@
     ctxOpen: false,        /* Context and Evidence is collapsed on arrival, by contract */
     ctxLayer: null,        /* the active Context layer id, or null; off by default */
     cmp: { mode: "places", members: [], subject: null, slices: [] },
-    da: null
+    da: null,
+    daNote: null          /* what a refinement inside Detailed Analysis did on the way back */
   };
 
   var byKey = {};
@@ -1903,7 +1914,7 @@
     if (S.view === "state") { openDistrict(b.dk); return; }
     if (b.dk !== S.district) return;
     S.block = b.k;
-    S.da = { level: "Block", unit: b.n + ", " + (byKey[b.dk] ? byKey[b.dk].n : "") };
+    daOpen("Block", b.k, b.n + ", " + (byKey[b.dk] ? byKey[b.dk].n : ""), null);
     render();
   }
 
@@ -2218,21 +2229,216 @@
     return "<span class='band' style='color:" + BAND_INK[b] + "'>" + b + "</span>";
   }
 
+  /* ---------- the Detailed Analysis doorway ----------------------------------
+     A display name is not an identifier. "Mancherial" is both a district of
+     Telangana and a block inside that district, and three States hold a
+     "Bilaspur". What crosses this seam is the key the roster issued; the name
+     travels beside it only to write the heading. A destination that resolves
+     names instead of keys will sometimes open the wrong place and never know. */
+  var DA_BUNDLE_ID = {
+    "Heat Risk": "composite_heat_risk",
+    "Drought Risk": "composite_drought_risk",
+    "Extreme Rainfall | Flash Flood Risk": "composite_flood_extreme_rainfall_risk",
+    "Heat Stress": "composite_heat_stress",
+    "Cold Risk": "composite_cold_risk",
+    "Riverine Flood": "composite_flood_jrc_depth"
+  };
+  var DA_LEVEL_ID = { "State/UT": "state", "District": "district", "Block": "block" };
+
+  /* A State/UT's stable key is the slug its own districts already carry as their
+     first segment -- "telangana", not the printed "Telangana". Sending the
+     printed name would hand the destination an ampersand to re-slug ("Andaman &
+     Nicobar Islands") and two ways to get it wrong. */
+  function daGeoKey(level, key) {
+    if (level !== "State/UT") return key;
+    var ds = statesOf[key] || [];
+    return ds.length ? String(ds[0].k).split("|")[0] : key;
+  }
+
+  /* A rule signal is not a metric. It is a threshold rule composed over several
+     measured quantities, so there is no single measured thing underneath it --
+     no map of it exists and no trend of it exists -- and Detailed Analysis has
+     nothing to open. Sectoral Risk Domains report rule signals rather than
+     metrics, so this is not a hypothetical: it is what every sectoral bundle
+     will do. One is shown here, marked as a demonstration, because the live
+     bundle is thematic and every one of its nine metrics routes. */
+  var DA_DEMO_RULE = "demo:rule_signal";
+  var DA_DEMO_RULE_LABEL = "Consecutive days above the crop heat threshold";
+
+  function daMetricLabel(slug) {
+    return slug === DA_DEMO_RULE ? DA_DEMO_RULE_LABEL : metricLabel(slug);
+  }
+
+  /* Not every named signal has somewhere to go. The doorway must say so at the
+     door, in the words of the thing the user clicked -- never open a blank
+     screen and never silently substitute something else without saying it. */
+  function daRoute(metric) {
+    if (metric === DA_DEMO_RULE) {
+      return { ok: false,
+        why: "This is a rule signal, not a metric: a threshold rule composed over several " +
+             "measured quantities. Detailed Analysis opens one measured quantity at a time, " +
+             "and there is no map or trend of a rule to open.",
+        instead: "Detailed Analysis opens on the composite hazard score instead, and the rule " +
+                 "stays readable here, at the level where it was computed." };
+    }
+    if (!DA_BUNDLE_ID[S.bundle]) {
+      return { ok: false,
+        why: "IRT publishes no composite for this Risk Domain, so Detailed Analysis has no " +
+             "surface to open at any level.",
+        instead: "The doorway is withheld rather than shown leading nowhere." };
+    }
+    if (metric && !D.metric_labels[metric]) {
+      return { ok: false,
+        why: "No metric is published under this identifier.",
+        instead: "Detailed Analysis opens on the composite hazard score." };
+    }
+    return { ok: true };
+  }
+
+  /* The number the user is holding as they step through, captured at the moment
+     of crossing. The destination must put the same number on its first screen.
+     If the two differ, the seam is wrong, and this is the one test that catches
+     it -- which is why it is recorded here rather than recomputed there. */
+  function daArrival(level, key) {
+    if (level === "State/UT") {
+      var st = sStats()[key];
+      if (!st || st.mean === undefined || st.mean === null) return null;
+      return { score: st.mean, rank: st.rank, total: Object.keys(sStats()).length,
+               scope: "State/UTs of India", n: st.n_valid, nWhat: "districts in the mean" };
+    }
+    if (level === "District") {
+      var d = byKey[key], r = districtRank(key);
+      if (!r) return null;
+      return { score: r.score, rank: r.rank, total: r.total,
+               scope: "districts of " + (d ? d.s : ""), n: null, nWhat: "" };
+    }
+    var br = blockRank(key);
+    if (!br) return null;
+    return { score: br.score, rank: br.rank, total: br.total,
+             scope: "blocks of " + br.district, n: null, nWhat: "" };
+  }
+
+  function daOpen(level, key, name, metric) {
+    var route = daRoute(metric);
+    S.da = {
+      level: level, key: daGeoKey(level, key), name: name,
+      requested: metric || null,
+      metric: route.ok ? (metric || null) : null,
+      blocked: route.ok ? null : route,
+      lookupKey: key,
+      arrival: daArrival(level, key),
+      /* what the user changes INSIDE Detailed Analysis, which is the half of the
+         doorway the prototype never used to show */
+      refine: { scenario: S.scenario, period: S.period, metric: "", stat: "mean", geo: "" },
+      /* where to put them back, exactly */
+      from: { view: S.view, state: S.state, district: S.district, block: S.block,
+              scenario: S.scenario, period: S.period, pinned: S.pinned,
+              showAll: S.showAll, mode: S.mode }
+    };
+    S.report = null;
+    S.daNote = null;
+  }
+
+  function daSel(id, label, opts, value) {
+    var h = "<div><label for='" + id + "'>" + esc(label) + "</label><select id='" + id + "'>";
+    Object.keys(opts).forEach(function (k) {
+      h += "<option value='" + escAttr(k) + "'" + (k === value ? " selected" : "") + ">" +
+           esc(opts[k]) + "</option>";
+    });
+    return h + "</select></div>";
+  }
+
+  /* What a refinement made inside Detailed Analysis does on the way back.
+     Scenario and period are axes of the whole screen: send the user back to a map
+     of 2040-2060 after they have just been reading 2060-2080 and the screen is
+     lying to them, so those return. Geography returns whenever the Overview can
+     show it. Metric and statistic do not return: screening always paints the
+     composite on the area-weighted mean, and swapping either one behind an
+     unchanged colourbar would change what the colours mean without saying so. */
+  function daBack() {
+    var da = S.da, f = da.from, r = da.refine, notes = [], refused = null;
+    S.view = f.view; S.state = f.state; S.district = f.district; S.block = f.block;
+    S.pinned = f.pinned; S.showAll = f.showAll; S.mode = f.mode;
+    S.scenario = f.scenario; S.period = f.period;
+
+    if (r.scenario !== f.scenario || r.period !== f.period) {
+      S.scenario = r.scenario; S.period = r.period;
+      notes.push("the future you moved to came back with you (" +
+        esc(D.scenario_labels[r.scenario]) + " \u00b7 " + esc(D.period_labels[r.period]) +
+        "), so the map is showing what you were just reading");
+    }
+
+    if (r.geo === "up") {
+      if (da.level === "Block" && blockByKey[da.lookupKey]) {
+        var b = blockByKey[da.lookupKey];
+        S.view = "district"; S.state = b.s; S.district = b.dk; S.block = null;
+        notes.push("you moved up from the block to " +
+          esc(byKey[b.dk] ? byKey[b.dk].n : b.dk) + ", and the Overview came back open on " +
+          "that district");
+      } else if (da.level === "District" && byKey[da.lookupKey]) {
+        S.view = "state"; S.state = byKey[da.lookupKey].s; S.district = null; S.block = null;
+        notes.push("you moved up from the district to " + esc(byKey[da.lookupKey].s) +
+          ", and the Overview came back open on that State/UT");
+      } else {
+        S.view = "india"; S.state = null; S.district = null; S.block = null;
+        notes.push("you moved up from the State/UT to India, and the Overview came back at " +
+          "the national level");
+      }
+      S.pinned = null; S.showAll = false;
+    } else if (r.geo === "offmap") {
+      refused = "Inside Detailed Analysis you moved to a block in a State/UT whose blocks are " +
+        "not scored in this build. The Overview cannot open it, so it came back exactly where " +
+        "you left it rather than landing you on an empty view. Nothing was lost: the geography " +
+        "you had is still selected.";
+    }
+
+    if (r.metric) {
+      notes.push("the metric you switched to (" + esc(metricLabel(r.metric)) + ") stayed " +
+        "behind, because the screening surface always paints the composite hazard score");
+    }
+    if (r.stat !== "mean") {
+      notes.push("the statistic you switched to (Median) stayed behind, because screening is " +
+        "fixed to the area-weighted mean so that two units are always aggregated the same way");
+    }
+
+    /* The header selectors are the visible statement of which future is on
+       screen. Moving S.scenario without moving them would leave the map painting
+       one future while the control names another -- precisely the desync this
+       doorway exists to rule out. They are built once, so they are set here. */
+    var scEl = document.getElementById("sel-scenario");
+    var peEl = document.getElementById("sel-period");
+    if (scEl) scEl.value = S.scenario;
+    if (peEl) peEl.value = S.period;
+
+    S.daNote = { unit: da.name, level: da.level, notes: notes, refused: refused,
+                 moved: r.geo === "up" };
+    S.da = null;
+  }
+
+  function daCapFirst(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
   /* A driver list whose every item routes into Detailed Analysis with the
      current geography, level, bundle, scenario and period preserved and that
      metric selected -- the driver-to-Detailed-Analysis route of section 7. */
-  function driverList(slugs, level, unit) {
+  function driverList(slugs, level, key, unit) {
     if (!slugs || !slugs.length) {
       return "<p class='sub' style='margin:12px 0 0'>Metric information is not " +
              "available for this geography.</p>";
     }
+    /* The demonstration rule signal is appended, and said to be one, so that the
+       one case with nowhere to go is clickable in the live thematic bundle. */
+    var items = slugs.concat([DA_DEMO_RULE]);
     return "<p class='drv-head'>" +
       (D.bundle_kind === "sector" ? "Top rule signals" : "Top metrics") +
       "</p><ul class='drv'>" +
-      slugs.map(function (slug) {
-        return "<li><button type='button' data-drv='" + esc(slug) +
-          "' data-lvl='" + esc(level) + "' data-unit='" + esc(unit) + "'>" +
-          esc(metricLabel(slug)) + "<span class='drv-go'>&rsaquo;</span></button></li>";
+      items.map(function (slug) {
+        var demo = slug === DA_DEMO_RULE;
+        return "<li><button type='button'" + (demo ? " class='no-route'" : "") +
+          " data-drv='" + escAttr(slug) + "' data-lvl='" + escAttr(level) +
+          "' data-key='" + escAttr(key) + "' data-unit='" + escAttr(unit) + "'>" +
+          esc(daMetricLabel(slug)) +
+          (demo ? " <i>&mdash; demonstration: a signal with no destination</i>" : "") +
+          "<span class='drv-go'>&rsaquo;</span></button></li>";
       }).join("") + "</ul>";
   }
 
@@ -2241,7 +2447,7 @@
     for (var i = 0; i < buttons.length; i++) {
       buttons[i].addEventListener("click", function (ev) {
         var b = ev.currentTarget;
-        S.da = { level: b.dataset.lvl, unit: b.dataset.unit, driver: b.dataset.drv };
+        daOpen(b.dataset.lvl, b.dataset.key, b.dataset.unit, b.dataset.drv);
         render();
       });
     }
@@ -2257,7 +2463,8 @@
   function unitActions(level, key, name) {
     return "<div class='act-row'>" +
       "<button type='button' class='btn' data-act='da' data-lvl='" + escAttr(level) +
-        "' data-unit='" + escAttr(name) + "'>Explore in Detailed Analysis</button>" +
+        "' data-key='" + escAttr(key) + "' data-unit='" + escAttr(name) +
+        "'>Explore in Detailed Analysis</button>" +
       "<button type='button' class='btn ghost' data-act='report' data-lvl='" + escAttr(level) +
         "' data-key='" + escAttr(key) + "' data-unit='" + escAttr(name) +
         "'>Download report</button>" +
@@ -2270,8 +2477,7 @@
       bs[i].addEventListener("click", function (ev) {
         var b = ev.currentTarget;
         if (b.dataset.act === "da") {
-          S.da = { level: b.dataset.lvl, unit: b.dataset.unit };
-          S.report = null;
+          daOpen(b.dataset.lvl, b.dataset.key, b.dataset.unit, null);
         } else {
           S.report = { level: b.dataset.lvl, key: b.dataset.key, name: b.dataset.unit };
           S.da = null;
@@ -2307,7 +2513,7 @@
           "among States. The score measures the hazard itself: how severe the climate " +
           "conditions are. It does not account for how many people or assets are exposed, " +
           "or how well they can cope.</p>" +
-        driverList(drv, "State/UT", S.state) +
+        driverList(drv, "State/UT", S.state, S.state) +
         unitActions("State/UT", S.state, S.state);
       wireDrivers(host);
       wireCmpControls(host);
@@ -2339,7 +2545,8 @@
         fmt(vals[0]) + "</b> to <b>" + fmt(vals[vals.length - 1]) + "</b>. Blocks are " +
         "scored from their own physical values on the same frozen ruler, so this " +
         "district's score is not their average.</p>" +
-      driverList(dDrivers()[S.district] || [], "District", d.n + ", " + S.state) +
+      driverList(dDrivers()[S.district] || [], "District", S.district,
+                 d.n + ", " + S.state) +
       unitActions("District", S.district, d.n);
     wireDrivers(host);
     wireCmpControls(host);
@@ -2495,6 +2702,22 @@
     var host = document.getElementById("inspection");
     var html = "";
 
+    /* Coming back is half the doorway. The Overview reopens exactly where it was
+       left, and says in words what a refinement made inside did or did not do to
+       it -- otherwise the user cannot tell a deliberate contract from a bug. */
+    if (S.daNote) {
+      html += "<div class='card'><h2>Back from Detailed Analysis</h2>" +
+        (S.daNote.refused ? "<p class='cmp-alert'>" + S.daNote.refused + "</p>" : "") +
+        "<p class='sub' style='margin:0'>You left the Overview on <b>" +
+          esc(S.daNote.unit) + "</b> (" + esc(S.daNote.level) + ")" +
+          (S.daNote.moved ? "." : " and it is open there again.") + (S.daNote.notes.length
+            ? " " + daCapFirst(S.daNote.notes.join("; ")) + "."
+            : " Nothing you did inside changed it.") +
+        "</p>" +
+        "<div class='btn-row'><button class='btn ghost' id='clear-danote'>Dismiss" +
+        "</button></div></div>";
+    }
+
     if (S.view === "district" && S.block && blockByKey[S.block]) {
       var b = blockByKey[S.block];
       var v = bScores()[b.k];
@@ -2521,7 +2744,8 @@
           })() + "</dd>" +
           "<dt>Coverage</dt><dd>Complete — all 9 headline metrics valid</dd>" +
         "</dl>" +
-        driverList(bDrivers()[b.k] || [], "Block", b.n + ", " + (parent ? parent.n : "")) +
+        driverList(bDrivers()[b.k] || [], "Block", b.k,
+                   b.n + ", " + (parent ? parent.n : "")) +
         unitActions("Block", b.k, b.n) +
         "</div>";
     }
@@ -2554,28 +2778,127 @@
     }
 
     if (S.da) {
+      var da = S.da, ar = da.arrival, rf = da.refine;
+      var bid = DA_BUNDLE_ID[S.bundle] || null;
+
       html +=
         "<div class='card'><h2>Detailed Analysis</h2>" +
-        "<div class='stub'><h3>Stub destination</h3>" +
-        "<p style='margin:0 0 8px'>Detailed Analysis is not designed in this prototype. What it " +
-        "receives across the seam is real, and is exactly this:</p>" +
+        "<div class='stub'><h3>1 &middot; What crosses the seam</h3>" +
+        "<p style='margin:0 0 8px'>Detailed Analysis is not designed in this prototype. " +
+        "Everything on this screen is real: the identifiers that cross, the answer the " +
+        "destination has to reproduce, and what a refinement made here does on the way back." +
+        "</p>" +
         "<dl class='kv'>" +
-          "<dt>Risk Domain</dt><dd>" + esc(S.bundle) + "</dd>" +
-          "<dt>Scenario</dt><dd>" + esc(D.scenario_labels[S.scenario]) + "</dd>" +
-          "<dt>Period</dt><dd>" + esc(D.period_labels[S.period]) + "</dd>" +
-          "<dt>Level</dt><dd>" + esc(S.da.level) + "</dd>" +
-          "<dt>Unit</dt><dd>" + esc(S.da.unit) + "</dd>" +
+          "<dt>Risk Domain</dt><dd><code>" + (bid ? esc(bid) : "&mdash; none published") +
+            "</code> &middot; shown as " + esc(S.bundle) + "</dd>" +
+          "<dt>Scenario</dt><dd><code>" + esc(S.scenario) + "</code> &middot; shown as " +
+            esc(D.scenario_labels[S.scenario]) + "</dd>" +
+          "<dt>Period</dt><dd><code>" + esc(S.period) + "</code> &middot; shown as " +
+            esc(D.period_labels[S.period]) + "</dd>" +
+          "<dt>Slice</dt><dd><code>" + esc(sliceId()) + "</code></dd>" +
+          "<dt>Level</dt><dd><code>" + esc(DA_LEVEL_ID[da.level] || da.level) +
+            "</code> &middot; " + esc(da.level) + "</dd>" +
+          "<dt>Geography</dt><dd><code>" + esc(da.key) + "</code> &middot; shown as " +
+            esc(da.name) + "</dd>" +
+          "<dt>Opens on</dt><dd>" + (da.metric
+            ? "<code>" + esc(da.metric) + "</code> &middot; " + esc(metricLabel(da.metric))
+            : "<code>" + (bid ? esc(bid) : "&mdash;") + "</code> &middot; the composite hazard " +
+              "score, never <code>Metric = All</code>") + "</dd>" +
+          "<dt>Statistic</dt><dd><code>mean</code> &middot; area-weighted, fixed by the scale " +
+            "contract</dd>" +
+          "<dt>Ruler</dt><dd><code>cdf_v1</code> &middot; <code>colour_scale.json</code></dd>" +
           "<dt>Comparison context</dt><dd>" + esc(cmpContextText()) + "</dd>" +
-          "<dt>Opens on</dt><dd>" +
-            (S.da.driver
-              ? "the metric <b>" + esc(metricLabel(S.da.driver)) + "</b>, the one that was " +
-                "selected"
-              : "the composite metric for " + esc(S.bundle) + ", never <code>Metric = All</code>") +
-          "</dd>" +
         "</dl>" +
-        "<p style='margin:10px 0 0'>Hover, bin filter and temporary map emphasis are not " +
-        "carried across.</p></div>" +
-        "<div class='btn-row'><button class='btn ghost' id='back-ov'>Back to Overview</button></div>" +
+        "<p style='margin:10px 0 0'>The key is what crosses; the display name travels beside it " +
+        "to write the heading and nothing else. Two different units can share a name &mdash; " +
+        "<b>Mancherial</b> is a district of Telangana and a block inside that district &mdash; " +
+        "so a destination that resolves names instead of keys will sometimes open the wrong " +
+        "place and never know it.</p>" +
+        "</div>";
+
+      if (da.blocked) {
+        html += "<p class='cmp-alert'><b>" + esc(daMetricLabel(da.requested)) +
+          " has no Detailed Analysis to open.</b> " + da.blocked.why + " " +
+          da.blocked.instead + "</p>";
+      }
+
+      html +=
+        "<div class='stub'><h3>2 &middot; The screen it must land on</h3>" +
+        (ar
+          ? "<p style='margin:0 0 8px'>Detailed Analysis opens already showing the answer the " +
+            "Overview just gave &mdash; same unit, same slice, same ruler &mdash; not a blank " +
+            "cascade to fill in again:</p>" +
+            "<dl class='kv'>" +
+              "<dt>Hazard score</dt><dd><b>" + fmt(ar.score) + "</b> &middot; " +
+                bandPill(ar.score) + "</dd>" +
+              "<dt>Rank</dt><dd>" + ar.rank + " of " + ar.total + " " + esc(ar.scope) +
+                "</dd>" +
+              (ar.n === null || ar.n === undefined ? ""
+                : "<dt>With data</dt><dd>" + ar.n + " " + esc(ar.nWhat) + "</dd>") +
+            "</dl>" +
+            "<p style='margin:8px 0 0'><b>The one acceptance test.</b> That score must be the " +
+            "same number on both sides of this doorway. Today it will not be: IRT fits its " +
+            "ruler to each State/UT and each slice, so the same unit reads differently there. " +
+            "Until Detailed Analysis reads the frozen national ruler, walking through this door " +
+            "moves the user from one number to a contradicting one.</p>"
+          : "<p style='margin:0'>This unit has no score in " +
+            esc(D.scenario_labels[S.scenario]) + " &middot; " +
+            esc(D.period_labels[S.period]) + ". Detailed Analysis must open saying <b>No data " +
+            "for this scenario and period</b>, with the geography still selected and the " +
+            "context still readable &mdash; not an empty screen and not a silent fallback to " +
+            "another slice.</p>") +
+        "</div>";
+
+      var metOpts = { "": "Composite hazard score" };
+      Object.keys(D.metric_labels).forEach(function (k) { metOpts[k] = D.metric_labels[k]; });
+      var upLabel = da.level === "Block"
+        ? "Up to " + (blockByKey[da.lookupKey] && byKey[blockByKey[da.lookupKey].dk]
+            ? byKey[blockByKey[da.lookupKey].dk].n : "its district") + " (district)"
+        : da.level === "District"
+          ? "Up to " + (byKey[da.lookupKey] ? byKey[da.lookupKey].s : "its State/UT") +
+            " (State/UT)"
+          : "Up to India";
+      var geoOpts = { "": "No change \u2014 " + da.name, up: upLabel,
+                      offmap: "A block in a State/UT with no blocks scored" };
+
+      html +=
+        "<div class='stub'><h3>3 &middot; Refine here, then go back</h3>" +
+        "<p style='margin:0 0 8px'>Change anything below, then press Back to Overview. Part of " +
+        "it follows you back and part of it must not, and which is which is the contract the " +
+        "vendor has to build:</p>" +
+        "<div class='da-refine'>" +
+          daSel("da-scn", "Scenario", D.scenario_labels, rf.scenario) +
+          daSel("da-per", "Period", D.period_labels, rf.period) +
+          daSel("da-met", "Metric", metOpts, rf.metric) +
+          daSel("da-stat", "Statistic", { mean: "Mean", median: "Median" }, rf.stat) +
+          daSel("da-geo", "Geography", geoOpts, rf.geo) +
+        "</div>" +
+        "<p class='sub' style='margin:8px 0 0'>Detailed Analysis is now on <b>" +
+          esc(rf.metric ? metricLabel(rf.metric) : "the composite hazard score") +
+          "</b> &middot; " + esc(D.scenario_labels[rf.scenario]) + " &middot; " +
+          esc(D.period_labels[rf.period]) + " &middot; " +
+          esc(rf.stat === "median" ? "Median" : "Mean") +
+          (rf.geo ? " &middot; " + esc(geoOpts[rf.geo]) : "") + "</p>" +
+        (rf.stat === "median" && !rf.metric
+          ? "<p class='cmp-alert' style='margin:8px 0 0'><b>Unsupported combination.</b> The " +
+            "composite is published already aggregated &mdash; one value per unit &mdash; so " +
+            "there is no set of values underneath it to take a median of. A constituent metric " +
+            "keeps its underlying grid, which is why Median is legal there and not here. " +
+            "Detailed Analysis must refuse this pairing at the control, not compute something " +
+            "and call it a median.</p>"
+          : "") +
+        "<dl class='kv' style='margin-top:10px'>" +
+          "<dt>Comes back</dt><dd><b>Scenario and period.</b> They are axes of the whole " +
+            "screen, and returning the user to a map of a different future than the one they " +
+            "were just reading would be a lie. <b>Geography</b> too, whenever the Overview can " +
+            "show it.</dd>" +
+          "<dt>Stays here</dt><dd><b>Metric and statistic.</b> Screening always paints the " +
+            "composite on the area-weighted mean. Carrying either one back would change what " +
+            "the colours mean while the colourbar still said hazard score.</dd>" +
+          "<dt>Never crosses</dt><dd>Hover, the pinned distribution bin and temporary map " +
+            "emphasis. Those are gestures, not state.</dd>" +
+        "</dl></div>" +
+        "<div class='btn-row'><button class='btn' id='back-ov'>Back to Overview</button></div>" +
         "</div>";
     }
 
@@ -2586,7 +2909,18 @@
     var c = document.getElementById("close-insp");
     if (c) c.addEventListener("click", function () { S.block = null; S.da = null; render(); });
     var bo = document.getElementById("back-ov");
-    if (bo) bo.addEventListener("click", function () { S.da = null; render(); });
+    if (bo) bo.addEventListener("click", function () { daBack(); render(); });
+    var dn = document.getElementById("clear-danote");
+    if (dn) dn.addEventListener("click", function () { S.daNote = null; render(); });
+    [["da-scn", "scenario"], ["da-per", "period"], ["da-met", "metric"],
+     ["da-stat", "stat"], ["da-geo", "geo"]].forEach(function (pair) {
+      var el = document.getElementById(pair[0]);
+      if (!el) return;
+      el.addEventListener("change", function () {
+        S.da.refine[pair[1]] = el.value;
+        render();
+      });
+    });
     var cr = document.getElementById("close-report");
     if (cr) cr.addEventListener("click", function () { S.report = null; render(); });
   }
@@ -3206,7 +3540,7 @@
     if (!b) return;
     S.view = "district"; S.state = b.s; S.district = b.dk; S.block = b.k;
     S.showAll = false;
-    S.da = { level: "Block", unit: b.n + ", " + (byKey[b.dk] ? byKey[b.dk].n : "") };
+    daOpen("Block", b.k, b.n + ", " + (byKey[b.dk] ? byKey[b.dk].n : ""), null);
     render();
   }
 
@@ -3569,7 +3903,7 @@
       target: "A coordinate resolves to the block that contains it and is then an ordinary unit: same score, metrics, context, ranking position and doorways." },
     { n: 11, what: "Two doorways at every named unit",
       today: "There is no report, and no explicit route from a screening result into a deeper analysis.",
-      target: "Detailed Analysis and Download report are offered wherever a unit is named, carry the unit, scenario and period with them, and return the user where they left." }
+      target: "Detailed Analysis and Download report are offered wherever a unit is named. Detailed Analysis carries roster keys rather than display names, opens already showing the score the Overview just gave, refuses the signals it has no surface for, and on the way back returns scenario, period and geography while leaving metric and statistic behind \u2014 each with its reason stated on screen." }
   ];
 
   var byN = {};
