@@ -3,16 +3,22 @@ self-contained HTML page (CHG-0385, extended by CHG-0392, CHG-0393 and
 CHG-0399..0402).
 
 This is a *workflow* prototype for vendor handoff, not a data product. It renders
-the flow specified by ``recommended_target_workflow.md`` section 1-8 so the
-interaction contract can be judged and implemented:
+the flow specified by ``recommended_target_workflow.md`` sections 0-8 so the
+interaction contract can be judged and implemented. Section 0 is the finalised
+flow definition and governs; sections 1-8 hold the clause-level detail.
+
+Two known divergences from section 0, both predating CHG-0489 and neither fixed
+here: this page does not rank a district's blocks, and it predates the settled
+naming in section 11. The shell-faithful ``irt_target_prototype.html`` is the
+page that demonstrates the finalised flow.
 
     India view      districts painted, State/UTs ranked, State/UT means binned
         -> select a State/UT
     State view      blocks painted, districts ranked, district scores binned
         -> select a district
     District view   that district's blocks painted and zoomed; ranking and
-                    distribution inherited from the State, because blocks are
-                    never ranked at any scope
+                    distribution inherited from the State (the inheritance
+                    matches section 0; the absent block ranking does not)
         -> select a block  (inspection state; no breadcrumb level)
 
 Everything about the score is frozen, exactly as in

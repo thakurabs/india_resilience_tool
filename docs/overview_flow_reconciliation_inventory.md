@@ -98,9 +98,15 @@ called the district map "a redundant re-render"; the built version is not redund
 re-frames the extent, hosts its own headline, and is the only place a block becomes selectable.
 
 Consequences to carry: **INS-04** (district/block selection precedence) must be restated for a
-three-level model rather than the doc's inspection-state model; `recommended_target_workflow.md`
-lines 9–10 and 576–581 now contradict the finalised flow and must be marked superseded rather than
-silently left in place.
+three-level model rather than the doc's inspection-state model.
+
+**CLOSED 2026-09-16 (CHG-0489).** The contradiction in `recommended_target_workflow.md` is
+resolved rather than merely marked: the doc now carries the three-level model in its own section 0
+and section 1, its 2026-09-09 revision header is annotated as reversed, and the reversal is
+recorded with its reason at the site. The same change reversed the block-ranking prohibition
+(blocks rank within their own district and nowhere wider) and renamed the top band to `Very High`.
+Note that this inventory's own vocabulary predates the naming settled in that doc's section 11;
+where the two differ, section 11 governs.
 
 ## Batch E — Inspection panels
 

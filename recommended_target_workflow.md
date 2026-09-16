@@ -7,10 +7,23 @@
 > reverse: a State mean is now permitted as the national value, national results *are* absolute
 > interstate comparisons, and `coverage_fraction` moves from a shipped field to a build gate.
 > A district selection is an inspection state inside the State view; the District-view layout
-> contract and the third breadcrumb level are withdrawn.
+> contract and the third breadcrumb level are withdrawn. **Both were reversed on 2026-09-16; see
+> the revision below and section 1.**
 >
 > Rationale, evidence and the vendor handoff contract:
 > [`docs/composite_scale_decisions.md`](docs/composite_scale_decisions.md).
+>
+> **Revision — 2026-09-16 (CHG-0489).** A new section 0 states the finalised Overview journey and
+> governs the clause-level sections beneath it. Section 11 records the settled user-facing naming.
+> Three contracts from the 2026-09-09 amendment above are **reversed**, each for a reason recorded
+> at its site: District is a navigation level again, with its own breadcrumb entry; blocks are
+> ranked within their own district, though nowhere above it; and the top score band is `Very High`
+> rather than `Extreme`. A block remains an inspection state and still adds no breadcrumb level.
+> Interface copy throughout now follows section 11; identifiers and methodology prose are
+> unchanged.
+>
+> Demonstrated in
+> [`docs/diagnostics/heat_risk_pilot/irt_target_prototype.html`](docs/diagnostics/heat_risk_pilot/irt_target_prototype.html).
 
 ## Working direction
 
@@ -32,29 +45,160 @@ In user-facing language, the preferred labels are:
 
 The Glance objective is retained even if Glance is not presented as a separate named mode.
 
+## 0. The Overview journey
+
+This section is the finalised flow definition. Sections 1-10 below hold the clause-level detail
+it refers down into; where the two disagree, this section governs and the clause is a defect.
+
+### The job
+
+> A user who must decide **where to act** opens IRT, sees the national picture for a default
+> hazard, identifies which places carry the most, drills into one, understands why, and either
+> builds a shortlist or hands off to Detailed Analysis.
+
+IRT stops at diagnosis. Intervention, costing and prioritisation are explicitly not in this
+journey; they hand off to a separate future capability.
+
+### The audience
+
+Four kinds of user enter through the same front door: an investor, a policy maker, a researcher,
+and an informed citizen. None of them is offered a different entry point, and no step assumes
+climate-science vocabulary. This is the constraint that drives section 11: a term that only the
+researcher understands is a defect even when it is technically the most precise term available.
+
+### The spine
+
+The journey is a spine of seven steps with three doorways set perpendicular to it. It is not a
+nine-step line. The distinction matters: under a linear reading, coordinate entry, Detailed
+Analysis and the report have to be squeezed in as steps 8, 9 and 10, and each then appears to
+belong at one point in the flow. They do not. Each is reachable wherever a unit is named, and
+each returns the user to where they left.
+
+```text
+1 arrive → 2 orient → 3 scan → 4 narrow → 5 understand → 6 localise → 7 shortlist
+
+        doorways, reachable wherever a unit is named:
+            · coordinate entry     "I know my place, not a region"
+            · Detailed Analysis    "interrogate this"
+            · Download report      "leave with it"
+```
+
+**1. Arrive.** The first screen already carries a result: the India map painted from district
+hazard scores, the default Risk Domain, scenario and period named as defaults, the frozen
+`0-100` colourbar, the ranked State/UTs, the distribution, and the scope caveat. There is no
+configuration step before information. Section 1 specifies this screen.
+
+**2. Orient.** The user learns what the number is before using it: that it is a hazard score on
+one national ruler, that it measures how severe the climate conditions are, and that it does not
+account for how many people or assets are exposed or how well they can cope. Stated positively,
+per section 11 — a low score means less hazard, never "safe" and never "good".
+
+**3. Scan.** The user reads the national picture two ways at once: colour on the map, and the
+ranked list of State/UTs beside it. The ranked list shows five highest and five lowest hazard,
+with the full set one click away in the Ranking Table. The ten-bin distribution says how the
+country is spread and can be pinned to filter the list.
+
+**4. Narrow.** The user picks a State/UT — from the map, the ranked list, the distribution, or
+geography search. All four routes do the same thing. The map repaints from block hazard scores,
+the ranked list switches to that State/UT's districts, and the colourbar does not move.
+
+**5. Understand.** The user reads why this place scores as it does: the score, its band, its rank
+with the comparison set named in words, the top metrics behind it, and the block range. This is
+the step the coordinate doorway rejoins, because a coordinate resolves to a block and the
+question it answers is "why here", not "where".
+
+**6. Localise.** The user opens a district and sees its own blocks painted and ranked within it.
+District is a navigation level with its own breadcrumb entry; a block below it is an inspection
+state and adds no level. This is where the journey reaches its finest grain.
+
+**7. Shortlist.** The user adds places to `My Portfolio` with `Add to Analysis`, available
+wherever a unit is named, and compares up to four of them on one axis at a time — either four
+places at one future, or one place across four futures. The portfolio survives navigation and
+Risk Domain changes. Beyond four, the question has become a ranking, which step 3 already
+answers.
+
+### The three doorways
+
+Each doorway is reachable from any step where a unit is named, carries the analytical context
+with it, and returns the user to the step they left with their selection intact.
+
+**Coordinate entry.** For a user who knows their site but not its administrative region. Reached
+through `Coordinate Analysis`. A coordinate resolves to the block containing it, and that
+geographic basis is stated on screen. It rejoins the spine at step 5 — the user arrives holding a
+place and needs to understand it, not to find it.
+
+**Detailed Analysis.** For a user who wants to interrogate the result. One prominent action per
+result, opening on the composite metric for the active Risk Domain with geography, level,
+scenario, period and the selected metric preserved. `Back to Overview` restores the Overview
+context, including the District and Block selections. Sections 6, 7 and 8 specify this.
+
+**Download report.** For a user who needs to leave with the answer. A PDF carrying the current
+answer, the visible evidence, the metadata and the method note, with a live link to the same
+state on its cover. Its contents are specified at journey level only; the tier and exclusion
+detail belongs to the vendor specification rather than here.
+
+### Cross-journey rules
+
+These hold at every step and inside every doorway.
+
+- **One frozen ruler.** One national `0-100` domain, fitted once, never rescaled per selection.
+  It ships baked inside the score, so the vendor performs no normalization and cannot
+  reconstruct a per-State one.
+- **The number is a hazard score.** Not a risk score. The Risk Domain names the subject; the
+  score names what was measured. See section 11.
+- **Geography is navigation, not a selector.** India → State/UT → District are breadcrumb levels;
+  a block is an inspection state. Administrative level is never a fourth analysis control.
+- **Three primary controls only.** Risk Domain, scenario, period. Everything else is in Detailed
+  Analysis, with one exception: `Map Mode`, which offers `Absolute value` as the landing state
+  and `Local contrast` as a view extent.
+- **The ranked list ranks what you would click next.** India ranks State/UTs, a State/UT ranks its
+  districts, a district ranks its blocks. Blocks are ranked only within their own district, where
+  one administration drew them all.
+- **One statistic.** The State/UT figure is the area-weighted mean of its district scores. The
+  control reads `Mean`; the weighting is in its tooltip. There is no second statistic.
+- **`Add to Analysis` everywhere.** Wherever a unit is named, it can enter the portfolio. No
+  separate picker exists.
+- **Stops at diagnosis.** No step recommends an intervention, prices one, or ranks one.
+
+### Deliberately out
+
+Named here so later stages do not re-open them:
+
+- A population-weighted State statistic. Not produced, not shipped, not displayed.
+- A second distribution chart. The five-band bar chart is withdrawn; the bands survive as labels.
+- A State/UT score-derived map fill. There is exactly one score-derived fill per view.
+- Cross-Risk-Domain comparison. Scores are not comparable across Risk Domains, and the portfolio
+  holds one Risk Domain at a time.
+- A minimum size for a comparison set, and the `Small cohort` flag. Withdrawn; the consequence
+  is recorded in section 1 instead.
+- Block ranks at State or national scope, and blocks in an orderable rank column in the
+  portfolio. A block's rank is meaningful only inside its own district.
+- Intervention, cost and prioritisation. Handed off, not built here.
+
 ## 1. Open with an immediate national overview
 
 The first screen should already contain a useful result:
 
 - an India map;
-- a clearly labelled default bundle;
+- a clearly labelled default Risk Domain;
 - a clearly labelled default scenario;
 - a clearly labelled default period;
-- a continuous bundle-score legend on the fixed `0-100` national scale;
+- a continuous hazard-score legend on the fixed `0-100` national scale;
 - the states and union territories with the highest area-weighted mean district scores;
 - a distribution of State/UT mean scores; and
 - a concise explanation of what the score represents and what it excludes.
 
-The national map paints **districts** directly from their bundle composite scores on the frozen
+The national map paints **districts** directly from their hazard scores on the frozen
 `0-100` national scale. Because every score comes from one frozen national ruler rather than a
 per-State normalization, district scores are directly comparable between States, and a pan-India
 district map is a valid absolute comparison rather than a screening proxy.
 
-The State/UT headline statistic is the **area-weighted mean of its valid district composite
-scores**. There is no second State statistic: a population-weighted mean is not produced, not
+The State/UT headline statistic is the **area-weighted mean of its districts' hazard scores**.
+The control that names it reads `Mean`; the area weighting belongs in that control's tooltip, not
+in the label. There is no second State statistic: a population-weighted mean is not produced, not
 shipped and not displayed. The area-weighted mean is not a percentile among States — it is the
-area-weighted average of that State's districts' national percentiles, and must be labelled as
-such.
+area-weighted average of that State's districts' positions among India's districts. It must be
+labelled as an average of its districts, never as a rank among States.
 
 The State statistic is used for ranking, the answer card, the tooltip and exports. It is **not a
 map encoding**: no State/UT polygon is filled from it at any zoom. The national map paints
@@ -68,8 +212,9 @@ exactly 0%, and at end-century the median exceeded 80% — and it tied large gro
 identical values. A ten-bin distribution of State/UT mean scores replaces it as the supporting
 view of the complete distribution.
 
-The national screening surface is limited to the 13 scenario-based thematic and sector-wise
-bundles:
+The national screening surface is limited to the 13 scenario-based thematic and sector-wise Risk
+Domains. `Risk Domain` is IRT's own name for this selector and is what the user reads; the data
+contract keeps `bundle_id` unchanged.
 
 ```text
 Thematic
@@ -90,14 +235,14 @@ Sector-wise
     Life & Livelihood Loss Risk
 ```
 
-`Water Risk`, `Riverine Flood`, and other snapshot, standalone, or non-bundle products are outside
-the scope of this scenario-and-period screening surface. Their different temporal or normalization
-contracts should not be silently mixed with the 13 eligible bundles.
+`Water Risk`, `Riverine Flood`, and other snapshot or standalone products are outside the scope of
+this scenario-and-period screening surface. Their different temporal or normalization contracts
+should not be silently mixed with the 13 eligible Risk Domains.
 
 The public defaults are fixed as:
 
 ```text
-Bundle:   Heat Risk
+Risk Domain: Heat Risk
 Scenario: SSP5-8.5
 Period:   2040-2060
 ```
@@ -106,23 +251,27 @@ The Overview uses the following user-facing labels while retaining the SSP and p
 in the artifact and URL state:
 
 ```text
-Middle-of-the-road (SSP2-4.5)
+Middle of the road (SSP2-4.5)
 Fossil-fuelled development (SSP5-8.5)
 
 Early century (2020–2040)
-Mid-century (2040–2060)
+Mid century (2040–2060)
 End century (2060–2080)
 ```
 
+These override IRT's existing `Business as usual` and `Pessimistic`; section 11 records why.
+
 The national statistic answers:
 
-> Within this State/UT, what is the area-weighted average bundle composite score of its
-> districts, on the frozen national scale?
+> Within this State/UT, what is the area-weighted average hazard score of its districts, on the
+> frozen national scale?
 
 Because the scale is frozen nationally, this **is** an absolute interstate comparison and may be
 described as one. The caveat that survives is about scope, not normalization: the score is
 hazard-only, it does not include exposure, vulnerability or resilience, and it is not comparable
-across bundles. Avoid `national climate-risk score`, which implies the excluded dimensions.
+across Risk Domains. Avoid `national climate-risk score` and `risk score`, both of which imply the
+excluded dimensions; the number is the `hazard score` everywhere. Section 11 fixes the wording of
+the caveat itself.
 
 District and block scores are produced on the same frozen national ruler and are therefore
 directly comparable: a district and a block holding the same physical value receive the same
@@ -154,52 +303,64 @@ coverage >= 90%
     -> rank it
 ```
 
-Every State/UT that survives the build gate is ranked, and every valid district is ranked within
-its State/UT. There is no cohort-size minimum and no `Small cohort` flag: the earlier ten-unit rule
-is withdrawn as complexity that cost more to communicate than it bought. One consequence is
-recorded rather than hidden — a State/UT holding one valid district ranks on that district's score
-against one holding seventy-five, so the ranking column carries units of very uneven statistical
-weight. This is a display rule over unchanged scores and can be reinstated without touching an
-artifact.
+Every State/UT that survives the build gate is ranked, every district with data is ranked within
+its State/UT, and every block with data is ranked within its district. There is no minimum size
+for a comparison set and no `Small cohort` flag: the earlier ten-unit rule is withdrawn as
+complexity that cost more to communicate than it bought. One consequence is recorded rather than
+hidden — a State/UT holding one valid district ranks on that district's score against one holding
+seventy-five, so the ranking column carries units of very uneven statistical weight. This is a
+display rule over unchanged scores and can be reinstated without touching an artifact.
 
-If `n_valid = 0`, show `No valid data` and no score, band, rank, or drivers. A geography may remain
+If `n_valid = 0`, show `No data` and no score, band, rank, or metrics. A geography may remain
 available for drill-down when usable lower-level data exists.
 
-Ranking is hierarchical and comparison-cohort-specific:
+Ranking is hierarchical and comparison-set-specific, and each view ranks the units the user
+would click next:
 
 ```text
 National view
-    Rank every State/UT by the area-weighted mean district composite score.
+    Rank every State/UT by the area-weighted mean of its districts' hazard scores.
 
 State view
-    Rank every valid district composite score within the selected State/UT.
+    Rank every district with data in the selected State/UT, by hazard score.
+
+District view
+    Rank every block with data in the selected district, by hazard score.
 ```
 
-Ranking is two-tier. Blocks are painted but not ranked: the roster's subdivision density reflects
-State administration rather than geography, so a block ranking would compare units drawn by
-different administrations rather than by the landscape.
+The third tier is deliberately narrow, and it reverses the 2026-09-09 prohibition. The original
+objection is what defines the scope of that reversal. The objection was never comparability —
+block scores *are* nationally comparable under the frozen ruler. It was administrative unevenness:
+subdivision density reflects State administration rather than geography, so a block ranking
+spanning States compares units drawn by different administrations. **Inside one district that
+objection does not arise**, because one administration drew every block in it. So a block carries
+a rank within its own district and nowhere else.
 
-Do not expose State-wide or national block ranks in Overview. Block scores *are* nationally
-comparable under the frozen ruler; the objection is administrative unevenness, not comparability.
+Do not expose State-wide or national block ranks in Overview, and do not render block ranks as an
+orderable column in `Compare Portfolio`, where members may come from different districts.
 
-The national rank denominator is the number of State/UTs with a valid mean, and the district rank
-denominator is `n_valid` districts in the selected State/UT. Missing or invalid units do not
-participate in ranking, and `n_expected` must not be presented as the rank denominator when some
+The national rank denominator is the number of State/UTs with a valid mean, the district rank
+denominator the number of districts with data in the selected State/UT, and the block rank
+denominator the number of blocks with data in the selected district. Missing or invalid units do
+not participate in ranking, and `n_expected` must not be presented as the rank denominator when some
 units are invalid. No separate `n_ranked` field or public term is required.
 
 Rankings should use competition ranks, so identical values receive the same rank and the following
 rank reflects the number of preceding entries. Alphabetical or stable administrative-code sorting
-may order tied rows visually but must not break the statistical tie. Show a top-10 shortlist by
-default with a `View all` action. Calculate band assignment and ranks from
-full-precision stored values; round only for display. Exact full-precision equality receives a
-tied rank. If two unequal values appear identical at the default display precision, the tooltip or
-expanded ranking should expose sufficient additional decimal precision to explain their order.
-When a genuine tie exists, user-facing text may say `Rank N (tied) of M valid units`.
+may order tied rows visually but must not break the statistical tie. Show five highest-hazard and
+five lowest-hazard units by default, headed `Highest hazard` and `Lowest hazard` — never `worst`
+and `best`, since a lowest-hazard place is not a good place — with the full set one click away in
+the `Ranking Table`. Calculate band assignment and ranks from full-precision stored values; round
+only for display. Exact full-precision equality receives a tied rank. If two unequal values appear
+identical at the default display precision, the tooltip or expanded ranking should expose
+sufficient additional decimal precision to explain their order. When a genuine tie exists,
+user-facing text may say `Rank N (tied) of M units with data`, naming the set outright — `rank 4
+of 33 districts in Telangana` — in preference to any word for the set.
 
 Use the following display precision:
 
 ```text
-Bundle scores:             1 decimal place
+Hazard scores:             1 decimal place
 State mean scores:         1 decimal place
 Counts and ranks:          integers
 ```
@@ -225,16 +386,17 @@ Before production release, the roster build must assign and persist a concrete i
 `n_expected` must come from this fixed, versioned canonical administrative roster, never from the
 set of rows that happen to contain scores for the active bundle. District expectations should use
 the canonical State/UT-district roster, while block expectations should use the canonical
-State/UT-district-block roster. Missing bundle scores reduce `n_valid`; they must not reduce
+State/UT-district-block roster. Missing hazard scores reduce `n_valid`; they must not reduce
 `n_expected`.
 
 District scores, block scores, map geometry, and denominator artifacts must reference the same
 administrative-roster version. The offline build should reject duplicate geographic keys,
 unexpected units, missing parent keys, or a mismatch between score and boundary-roster versions.
-Stable official geographic identifiers should be used for joins, cohort membership, and ranking,
-and retained alongside display names wherever the source provides them. Names are presentation
-fields and must not be the primary production join keys. Moving the current name-derived Glance
-keys to stable administrative identifiers is explicit production migration work.
+Stable official geographic identifiers should be used for joins, comparison-set membership and
+ranking, and retained alongside display names wherever the source provides them. Names are
+presentation fields and must not be the primary production join keys. Moving the current
+name-derived Glance keys to stable administrative identifiers is explicit production migration
+work.
 
 Each published screening artifact or its accompanying manifest must record enough provenance to
 reproduce the denominator contract, including:
@@ -287,10 +449,10 @@ data_snapshot_hash
 Each released analytical artifact set must also have a unique reproducible build identity that
 records the build timestamp, exact source-code commit SHA, artifact manifest, manifest
 hash/checksum, and `admin_roster_version`. The manifest is the canonical inventory of supported
-Bundle x Scenario x Period x administrative-level artifacts and must identify each artifact path or
-identifier and version/checksum. Validation baselines must reference this same build identity.
-Analytically meaningful changes to code, roster, inputs, or artifacts create a new identity rather
-than mutating a validated release.
+Risk Domain x Scenario x Period x administrative-level artifacts and must identify each artifact
+path or identifier and version/checksum. Validation baselines must reference this same build
+identity. Analytically meaningful changes to code, roster, inputs, or artifacts create a new
+identity rather than mutating a validated release.
 
 ### Current case-study validation baseline
 
@@ -298,7 +460,7 @@ The refreshed national-screening case study successfully rebuilt the 13 eligible
 Glance artifact families against the canonical roster. The accepted validation baseline is:
 
 ```text
-Eligible bundles:             13
+Eligible Risk Domains:        13
 Scenarios:                     2
 Periods:                       3
 Administrative levels:        2
@@ -321,17 +483,18 @@ and concrete `admin_roster_version` before these values become a release baselin
 
 ### National map visual encoding
 
-The pan-India map paints each district directly from its bundle composite score on the frozen
+The pan-India map paints each district directly from its hazard score on the frozen
 `0-100` domain, through the vendored `WhiteBlueGreenYellowRed` colour table sampled at 101 stops
 starting at fraction `0.045` so that no valid score renders as pure white. Colour is a pure
 function of the score — `index = round(score)` — with no binning, smoothing, or parent-geography
 effect.
 
-There is **one** continuous colourbar with fixed numeric ticks, titled level-neutrally
-(`<Bundle> score`, not `District Bundle Score` or `Block Bundle Score`). One frozen ruler means one
-legend; separate per-level titles would describe a distinction the methodology no longer makes.
+There is **one** continuous colourbar with fixed numeric ticks, titled level-neutrally (`<Risk
+Domain> · hazard score`, not `District Bundle Score` or `Block Bundle Score`). One frozen ruler
+means one legend; separate per-level titles would describe a distinction the methodology no longer
+makes.
 
-The domain never rescales. Not when the bundle, scenario, or period changes, and not when a
+The domain never rescales. Not when the Risk Domain, scenario, or period changes, and not when a
 State/UT is selected. Identical colours represent identical scores across every selection and both
 administrative levels.
 
@@ -363,8 +526,10 @@ hue rather than a fourth grey weight, so it cannot be mistaken for another admin
 
 A bracket on the colourbar marks the score range present in the current view, with a numeric
 readout beside it — a State/UT whose blocks genuinely span two points should read as narrow, not
-as broken. A `Local contrast` view may rescale the domain to the visible extent; it is off by
-default, explicitly labelled as not comparable across selections, and is never the landing state.
+as broken. `Local contrast` is the second option of IRT's own `Map Mode` control, whose first
+option and landing state is `Absolute value`. It stretches the ramp to the extent of the units in
+view; the scores themselves never change. It is never the default, says on screen that the colours
+have stopped being comparable, and is offered only when the view has a spread to stretch.
 Its extent is computed from the visible scores at render time and is never a stored normalization
 parameter.
 
@@ -395,16 +560,16 @@ In the pan-India view, hovering anywhere within a state should highlight the who
 state-level information only:
 
 - state or union-territory name;
-- the area-weighted mean district bundle score and its five-band classification;
+- the area-weighted mean of its districts' hazard scores, and its five-band classification;
 - national rank and the number of ranked State/UTs; and
 - a quality flag, when one applies.
 
-District names, district composite scores, and district score bands should not appear in the
+District names, district hazard scores, and district score bands should not appear in the
 pan-India tooltip even though districts are individually painted. Districts become inspectable
 only after a State/UT is selected.
 
 Clicking anywhere within a state should select and zoom to that state, load that State/UT's block
-geometry and attributes, and repaint the map from **block** composite scores. The district boundary
+geometry and attributes, and repaint the map from **block** hazard scores. The district boundary
 becomes the coarse stroke and the block boundary the fine stroke. The colourbar, its title and its
 domain do not change.
 
@@ -429,23 +594,23 @@ Very Low: 0 <= score < 20
 Low:      20 <= score < 40
 Moderate: 40 <= score < 60
 High:     60 <= score < 80
-Extreme:  80 <= score <= 100
+Very High: 80 <= score <= 100
 ```
 
 The visual hierarchy is therefore:
 
 ```text
-National view: continuous district composite-score colour
+National view: continuous district hazard-score colour
                thick State/UT boundary, thin district boundary
     → select state
-State view:    continuous block composite-score colour
+State view:    continuous block hazard-score colour
                thick district boundary, thin block boundary
                + ten-bin district score distribution, district and block inspection
 ```
 
 Both views preserve the same fixed `0-100` colour domain and the same level-neutral legend title,
 so identical colours retain identical score meanings across geography, administrative level,
-bundle, scenario, and period. The continuous map colourbar and the score distribution serve
+Risk Domain, scenario, and period. The continuous map colourbar and the score distribution serve
 different purposes: the colourbar encodes exact mapped scores, while the histogram shows how the
 ranked units are spread and provides the filtering aid.
 
@@ -454,7 +619,7 @@ the full district score distribution alongside the headline, for example:
 
 ```text
 Telangana — Heat Risk
-77.8 area-weighted mean district score · High · 33 valid districts
+77.8 mean district hazard score · High · 33 districts with data
 
 Distribution of district scores · 33 districts
 [ten-bin interactive histogram]
@@ -474,7 +639,7 @@ National view   36 State/UT area-weighted mean scores
                 hover or click a bin -> emphasise those State/UTs' districts
                 filters the State/UT ranking shortlist
 
-State view      the selected State/UT's valid district scores
+State view      the selected State/UT's district hazard scores
                 hover or click a bin -> emphasise those districts' blocks
                 filters the district ranking shortlist
 ```
@@ -504,7 +669,7 @@ The widget must be titled by the units it counts, never generically:
 
 ```text
 National view   Distribution of State/UT mean scores · 36 units
-State view      Distribution of district scores · <n_valid> districts
+State view      Distribution of district scores · <n> districts with data
 ```
 
 A mean is a summary, so a unit's bin does not constrain its children. At SSP2-4.5 mid-century
@@ -532,7 +697,7 @@ select a unit   proceeds normally whether or not a bin is pinned; selection
                 outranks filter emphasis, so a selected unit outside the pinned
                 bin stays visible and selected
 
-bundle, scenario, period or view changes     the pinned bin clears
+Risk Domain, scenario, period or view change the pinned bin clears
 ```
 
 One bin is pinned at a time. Zero-count bins remain drawn and are not clickable. Counts are the
@@ -548,18 +713,18 @@ The State-view layout contract is:
 
 ```text
 Header
-    State/UT name + persistent Bundle, Scenario, and Period selectors
+    State/UT name + persistent Risk Domain, Scenario, and Period selectors
 
 Headline
-    Area-weighted mean district bundle score + five-band classification
-    n_valid + national rank
+    Mean district hazard score + five-band classification
+    Districts with data + national rank
 
 Map
     Continuous block composite-score colour + district interaction
     Thick district boundary, thin block boundary
 
 Supporting evidence
-    Ten-bin district score distribution + top-10 district shortlist + metric/rule signals
+    Ten-bin district score distribution + ranked district list + top metrics
     District inspection panel when a district is selected; block panel beneath it when a
     block within that district is selected
 
@@ -567,36 +732,48 @@ Context and Evidence
     Collapsed exposure, hydrology, data-quality, and optional-overlay content
 
 Navigation
-    India > State/UT breadcrumb
+    India > State/UT breadcrumb; a selected district extends it to
+    India > State/UT > District
 ```
 
-The district ranking denominator is the number of valid districts in the selected State/UT, not
-the number expected when some scores are invalid.
+The district ranking denominator is the number of districts with data in the selected State/UT,
+not the number expected when some scores are invalid.
 
-A district selection is an **inspection state inside the State view**, not a navigation level. It
-does not change the map encoding: block fill is retained, and the colourbar, its title and its
-domain do not change. The breadcrumb stops at `India > State/UT`. Under the frozen ruler there is
-no finer map for a District view to introduce — its map would repaint the same blocks, on the same
-ruler, against the same colourbar, at a smaller extent — so the level is withdrawn rather than
-retained as a redundant re-render.
+A district selection is a **navigation level**, and the breadcrumb reads
+`India > State/UT > District`. This reverses the 2026-09-09 withdrawal. The withdrawal reasoned
+from the map alone — a District view repaints the same blocks, on the same ruler, against the same
+colourbar, at a smaller extent — and that reasoning still holds for the map. It was the wrong test.
+What makes the District a level is not a new fill but a new **ranked set**: the District view
+ranks that district's blocks, which no other view does, and a level that ranks something of its own
+is a place the user navigates to rather than a state they inspect from elsewhere. The map encoding
+is unchanged on entry: block fill is retained, and the colourbar, its title and its domain do not
+change.
+
+A **block** remains an inspection state and adds no breadcrumb level, because it ranks nothing and
+paints nothing of its own.
 
 Selecting a district promotes its outline to the accent selection stroke and shows:
 
 ```text
 District inspection panel
     District name + parent State/UT
-    District composite score + five-band classification
+    District hazard score + five-band classification
     District rank within the selected State/UT
     Relevant coverage or quality status
-    Up to three valid District-scoped metric drivers or rule signals
+    Up to three valid District-scoped metrics or rule signals
     The score range of its blocks, with the block count
 ```
 
-A district may be selected from the map, from the five-band district distribution, or from the
-top-10 district shortlist. The block range is a minimum, maximum and count on the frozen scale —
-not a distribution and not a ranking. The median district holds 8 blocks and cohorts run from 1 to
-38, so a five-band histogram at that scope would usually leave three bands empty, and blocks are
-not ranked at any scope.
+A district may be selected from the map, from the district distribution, or from the ranked
+district list. Selecting it opens the District view, which ranks its blocks. The block range shown
+in the inspection panel is a minimum, maximum and count on the frozen scale — a summary, not the
+ranking itself.
+
+The District view **inherits the parent State/UT's district distribution** rather than binning its
+own blocks, and its histogram title says so. This is the one place the "bin what the view ranks"
+rule of the histogram contract is deliberately relaxed, and the reason is the same one that
+retired the five-band chart at this scope: the median district holds 8 blocks and the range runs 1
+to 38, so ten bins over 8 units is noise rather than a distribution.
 
 Districts and blocks are two independent inspection targets within one view, and their precedence
 is explicit. Selecting a district clears any selected block. Selecting a block inside the selected
@@ -605,10 +782,11 @@ outside it replaces the district selection with that block's parent district, so
 always sits under its own district. At most one district and one block are selected at a time,
 either may be cleared without leaving the State view, and neither adds a breadcrumb level.
 
-A selected block shows its name, parent district and State/UT, its composite score, five-band
-classification, relevant data-quality state, and valid Block-scoped driver or rule signals. Do not
-show a State-wide or national block rank, a block rank within the district, a nested distribution,
-or a duplicated Context and Evidence hierarchy. Show `View Detailed Analysis` only when a
+A selected block shows its name, parent district and State/UT, its hazard score, five-band
+classification, its rank within its own district, relevant data-quality state, and valid
+Block-scoped metrics or rule signals. Do not show a State-wide or national block rank, a nested
+distribution, or a duplicated Context and Evidence hierarchy. A block's rank within its own
+district is shown; see the District view above. Show `View Detailed Analysis` only when a
 registered valid route exists.
 
 Do not rank districts by any block-derived statistic in Phase 1. Block information explains
@@ -625,50 +803,54 @@ identified as defaults rather than being mistaken for user-selected values.
 
 The Overview should expose only three primary analysis selectors:
 
-1. Bundle
+1. Risk Domain
 2. Scenario
 3. Period
 
-Constituent metric, statistic, map mode, model controls, and detailed chart options belong in
-Detailed Analysis.
+Constituent metric, model controls, and detailed chart options belong in Detailed Analysis. Two
+IRT controls stay in the Overview and stay live: `Statistic`, fixed at `Mean`, and `Map Mode`,
+offering `Absolute value` and `Local contrast`. A control that is visible but permanently disabled
+teaches the user that the interface is broken.
 
 Administrative level should appear contextually through the geographic drill-down:
 
 ```text
-India → States           (two navigation levels)
-    ↳ Districts, Blocks  (inspection states within the State view)
+India → State/UT → District      (three navigation levels)
+    ↳ Block                      (an inspection state within the District view)
 ```
 
 Geography should be navigated through search or direct map interaction rather than treated as a
 fourth analysis selector. This is easier to understand than requiring every geographic dimension
 to be configured before the map becomes useful.
 
-Bundle, Scenario, and Period selections should persist throughout drill-down. Breadcrumbs should
-provide the reversible geographic path, for example `India > Uttar Pradesh`. District and
-block selections are inspection states and do not extend the breadcrumb. Browser
-Back is outside the Overview analytical-state model; breadcrumbs and in-application navigation are
-authoritative for moving through analytical states. Existing application-shell Browser Back
-behavior is not redefined by this workflow.
+Risk Domain, Scenario, and Period selections should persist throughout drill-down. Breadcrumbs
+should provide the reversible geographic path, for example `India > Uttar Pradesh > Meerut`. A
+block selection is an inspection state and does not extend the breadcrumb. Browser Back is outside
+the Overview analytical-state model; breadcrumbs and in-application navigation are authoritative
+for moving through analytical states. Existing application-shell Browser Back behavior is not
+redefined by this workflow.
 
-When Bundle, Scenario, or Period changes, preserve the current geography where it remains
+When Risk Domain, Scenario, or Period changes, preserve the current geography where it remains
 supported; clear bin filters, hover, and temporary emphasis; and recompute scores, bands, ranks,
-drivers, and distributions. If a geography still exists in the canonical roster but has no valid
-score under the new selection, remain at that geography and show `No valid data`. Fall back through
+metrics, and distributions. If a geography still exists in the canonical roster but has no valid
+score under the new selection, remain at that geography and show `No data`. Fall back through
 `Block -> District -> State/UT -> India` only when the selected geography or level is genuinely
 obsolete or unsupported, and explain what could not be restored.
 
-Distribution bin filters are view-local transient state. Clear them when Bundle, Scenario, Period,
-or view changes. Applying a filter must not clear an already selected geography that falls outside
-the bin; selection takes precedence over filter emphasis. Breadcrumb navigation
-preserves Bundle, Scenario, and Period, clears selections below the destination level, and clears
-the previous view's filters. Compare-tray membership is not transient state and is exempt from
-these rules; see `Compare locations` in section 4.
+Distribution bin filters are view-local transient state. Clear them when Risk Domain, Scenario,
+Period, or view changes. Applying a filter must not clear an already selected geography that falls
+outside the bin; selection takes precedence over filter emphasis. Breadcrumb navigation preserves
+Risk Domain, Scenario, and Period, clears selections below the destination level, and clears the
+previous view's filters. Portfolio membership is not transient state and is exempt from these
+rules; see `Compare Portfolio` in section 4.
 
-Coordinate analysis should remain available as an alternate location-entry path, but it should
-not compete visually with the default geography-first workflow. A clear action such as
-`Analyse a custom location` can reveal manual coordinate and file-upload controls when needed.
+`Coordinate Analysis` — IRT's own name for it — remains available as an alternate location-entry
+path, but must not compete visually with the default geography-first workflow. It reveals manual
+coordinate and file-upload controls when needed, resolves an input to the block containing it, and
+states that geographic basis on screen. It is a doorway rather than a step: it rejoins the spine at
+step 5, because a user arriving with a coordinate already knows where and is asking why.
 
-Supported Bundle x Scenario x Period combinations come from the deployed artifact manifest.
+Supported Risk Domain x Scenario x Period combinations come from the deployed artifact manifest.
 Normal selectors must not offer unsupported combinations. An obsolete or invalid deep-linked
 combination should fall back to a valid configured selection with a concise explanation. By
 contrast, when an expected artifact is missing or unloadable, retain the requested selectors and
@@ -676,7 +858,7 @@ show an unavailable state; never silently substitute another scenario, period, o
 
 During loading, preserve the page structure and selected geography, show an explicit loading
 state, and disable interactions that depend on the incoming artifact. Never display old analytical
-values under newly selected labels. A valid artifact with no valid data should show `No valid data`
+values under newly selected labels. A valid artifact with no valid data should show `No data`
 for the affected geography while independently available Context and Evidence may remain visible.
 An artifact-version mismatch must never render mixed-version analytical outputs: show a generic
 unavailable state and retain technical details in logs and diagnostics.
@@ -686,16 +868,16 @@ unavailable state and retain technical details in logs and diagnostics.
 After a geography is selected, the first summary should answer the user's likely question in
 plain language. For example:
 
-> Warangal has a Heat Risk bundle score of 72, ranking 4 of 33 districts in Telangana. Its assigned
-> five-band classification and strongest drivers are shown below.
+> Warangal has a Heat Risk hazard score of 72, ranking 4 of 33 districts in Telangana. Its
+> five-band classification and strongest metrics are shown below.
 
 The answer card should contain:
 
-- bundle score;
+- hazard score;
 - score band;
-- rank within the declared State/cohort comparison group;
-- the declared State/cohort comparison scope;
-- up to three strongest valid metric drivers or rule signals; and
+- rank within the comparison set, with that set named outright;
+- the comparison scope;
+- up to three strongest valid metrics or rule signals; and
 - a concise interpretation boundary, such as `Hazard-only; does not include exposure,
   vulnerability, or resilience`.
 
@@ -707,10 +889,10 @@ interpret several charts independently.
 Supporting information should be available through secondary or expandable sections:
 
 - `Where are the hotspots?`
-- `Compare locations`
-- `View rankings`
+- `Compare Portfolio`
+- `Ranking Table`
 - `Context layers`
-- `Download answer`
+- `Download report`
 
 These sections should not all be expanded on first load.
 
@@ -719,9 +901,10 @@ is not one of these collapsed sections: it is visible on the first screen and in
 under the interaction contract above. Filtering must retain each location's original rank rather
 than recalculating rank within the filtered subset, and the active filter and comparison scope
 should remain visible. Rankings, answer cards and method copy should use the same band order
-throughout: `Very Low`, `Low`, `Moderate`, `High`, `Extreme`.
+throughout: `Very Low`, `Low`, `Moderate`, `High`, `Very High`. `Extreme` is withdrawn as the top
+band label: it reads as a physical claim, while every band edge on this ruler is positional.
 
-### Compare locations
+### Compare Portfolio
 
 Comparison should be a deliberate follow-up action. It should not add controls to the initial
 path before the user has understood the first result: the tray is absent until the user puts
@@ -729,7 +912,7 @@ something in it.
 
 The frozen national ruler is what makes this feature possible. Under per-State normalization two
 districts in different States shared no scale and could not be compared; under one ruler fitted
-once over the national district pool across every declared scenario/period slice, they can — and
+once over the national district pool across every declared scenario and period, they can — and
 so can one place against its own futures. Both comparisons are valid, and the tray supports both.
 
 **One axis varies at a time.** The tray is in one of two modes, and the mode fixes what is held
@@ -740,7 +923,7 @@ Places mode     slots differ by place
                 scenario and period are locked to the header selectors and
                 move every slot together
 
-Futures mode    slots differ by scenario x period
+Futures mode    slots differ by future — one scenario and period pair per slot
                 the place is fixed to one selected unit
 ```
 
@@ -764,61 +947,66 @@ subject; the tray seeds with the current scenario across all three periods and t
 are released. Returning to places mode leaves the subject as the sole member. Neither transition
 leaves the Overview or extends the breadcrumb.
 
-Adding a member is a single control wherever a unit is already named — the State/UT headline, the
-district and block inspection panels, a ranking row, and geography search. No separate picker is
-introduced.
+Adding a member is one control, `Add to Analysis`, wherever a unit is already named — the State/UT
+headline, the district and block panels, a ranked row, the Ranking Table, and geography search. No
+separate picker is introduced. The set it adds to is `My Portfolio`. That `Add to Analysis` feeds
+`My Portfolio` is a mismatch, and it is IRT's own; inheriting it beats introducing a third name.
 
 The tray survives geography navigation, view changes, and selector changes. Members are recomputed
 in place, never discarded:
 
 ```text
-scenario or period changes (places mode)  every slot recomputes on the new slice
-bundle changes                            members are retained and repopulated
-                                          with the new bundle's scores, bands,
-                                          ranks and drivers
-view or geography changes                 the tray is unaffected
+scenario or period changes (places mode)  every slot recomputes on the new future
+Risk Domain changes                       members are retained and repopulated
+                                          with the new Risk Domain's scores,
+                                          bands, ranks and metrics
+view or geography changes                 the portfolio is unaffected
 ```
 
-Retaining members across a bundle change is deliberate. The units stay valid and the user's
+Retaining members across a Risk Domain change is deliberate. The units stay valid and the user's
 shortlist is the expensive thing to rebuild; only the figures are replaced. Because the previous
-bundle's figures are gone and were never comparable to the new ones, the panel states the active
-bundle on its face and carries no residue of the previous one. Bin filters, hover and temporary
-emphasis are transient and clear as they do elsewhere; tray membership is not transient state.
+Risk Domain's figures are gone and were never comparable to the new ones, the panel states the
+active Risk Domain on its face and carries no residue of the previous one. Bin filters, hover and
+temporary emphasis are transient and clear as they do elsewhere; tray membership is not transient
+state.
 
-The comparison panel presents one column per slot and one row per attribute: score, band, rank with
-its scope, drivers, and the block range with its count. Column headers carry the place and its
-parent in places mode, and the scenario and period labels in futures mode.
+The comparison panel presents one column per slot and one row per attribute: hazard score, band,
+rank with its scope, metrics, and the block range with its count. Column headers carry the place
+and its parent in places mode, and the scenario and period labels in futures mode.
 
-Ranks compare only within one cohort. Ranking is cohort-specific, so in places mode a rank must
-render as a scoped string — `4 of 33 in Telangana` — on its own line, never as a sortable numeric
-column. Two districts from different States hold ranks that cannot be ordered against each other,
-and a numeric column is precisely the affordance that invites that false ordering. In futures mode
-the cohort is identical across slots and ranks *are* comparable, because the same units are ranked
-on a different slice; the panel may show rank movement directly. Where `n_valid` differs between
-slices the denominators differ, and the panel says so rather than presenting the movement as clean.
+Ranks compare only within one comparison set, so in places mode a rank must render as a scoped
+string — `4 of 33 districts in Telangana` — on its own line, never as a sortable numeric column.
+Two districts from different States hold ranks that cannot be ordered against each other, and a
+numeric column is precisely the affordance that invites that false ordering. In futures mode the
+comparison set is identical across slots and ranks *are* comparable, because the same units are
+ranked on a different future; the panel may show rank movement directly. Where the number of units
+with data differs between futures the denominators differ, and the panel says so in words rather
+than presenting the movement as clean.
 
 Differences are expressed in scale points. The ruler is rank-based, so a gap of 12.3 is a
-difference in national percentile position and must be labelled as such — never as a physical
-difference, a percentage, or a multiple. Blocks carry no rank at any scope, in either mode.
+difference in **position among India's districts** and must be labelled in those terms on screen —
+never as a physical difference, a percentage, or a multiple, and not as a "percentile" in
+user-facing copy. Blocks carry no rank at any scope, in either mode.
 
 Mixed administrative levels are permitted and must be labelled. A district and a block may share a
 tray, because both are scored on the same ruler and a district and a block holding the same
 physical value receive the same score. Each column states its level, since the rank and block-range
-rows differ in kind between them.
+rows differ in kind between them. A block's rank is scoped to its own district, so two blocks from
+different districts hold ranks that must not be ordered against each other.
 
-Shared drivers are the analytical output. Drivers common to several columns should be visually
-distinguished from those unique to one: a shared driver means one intervention addresses several
-places, and a unique driver means it does not. Driver display follows the existing contract — at
-most three, ordered by full-precision signal strength, with no numeric signal values shown.
+Shared metrics are the analytical output. Metrics common to several columns should be visually
+distinguished from those unique to one: a shared metric means one intervention addresses several
+places, and a unique metric means it does not. Display follows the existing contract — at most
+three, ordered by full-precision signal strength, with no numeric signal values shown.
 
 Tray members visible in the current view carry a persistent outline in a hue distinct from the
 accent selection stroke, and never as a fourth grey boundary weight. Members outside the current
 view are simply not outlined; the panel is authoritative and the map emphasis is a convenience.
 Precedence runs selection, then compare membership, then bin-filter emphasis.
 
-One bundle at a time. The tray holds locations and futures, never bundle pairs. Scores are not
-comparable across bundles, and a comparison table is the single most likely place for that
-prohibition to be breached.
+One Risk Domain at a time. The portfolio holds locations and futures, never Risk Domain pairs.
+Scores are not comparable across Risk Domains, and a comparison table is the single most likely
+place for that prohibition to be breached.
 
 The tray is the comparison context carried into Detailed Analysis where a route supports it, and
 dropped cleanly where none does.
@@ -829,7 +1017,11 @@ Overview exports should focus on the current answer and visible evidence:
 
 - copyable answer text;
 - the visible ranking rows; and
-- an answer pack containing the current context, drivers, metadata, and method note.
+- a `Download report` PDF carrying the current answer, the visible evidence, the metrics,
+  the metadata and the method note, with a live link to the same state on its cover.
+
+"Answer pack" was internal shorthand and does not appear on screen. The report's tier and
+exclusion detail belongs to the vendor specification rather than to this document.
 
 With an active bin filter, export the currently filtered rows only, retain their original
 unfiltered ranks, record the active filter and selection metadata, and never recompute ranks inside
@@ -838,22 +1030,22 @@ the exported subset.
 ## 5. Treat exposure and hydrology as context, not primary filters
 
 Exposure and hydrological information should support interpretation without competing with the
-main bundle-score or hazard-pressure question.
+main hazard-score question.
 
 In Overview, a compact `Context and Evidence` section should be available from the State view
 onward and collapsed by default:
 
 - place exposure overlays under a collapsed `Context layers` control;
 - allow a map layer to be selected independently of the risk analysis;
-- show a State/UT-level Exposure Summary and Hydrological Context using appropriately aggregated
+- show a State/UT-level `Exposure context` and `Water context` using appropriately aggregated
   context artifacts;
 - show progressively more local context after a district, block, or coordinate is selected;
 - keep basin, sub-basin, and river-network overlays optional; and
 - do not blend exposure or hydrological context into the displayed hazard score unless the
   methodology explicitly defines that relationship.
 
-Context and Evidence is supplementary. Its absence must not invalidate a bundle score, band, rank,
-or drivers. Show only fields supported at the current administrative level; do not infer,
+Context and Evidence is supplementary. Its absence must not invalidate a hazard score, band, rank,
+or metrics. Show only fields supported at the current administrative level; do not infer,
 interpolate, or substitute missing context from another geography level. Omit an unavailable field,
 and show a concise unavailable-state message when an entire subsection is absent. Omit unavailable
 overlays from the selector rather than showing disabled controls.
@@ -877,7 +1069,7 @@ State/UT context must follow scientifically appropriate aggregation rules:
   dominant basin assigned to individual districts;
 - exclude missing values transparently and display context coverage, units, source dates, and
   provenance; and
-- keep exposure and hydrology contextual rather than silently incorporating them into the bundle
+- keep exposure and hydrology contextual rather than silently incorporating them into the hazard
   score.
 
 A compact context summary could read:
@@ -902,20 +1094,21 @@ The transition should preserve:
 
 - geography and administrative level;
 - the selected unit;
-- bundle;
+- Risk Domain;
 - scenario;
 - period;
-- selected driver or rule when the action originated from one; and
+- the selected metric or rule when the action originated from one; and
 - the current comparison context where compatible.
 
 Do not carry hover, bin filter, tooltip, or temporary map emphasis into Detailed Analysis.
 
-Use canonical Bundle-to-Detailed-Analysis and driver/rule-to-Detailed-Analysis route registries.
+Use canonical Risk-Domain-to-Detailed-Analysis and metric/rule-to-Detailed-Analysis route
+registries.
 Do not infer destinations from labels or names. Preserve geography exactly where supported and do
 not substitute another administrative level unless the registry explicitly defines that fallback.
 If no valid route exists, do not show an active Detailed Analysis action.
 
-Detailed Analysis should open on the composite metric corresponding to the selected bundle. It
+Detailed Analysis should open on the composite metric corresponding to the selected Risk Domain. It
 should not open with `Metric = All`, because `All` does not clearly communicate whether the user
 is still viewing the same score.
 
@@ -928,8 +1121,6 @@ Detailed Analysis should initially show the same selected result, followed by a 
 `Refine analysis` area containing advanced controls such as:
 
 - constituent metric;
-- statistic;
-- map mode;
 - alternative scenario;
 - alternative period;
 - model-member controls;
@@ -940,43 +1131,44 @@ Advanced controls should be disclosed in response to user intent instead of bein
 for the first useful result.
 
 Overview should reuse the existing persisted Glance driver contract rather than introduce a new
-weighted-contribution calculation. For thematic bundles, show `Metric Drivers`; for sectoral
-bundles, show `Top Rule Signals`. At State/UT scope, rank each available metric or rule using its
-existing mean normalized score across valid districts. District and block inspection must use valid
+weighted-contribution calculation. For thematic Risk Domains, show `Top metrics`; for sectoral
+Risk Domains, show `Top Rule Signals`. `Metric` is IRT's own word; the underlying `driver` field
+names are unchanged. At State/UT scope, rank each available metric or rule using its existing mean
+normalized score across districts with data. District and block inspection must use valid
 persisted rows scoped to that exact administrative level. Do not infer, interpolate, or borrow
 driver signals from another level.
 
-These values should be described as normalized metric drivers or rule signals, not as percentage
+These values should be described as normalized metrics or rule signals, not as percentage
 shares of the composite. The interface must not claim, for example, that a metric `contributed 34%
 of the composite`, and no additional weighted-contribution calculation is required for this
-workflow. Show no more than three valid drivers/rules, ordered by full-precision signal strength,
+workflow. Show no more than three valid metrics or rules, ordered by full-precision signal strength,
 without displaying their numeric signal values in Overview. If fewer than three exist, show only
-those available. If none exist, show `Driver information is not available for this geography.` No
-secondary tie-breaking rule is required for driver ordering at this stage.
+those available. If none exist, show `Metric information is not available for this geography.` No
+secondary tie-breaking rule is required at this stage.
 
-Where a driver has a one-to-one underlying metric or rule route, selecting it should open Detailed
-Analysis with the current geography, administrative level, bundle, scenario, and period preserved
-and the corresponding metric or rule selected. A sectoral rule without a one-to-one Detailed
-Analysis target should be displayed as informative text and remain unclickable; it should not be
-routed to an approximate or unrelated metric. Driver validity and route availability are separate:
-a valid unroutable driver remains normally styled rather than being greyed out. A canonical
-driver/rule-to-Detailed-Analysis route registry controls clickability.
+Where a metric has a one-to-one underlying metric or rule route, selecting it should open Detailed
+Analysis with the current geography, administrative level, Risk Domain, scenario and period
+preserved, and the corresponding metric or rule selected. A sectoral rule without a one-to-one
+Detailed Analysis target should be displayed as informative text and remain unclickable; it should
+not be routed to an approximate or unrelated metric. Driver validity and route availability are
+separate: a valid unroutable driver remains normally styled rather than being greyed out. A
+canonical metric/rule-to-Detailed-Analysis route registry controls clickability.
 
 ## 8. Preserve a reversible return path
 
 `Back to Overview` should restore the previous Overview context, including:
 
 - geography;
-- bundle;
+- Risk Domain;
 - scenario;
 - period;
-- selected District and Block inspection states, where applicable;
+- the selected District navigation level and Block inspection state, where applicable;
 - map extent; and
 - major panel expansion state where technically supported.
 
 Do not restore hover, tooltip, bin-filter, or other temporary emphasis state.
 
-If a Detailed Analysis selection cannot map directly to an Overview bundle, returning should
+If a Detailed Analysis selection cannot map directly to an Overview Risk Domain, returning should
 restore the last valid Overview context rather than clearing or partially reconstructing the
 analysis.
 
@@ -1017,15 +1209,16 @@ data_snapshot_hash
 
 Per-unit district and block artifacts carry the stable administrative identifier, the geographic
 key, `bundle_id`, `scenario`, `period`, `admin_level`, `score`, and quality flags — and nothing
-else. They must not carry raw metric values, normalization parameters, ruler support, or per-State
+else. `bundle_id` keeps its spelling: the user reads `Risk Domain`, the contract keeps the field.
+They must not carry raw metric values, normalization parameters, ruler support, or per-State
 extents. Omitting those inputs is what makes a per-State renormalization downstream
-unconstructible rather than merely discouraged. The colour table and its domain ship alongside as a
-versioned scale definition rather than as prose, so that rendering is a lookup with no judgement in
-it.
+unconstructible rather than merely discouraged. The colour table and its domain ship alongside as
+a versioned scale definition rather than as prose, so that rendering is a lookup with no judgement
+in it.
 
 The five-band migration must replace the current four-band fields and distributions throughout the
 Overview; all assignment uses full-precision scores. National maps paint districts from their own
-composite scores on the frozen `0-100` scale, with State/UT polygons unfilled. State maps paint
+hazard scores on the frozen `0-100` scale, with State/UT polygons unfilled. State maps paint
 blocks on that same scale, with no inherited parent hue and no change of colourbar. There is one
 score-derived fill per view and one colourbar for both.
 
@@ -1040,13 +1233,15 @@ At minimum, synthetic and artifact-contract tests must prove:
 
 ### Ranking and coverage
 
-- national State ranking uses the area-weighted mean district composite score;
-- District ranking is within the selected State/UT only;
-- blocks are painted but never ranked, at any scope;
-- every State/UT surviving the build gate carries a national rank, with no cohort-size minimum
-  suppressing one, and a State/UT holding a single valid district still ranks;
+- national State ranking uses the area-weighted mean of its districts' hazard scores;
+- District ranking is within the selected State/UT only, and block ranking within the selected
+  district only;
+- blocks are ranked within their own district and at no wider scope: no State-wide or national
+  block rank exists, and no block rank is orderable in `Compare Portfolio`;
+- every State/UT surviving the build gate carries a national rank, with no comparison-set-size
+  minimum suppressing one, and a State/UT holding a single district with data still ranks;
 - the artifact build fails when coverage is below 90%, rather than publishing a suppressed value;
-- competition-ranking ties and rank denominators are correct;
+- competition-ranking ties and rank denominators are correct at all three ranked levels;
 - `n_expected` comes from the versioned roster rather than score rows; and
 - missing score rows never participate in ranking.
 
@@ -1061,31 +1256,33 @@ At minimum, synthetic and artifact-contract tests must prove:
 - the histogram bins the ranked units, not the painted ones: 36 State/UT means nationally and the
   selected State/UT's districts in the State view, in ten fixed bins of width 10 over `0-100`;
 - filtering never recomputes rank or clears a selected geography outside the active bin;
-- Bundle, Scenario, Period, and view changes clear the pinned bin;
+- Risk Domain, Scenario, Period, and view changes clear the pinned bin;
 - a roster-valid no-data geography remains selected with a no-data state;
 - an obsolete or unsupported Block, District, or State falls back only to its nearest valid parent;
-- district and block inspection create no breadcrumb level beyond `India > State/UT`;
+- a district selection extends the breadcrumb to `India > State/UT > District`, and a block
+  selection extends it no further;
 - selecting a district clears a selected block; selecting a block outside the selected district
   reselects that block's parent district; at most one district and one block are selected at once;
-- no block is ranked within a district, and no district is ranked by a block-derived statistic; and
+- a block is ranked within its own district and at no wider scope, and no district is ranked by a
+  block-derived statistic; and
 - Detailed Analysis routing and return preserve only the declared durable state.
 
 ### Comparison
 
-- the tray holds at most four members, and place and future never vary at once;
+- the portfolio holds at most four members, and place and future never vary at once;
 - entering futures mode fixes one subject and releases other members; leaving it retains the
   subject as the sole member;
 - scenario or period changes recompute every places-mode slot on the new slice;
-- a bundle change retains membership and replaces every figure, with no previous-bundle value
-  surviving in the panel;
+- a Risk Domain change retains membership and replaces every figure, with no previous Risk
+  Domain's value surviving in the panel;
 - a cross-State places-mode comparison exposes no orderable rank column, while a futures-mode
-  comparison may compare ranks, and flags a differing `n_valid`;
-- no block carries a rank in either mode;
+  comparison may compare ranks, and names a differing units-with-data denominator in words;
+- no block carries an orderable rank column in either mode;
 - differences are reported in scale points and never as physical or percentage differences;
 - compare emphasis never overrides a selection, and never renders as an administrative boundary
   weight; and
-- tray membership survives geography and view changes, and is not cleared by the transient-state
-  rules that clear bin filters and hover.
+- portfolio membership survives geography and view changes, and is not cleared by the
+  transient-state rules that clear bin filters and hover.
 
 ### Maps, routing, and data states
 
@@ -1100,7 +1297,7 @@ At minimum, synthetic and artifact-contract tests must prove:
 - the canary geographies render as expected: a State/UT whose blocks span under two points, such
   as Ladakh at SSP5-8.5 2040-2060, must render as one visually uniform fill, since more than one
   distinct colour there proves the domain has been rescaled;
-- clickable drivers have registered routes and valid unroutable drivers remain visible;
+- clickable metrics have registered routes and valid unroutable metrics remain visible;
 - unsupported combinations, missing expected artifacts, version mismatch, and valid no-data
   artifacts have distinct behaviors; and
 - loading never displays stale analytical values under new selector labels.
@@ -1113,13 +1310,97 @@ At minimum, synthetic and artifact-contract tests must prove:
 - artifacts reject missing/mismatched roster versions, build identities, and stable administrative
   keys.
 
+## 11. Settled user-facing naming
+
+Ruled 2026-09-16 and demonstrated in
+[`docs/diagnostics/heat_risk_pilot/irt_target_prototype.html`](docs/diagnostics/heat_risk_pilot/irt_target_prototype.html).
+These are the words that appear on screen. They are settled; a later stage that wants to change
+one is changing a decision, not filling a gap.
+
+Two rules govern the table. **Identifiers are not renamed** — `bundle_id`, `n_valid`,
+`coverage_fraction`, `n_expected`, `state_mean_area_weighted`, `ruler_id`, the API paths and the
+13-row manifest keep their existing spellings, because renaming a field costs the vendor a
+migration and buys the user nothing. **Methodology prose keeps its precision** — where a section
+below is specifying how a number is computed, it may and should say "area-weighted mean" or
+"national percentile". The table governs what the interface displays, not how the specification
+reasons.
+
+### What the number is called
+
+| On screen | Not | Why |
+|---|---|---|
+| `hazard score` | risk score, national score, composite, index | The score carries no exposure and no vulnerability. One name, with `0-100` adjacent on first appearance. |
+| `Heat Risk · hazard score` | Heat Risk score | The Risk Domain names the subject; the score names what was measured. |
+| `Very Low` `Low` `Moderate` `High` `Very High` | `Extreme` for the top band | Symmetric, and positional rather than a physical claim on a percentile-derived ruler. |
+| "higher than 84% of India's districts" | "84th percentile" | The comparison is the point; the statistical term is not. |
+| "position among India's districts" | "national percentile position" | Same, for the axis label and the difference between two scores. |
+
+The scope caveat is phrased positively, never as a disclaimer:
+
+> The score measures the hazard itself: how severe the climate conditions are. It does not
+> account for how many people or assets are exposed, or how well they can cope.
+
+A low score means **less hazard**. It never means "safe" and never means "good".
+
+### Controls and surfaces — IRT's own words win
+
+Where IRT already has a name for a thing, IRT's name is used. Introducing a third name for a
+control the vendor already ships costs them a rename and costs the user a relearn.
+
+| Concept | Ships as | Previously called |
+|---|---|---|
+| The thematic or sector selector | `Risk Domain` | Bundle |
+| The user's saved set of places | `My Portfolio` | My Analysis |
+| The comparison surface | `Compare Portfolio` | Compare locations |
+| The control that adds a place to it | `Add to Analysis` | — |
+| The full ranked table | `Ranking Table` | View all N |
+| The statistic control | `Mean` | Area-weighted mean |
+| The map colour control | `Map Mode`, options `Absolute value` / `Local contrast` | a separate Local contrast checkbox |
+| The panels and filter groups | `Spatial Panel`, `Administrative Analysis`, `Coordinate Analysis`, `Select your views`, `Select Resilience Filters` | — |
+
+`Add to Analysis` adding to `My Portfolio` is a mismatch, and it is IRT's own. Inheriting it beats
+introducing a third name for the same act.
+
+`Overview` and `Detailed Analysis` are ours, because IRT has no word for the Overview. `Download
+report` ships; "answer pack" was internal shorthand and does not appear on screen.
+
+### Jargon removed
+
+| Ships as | Previously | Note |
+|---|---|---|
+| `Metric`, `Metrics`, `Top metrics` | driver, Drivers | IRT's word. "What drives this score" survives only as a heading verb. |
+| "comparison set", or the set named outright | cohort | Naming the actual set — "of 33 districts in Telangana" — is better than either. |
+| "districts with data", "blocks with data", "No data" | valid districts, No valid data | |
+| "scenario and period", or "future" in the portfolio | slice | |
+| `block` | — | **Kept.** It is the LGD level name and the data key. A State's own term — tehsil, taluk, mandal, circle — appears only in that unit's own label. |
+
+### Scenario and period labels
+
+| Ships as | Identifier retained in state and URL |
+|---|---|
+| `Middle of the road (SSP2-4.5)` | `ssp245` |
+| `Fossil-fuelled development (SSP5-8.5)` | `ssp585` |
+| `Early century (2020–2040)` | `2020-2040` |
+| `Mid century (2040–2060)` | `2040-2060` |
+| `End century (2060–2080)` | `2060-2080` |
+
+The scenario labels are the one place this specification deliberately overrides IRT's existing
+wording. IRT calls SSP2-4.5 `Business as usual`, which is indefensible — in the literature
+business-as-usual is the high-emissions path, so the label attaches to the wrong scenario. IRT
+calls SSP5-8.5 `Pessimistic`, which is a judgement about an outcome rather than a name for a
+pathway. The SSP identifier is shown alongside the narrative name in both cases.
+
+Ranked-list headings read `Highest hazard` and `Lowest hazard`, five and five. Never "worst" and
+"best": the lowest-hazard places are not good places, they are places with less of this hazard.
+
 ## Core workflow principles
 
 The workflow should be evaluated against the following principles during each section-level
 refinement:
 
 - The first screen provides information rather than setup work.
-- No more than three primary analysis selectors are needed for a quick analysis.
+- No more than three primary analysis selectors — Risk Domain, scenario, period — are needed for
+  a quick analysis.
 - Each screen has one visually dominant next action.
 - Advanced capability is discoverable without being compulsory.
 - Overview and Detailed Analysis use one canonical analysis context.
@@ -1134,10 +1415,11 @@ refinement:
   explicitly included in a score.
 - Missing or partial data is visible and does not silently become a valid-looking score.
 - National results are absolute interstate hazard comparisons on one frozen scale; they remain
-  hazard-only and are not comparable across bundles.
+  hazard-only and are not comparable across Risk Domains.
 - Coverage is enforced at the artifact build; every unit that survives the gate is ranked.
-- Rankings use top-10 shortlists, competition ranks, stable alphabetical or administrative-code
-  display order within ties, and original ranks under filtering.
+- Rankings use five-highest and five-lowest shortlists over the units the view would open next,
+  competition ranks, stable alphabetical or administrative-code display order within ties, and
+  original ranks under filtering.
 - Geometry is loaded progressively: national district context first, then State-scoped block
   geometry and attributes together on State selection.
 - The interface answers a user question before offering additional analytical controls.
