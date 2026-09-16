@@ -241,6 +241,32 @@
   #compare:not(:empty) + .cmp-empty { display: none; }
   .saved-note { font-size: 11.5px; color: var(--ink-3); margin: 0 4px 12px; }
 
+  /* ---------- saved analyses, and the shared portfolio ---------- */
+  .pf-list { list-style: none; margin: 8px 0 0; padding: 0; }
+  .pf-list li { display: flex; align-items: flex-start; gap: 9px; padding: 8px 0;
+                border-top: 1px solid var(--rule); }
+  .pf-list li:first-child { border-top: 0; }
+  .pf-body { flex: 1 1 auto; min-width: 0; }
+  .pf-name { display: block; font-size: 13px; font-weight: 650; }
+  .pf-sub { display: block; font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+  .pf-acts { display: flex; gap: 5px; flex-wrap: wrap; align-items: flex-start; }
+  .pf-show { display: flex; align-items: center; gap: 5px; font-size: 10.5px;
+             color: var(--ink-2); white-space: nowrap; padding-top: 2px; }
+  .pf-show input:disabled + span { color: var(--ink-3); }
+  .sv-open { margin: 9px 0 0; padding: 9px 11px; border: 1px solid #c6cfd8;
+             border-radius: 7px; background: #f8fafb; }
+  .sv-open.legacy { border-left: 3px solid #95261c; }
+  .sv-open h3 { margin: 0 0 5px; font-size: 12.5px; }
+  .sv-open ul { margin: 5px 0 0; padding-left: 17px; font-size: 11.5px; color: var(--ink-2); }
+  .sv-open ul li { margin: 0 0 3px; }
+  .sv-unres { margin: 7px 0 0; padding: 7px 9px; border-radius: 6px;
+              background: #fdf3f2; border: 1px solid #f0cfcb; font-size: 11.5px; }
+  .sv-unres b { color: #95261c; }
+  .life { width: 100%; border-collapse: collapse; font-size: 11.5px; margin: 7px 0 0; }
+  .life th, .life td { text-align: left; padding: 5px 6px; vertical-align: top;
+                       border-top: 1px solid var(--rule); }
+  .life th { color: var(--ink-3); font-weight: 650; width: 40%; }
+
   /* ---------- headline ---------- */
   .headline .hl-top { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
   .headline .hl-name { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
@@ -585,7 +611,11 @@
         destination is undesigned. What the doorway carries, the answer the destination must
         reproduce on arrival, the signals that have nowhere to go, and what a refinement made
         inside does on the way back are all real and all demonstrated. One metric in every
-        list is marked as a demonstration of a signal with no destination.</p>
+        list is marked as a demonstration of a signal with no destination. Saved Analysis is real:
+        three seeded definitions demonstrate a legacy analysis opened against this release, an
+        advanced six-place configuration returning to a four-column Overview intact, and a
+        pre-2016 analysis whose places have since been renamed, split, retired and rendered
+        ambiguous.</p>
       <p>Context and Evidence carries no basin or river map overlay and no basin context at
         State/UT scope; the card and the method note say why.</p>
     </details>
@@ -723,12 +753,15 @@
     </div>
 
     <div id="pane-analysis" hidden>
-      <p class="saved-note">Your shortlist and the comparison built from it. Locations and futures
-        survive a bundle, scenario or period change.</p>
+      <p class="saved-note">Your portfolio, the comparison built over it, and the analyses you
+        named. The portfolio is the collection; the comparison is a choice of what to show side by
+        side. Changing the comparison never empties the collection.</p>
+      <div class="card" id="saved" data-delta="12"></div>
       <div id="compare" data-delta="9"></div>
       <div class="cmp-empty">Add locations to your analysis from anywhere a unit is named &mdash;
         the map, the ranked lists, the ranked table, a block inspection or a coordinate result
         &mdash; to build your portfolio.</div>
+      <div class="card" id="lifetimes"></div>
     </div>
   </aside>
 </div>
@@ -760,7 +793,14 @@
     local: false,          /* the local-contrast view; opt-in, never the landing state */
     ctxOpen: false,        /* Context and Evidence is collapsed on arrival, by contract */
     ctxLayer: null,        /* the active Context layer id, or null; off by default */
-    cmp: { mode: "places", members: [], subject: null, slices: [] },
+    /* The collection and the comparison are two fields, not one. See the
+       comment above the portfolio module for why that separation is the whole
+       of finding 7. */
+    portfolio: [],
+    cmp: { mode: "places", display: [], subject: null, slices: [], prevDisplay: [] },
+    saved: null,          /* named analysis definitions; seeded below */
+    savedNote: null,      /* what opening one did, stated in words */
+    savedAsk: null,       /* the id awaiting an explicit replace-or-merge answer */
     da: null,
     daNote: null          /* what a refinement inside Detailed Analysis did on the way back */
   };
@@ -1152,14 +1192,56 @@
      ranking. One view, one comparison set. */
   function cohort() { return rankingCohort(); }
 
-  /* ---------- persistent comparison tray ---------- */
+  /* ---------- the portfolio, and the comparison made over it ---------------
+     These are two different things and they are stored in two different fields.
+     The portfolio is the set of places the user collected. The comparison is a
+     choice of what to put side by side, made over that set. When one object
+     holds both, a comparison control destroys collected work -- and the
+     collection is the expensive thing to rebuild while the comparison is the
+     cheapest thing to change your mind about.
+
+     Four is the cap on COLUMNS, because beyond four columns side-by-side reading
+     fails and the question has become a ranking. The portfolio has no cap: a
+     shortlist of nine places is an ordinary thing to have, and the Overview's
+     job is to say which four of them are on screen, not to refuse the other
+     five. */
   function cmpIdentity(member) { return member.level + ":" + member.key; }
-  function cmpMemberIndex(member) {
+  function pfIndex(member) {
     var id = cmpIdentity(member);
-    for (var i = 0; i < S.cmp.members.length; i++) {
-      if (cmpIdentity(S.cmp.members[i]) === id) return i;
+    for (var i = 0; i < S.portfolio.length; i++) {
+      if (cmpIdentity(S.portfolio[i]) === id) return i;
     }
     return -1;
+  }
+  /* The displayed columns, resolved through the portfolio so that a stale id
+     cannot paint a column for a member who is no longer collected. */
+  function cmpDisplayed() {
+    var out = [];
+    S.cmp.display.forEach(function (id) {
+      S.portfolio.forEach(function (m) { if (cmpIdentity(m) === id) out.push(m); });
+    });
+    return out.slice(0, 4);
+  }
+  function pfAdd(member) {
+    if (pfIndex(member) >= 0) return;
+    S.portfolio.push(member);
+    /* A newly collected place is shown if there is a free column, and simply
+       collected if there is not. In futures mode nothing enters the display,
+       because one place is being held fixed. */
+    if (S.cmp.mode === "places" && S.cmp.display.length < 4) {
+      S.cmp.display.push(cmpIdentity(member));
+    }
+  }
+  function pfRemove(id) {
+    S.portfolio = S.portfolio.filter(function (m) { return cmpIdentity(m) !== id; });
+    S.cmp.display = S.cmp.display.filter(function (x) { return x !== id; });
+    S.cmp.prevDisplay = S.cmp.prevDisplay.filter(function (x) { return x !== id; });
+    if (S.cmp.subject && cmpIdentity(S.cmp.subject) === id) leaveFutures();
+  }
+  function pfToggleDisplay(id) {
+    var at = S.cmp.display.indexOf(id);
+    if (at >= 0) S.cmp.display.splice(at, 1);
+    else if (S.cmp.display.length < 4) S.cmp.display.push(id);
   }
   function makeCmpMember(level, key) {
     if (level === "State/UT") {
@@ -1177,28 +1259,31 @@
     }
     return null;
   }
+  /* Collecting a place is never refused and never disabled. It is not a
+     comparison act: it adds to the collection, and the comparison decides
+     separately what to show. The old control refused at four and refused in
+     futures mode, which is how a mode switch came to destroy a shortlist. */
   function cmpControl(member, compact) {
-    var present = cmpMemberIndex(member) >= 0;
-    var disabled = false, label, title;
-    if (S.cmp.mode === "futures") {
-      disabled = true;
-      label = compact ? "Fixed" : "Place fixed";
-      title = "Add-to-compare controls are disabled in futures mode because the place is fixed.";
-    } else if (!present && S.cmp.members.length >= 4) {
-      disabled = true;
-      label = "Tray full (4)";
-      title = "The comparison tray holds at most four places.";
+    var present = pfIndex(member) >= 0;
+    var label = present ? (compact ? "−" : "Remove from Analysis")
+                        : (compact ? "+" : "Add to Analysis");
+    var title;
+    if (present) {
+      title = "Remove " + member.name + " from your portfolio";
+    } else if (S.cmp.mode === "futures") {
+      title = "Add " + member.name + " to your portfolio. One place is held fixed while you " +
+        "compare futures, so it joins the collection now and is shown when you compare places.";
+    } else if (S.cmp.display.length >= 4) {
+      title = "Add " + member.name + " to your portfolio. Four columns are already shown, so it " +
+        "is collected and not displayed until you choose it.";
     } else {
-      label = present ? (compact ? "−" : "Remove from Analysis")
-                      : (compact ? "+" : "Add to Analysis");
-      title = (present ? "Remove " : "Add ") + member.name +
-        (present ? " from" : " to") + " your analysis — the shortlist the comparison uses";
+      title = "Add " + member.name + " to your portfolio — the collection the comparison " +
+        "is built over";
     }
     return "<button type='button' class='" + (compact ? "cmp-mini" : "btn ghost") +
       " cmp-toggle' data-cmp-level='" + escAttr(member.level) + "' data-cmp-key='" +
       escAttr(member.key) + "' title='" + escAttr(title) + "' aria-label='" +
-      escAttr(title) + "'" +
-      (disabled ? " disabled" : "") + ">" + esc(label) + "</button>";
+      escAttr(title) + "'>" + esc(label) + "</button>";
   }
   function wireCmpControls(host) {
     var buttons = host.querySelectorAll(".cmp-toggle");
@@ -1207,28 +1292,39 @@
         ev.stopPropagation();
         var member = makeCmpMember(ev.currentTarget.dataset.cmpLevel,
                                    ev.currentTarget.dataset.cmpKey);
-        if (!member || S.cmp.mode !== "places") return;
-        var at = cmpMemberIndex(member);
-        if (at >= 0) S.cmp.members.splice(at, 1);
-        else if (S.cmp.members.length < 4) S.cmp.members.push(member);
+        if (!member) return;
+        if (pfIndex(member) >= 0) pfRemove(cmpIdentity(member));
+        else pfAdd(member);
         render();
       });
     }
   }
+  /* Holding one place fixed changes what is displayed. It does not change what
+     is collected: every other member stays in the portfolio and is listed
+     there, and coming back restores the columns that were on screen before --
+     not the subject alone. */
   function enterFutures(member) {
+    if (pfIndex(member) < 0) pfAdd(member);
+    S.cmp.prevDisplay = S.cmp.display.slice();
     S.cmp.mode = "futures";
     S.cmp.subject = member;
-    S.cmp.members = [member];
     S.cmp.slices = Object.keys(D.period_labels).map(function (period) {
       return S.scenario + "|" + period;
     }).slice(0, 4);
     render();
   }
   function leaveFutures() {
+    var live = {};
+    S.portfolio.forEach(function (m) { live[cmpIdentity(m)] = 1; });
+    var back = (S.cmp.prevDisplay || []).filter(function (x) { return live[x]; });
+    if (!back.length && S.cmp.subject && live[cmpIdentity(S.cmp.subject)]) {
+      back = [cmpIdentity(S.cmp.subject)];
+    }
     S.cmp.mode = "places";
-    S.cmp.members = S.cmp.subject ? [S.cmp.subject] : [];
+    S.cmp.display = back;
     S.cmp.subject = null;
     S.cmp.slices = [];
+    S.cmp.prevDisplay = [];
     render();
   }
   function cmpRange(blocks, scores) {
@@ -1672,7 +1768,7 @@
     var selectedId = S.block ? "Block:" + S.block
       : S.view === "district" ? "District:" + S.district
       : S.view === "state" ? "State/UT:" + S.state : null;
-    S.cmp.members.forEach(function (member) {
+    S.portfolio.forEach(function (member) {
       if (cmpIdentity(member) === selectedId) return;
       var path = null, visible = false;
       if (member.level === "State/UT") {
@@ -3015,17 +3111,511 @@
       return "Futures for " + S.cmp.subject.name + " (" + S.cmp.subject.level + "): " +
         (labels.length ? labels.join("; ") : "no futures selected");
     }
-    if (S.cmp.members.length) {
+    var shown = cmpDisplayed();
+    if (shown.length) {
       return "Places at " + D.scenario_labels[S.scenario] + " " + D.period_labels[S.period] +
-        ": " + S.cmp.members.map(function (m) {
+        ": " + shown.map(function (m) {
           return m.name + " (" + m.level + ")";
-        }).join("; ");
+        }).join("; ") +
+        (S.portfolio.length > shown.length
+          ? " · " + (S.portfolio.length - shown.length) + " more collected, not displayed"
+          : "");
     }
-    return "No active comparison tray";
+    return S.portfolio.length ? "Portfolio of " + S.portfolio.length +
+      ", nothing selected for display" : "No active comparison";
   }
+  /* ================= the portfolio list, and saved analyses =================
+     Finding 7 in one sentence: a saved analysis stores a QUESTION, not an
+     answer. The question is a set of names and choices and it stays meaningful
+     across a rebuild. The answer was measured against a ruler, a roster and an
+     artifact release, and any of those can be superseded -- so storing the
+     answer and redisplaying it is how a stale number acquires the authority of
+     a current one. Nothing here stores a score for display. */
+
+  /* What this build is. Recorded beside every definition at save time, because
+     a change notice that cannot name what changed is not a notice. A ruler id
+     alone is not enough: data is revised under an unchanged ruler, and places,
+     metrics, supported combinations and boundaries all move while the scale
+     stays fixed. */
+  var RELEASE = {
+    build: "overview-2026-09-16.a",
+    roster: "lgd-roster-2026-08",
+    ruler: "cdf_v1",
+    method: "frozen national CDF · area-weighted mean"
+  };
+
+  var SAVED_SEED = [
+    {
+      id: "sv-advanced", name: "Six districts, three metrics, two futures",
+      saved_at: "2026-09-12", origin: "Detailed Analysis",
+      bundle_id: "Heat Risk", statistic: "mean",
+      metrics: ["txx_annual_max", "txge35_extreme_heat_days", "tasmin_tropical_nights_gt25"],
+      slices: ["ssp245|2040-2060", "ssp585|2060-2080"],
+      geography: [
+        { key: "telangana|adilabad", level: "District", name_at_save: "Adilabad" },
+        { key: "telangana|karimnagar", level: "District", name_at_save: "Karimnagar" },
+        { key: "telangana|khammam", level: "District", name_at_save: "Khammam" },
+        { key: "telangana|nalgonda", level: "District", name_at_save: "Nalgonda" },
+        { key: "telangana|nizamabad", level: "District", name_at_save: "Nizamabad" },
+        { key: "telangana|warangal|geesugonda", level: "Block", name_at_save: "Geesugonda",
+          coord: { lat: 17.9784, lon: 79.5941, site: "Kazipet substation" } }
+      ],
+      comparison: { kind: "matrix", note: "six places × three metrics × two futures" },
+      release: { build: "overview-2026-09-16.a", roster: "lgd-roster-2026-08",
+                 ruler: "cdf_v1", method: "frozen national CDF · area-weighted mean" },
+      legacy_results: null
+    },
+    {
+      id: "sv-legacy", name: "Telangana heat shortlist",
+      saved_at: "2026-03-04", origin: "Compare Portfolio, before the ruler was frozen",
+      bundle_id: "Heat Risk", statistic: "mean",
+      metrics: ["txx_annual_max", "txge35_extreme_heat_days"],
+      slices: ["ssp245|2040-2060"],
+      geography: [
+        { key: "telangana|warangal", level: "District", name_at_save: "Warangal Rural" },
+        { key: "telangana|karimnagar", level: "District", name_at_save: "Karimnagar" },
+        { key: "telangana|hanumakonda", level: "District", name_at_save: "Warangal Urban" }
+      ],
+      comparison: { kind: "places", note: "three districts on one future" },
+      release: { build: "glance-2026-02.c", roster: "lgd-roster-2025-11",
+                 ruler: "per-State min-max", method: "min-max fitted inside each State/UT" },
+      /* Retained, never rendered. Two of these are the figures the September
+         recon actually read out of the deployed Compare Portfolio. They are
+         kept because their reproducibility value is real; they are withheld
+         from every map, band, rank, column and export because they were
+         measured with a different ruler. */
+      legacy_results: [
+        { key: "telangana|warangal", score: 51.70 },
+        { key: "telangana|karimnagar", score: 66.50 }
+      ]
+    },
+    {
+      id: "sv-drift", name: "Warangal region, saved before the 2016 reorganisation",
+      saved_at: "2015-11-20", origin: "Compare Portfolio",
+      bundle_id: "Heat Risk", statistic: "mean",
+      metrics: ["txx_annual_max"],
+      slices: ["ssp245|2040-2060"],
+      geography: [
+        /* renamed, same stable identifier: Warangal Urban became Hanumakonda */
+        { key: "telangana|hanumakonda", level: "District", name_at_save: "Warangal Urban" },
+        /* split: the undivided district became five */
+        { key: "telangana|warangal undivided", level: "District", name_at_save: "Warangal",
+          drift: "split",
+          successors: ["telangana|warangal", "telangana|hanumakonda",
+                       "telangana|jayashankar bhupalapally", "telangana|mulugu",
+                       "telangana|mahabubabad"] },
+        /* saved by name, and the name crosses two levels */
+        { key: null, level: "District", name_at_save: "Mancherial", drift: "ambiguous",
+          candidates: ["telangana|mancherial", "telangana|mancherial|mancherial"] },
+        /* the identifier itself is not in the current roster */
+        { key: "telangana|hyderabad|maredpally", level: "Block", name_at_save: "Maredpally" }
+      ],
+      comparison: { kind: "places", note: "four places on one future" },
+      release: { build: "glance-2015-11.a", roster: "lgd-roster-2015-09",
+                 ruler: "per-State min-max", method: "min-max fitted inside each State/UT" },
+      legacy_results: null
+    }
+  ];
+
+  function svList() {
+    if (!S.saved) S.saved = SAVED_SEED.map(function (x) { return x; });
+    return S.saved;
+  }
+  function svFind(id) {
+    var hit = null;
+    svList().forEach(function (x) { if (x.id === id) hit = x; });
+    return hit;
+  }
+
+  /* ---- resolving a saved definition against the current roster -------------
+     Per member, never in bulk. A rename that kept its identifier is not a
+     failure and must not be treated as one; a split, a retired identifier and
+     an ambiguous name are three different things and each needs the user, not
+     the interface's judgement. Geography is never substituted silently and an
+     unresolved member is never quietly dropped -- an analysis that opens with
+     four of six places and no notice is indistinguishable from one saved with
+     four. */
+  function svResolve(entry) {
+    var ok = [], unresolved = [];
+    entry.geography.forEach(function (g) {
+      if (g.drift === "split") {
+        unresolved.push({ saved: g.name_at_save, key: g.key, reason:
+          "This identifier was split. The undivided district became " +
+          g.successors.length + " districts, and no one of them is the place that was saved.",
+          offer: "Choose one or more successors",
+          options: g.successors.map(function (k) {
+            return byKey[k] ? byKey[k].n : k;
+          }) });
+        return;
+      }
+      if (g.drift === "ambiguous") {
+        unresolved.push({ saved: g.name_at_save, key: null, reason:
+          "This member was saved by name, with no stable identifier, and the name crosses two " +
+          "levels: Mancherial is a district of Telangana and also a block inside that district.",
+          offer: "Say which one was meant",
+          options: g.candidates.map(function (k) {
+            return byKey[k] ? byKey[k].n + " (District)"
+                 : blockByKey[k] ? blockByKey[k].n + " (Block)" : k;
+          }) });
+        return;
+      }
+      var member = makeCmpMember(g.level, g.key);
+      if (!member) {
+        unresolved.push({ saved: g.name_at_save, key: g.key, reason:
+          "The current roster carries no unit under this identifier. It was retired, or it was " +
+          "never the spelling the roster issued.",
+          offer: "Search for the place and re-add it",
+          options: [] });
+        return;
+      }
+      ok.push({ member: member, renamedFrom:
+        member.name !== g.name_at_save ? g.name_at_save : null, coord: g.coord || null });
+    });
+    return { ok: ok, unresolved: unresolved };
+  }
+
+  /* What moved under the definition since it was saved. */
+  function svChanges(entry) {
+    var out = [], r = entry.release;
+    if (r.ruler !== RELEASE.ruler) {
+      out.push("The scale changed. Your scores were measured with " + r.ruler + ", fitted " +
+        "separately inside each State/UT; this release measures every unit against one frozen " +
+        "national ruler (" + RELEASE.ruler + "). The same place is a different number under " +
+        "each, so the numbers you saw are not the numbers below.");
+    }
+    if (r.roster !== RELEASE.roster) {
+      out.push("The administrative roster changed (" + r.roster + " → " + RELEASE.roster +
+        "), so a place may have been renamed, split, merged or retired since you saved this.");
+    }
+    if (r.build !== RELEASE.build) {
+      out.push("The data release changed (" + r.build + " → " + RELEASE.build + "). Scores " +
+        "can be revised under an unchanged ruler, which is why the release is recorded and not " +
+        "just the scale.");
+    }
+    if (!out.length) {
+      out.push("Nothing material changed: this analysis was saved against the release now " +
+        "published, so the figures below are the figures you saw.");
+    }
+    return out;
+  }
+
+  function svOpen(entry, how) {
+    var res = svResolve(entry);
+    if (how === "replace") { S.portfolio = []; S.cmp.display = []; }
+    S.cmp.mode = "places"; S.cmp.subject = null; S.cmp.slices = []; S.cmp.prevDisplay = [];
+    res.ok.forEach(function (r) { pfAdd(r.member); });
+
+    /* Scenario and period come back from the definition, and the header
+       selectors come back with them -- a map painting one future under a
+       control naming another is the desync this prototype keeps ruling out. */
+    var slice = (entry.slices && entry.slices[0] || "").split("|");
+    if (D.scenario_labels[slice[0]] && D.period_labels[slice[1]]) {
+      S.scenario = slice[0]; S.period = slice[1];
+      var scEl = document.getElementById("sel-scenario");
+      var peEl = document.getElementById("sel-period");
+      if (scEl) scEl.value = S.scenario;
+      if (peEl) peEl.value = S.period;
+    }
+    S.pinned = null; S.showAll = false; S.da = null; S.report = null; S.daNote = null;
+    S.savedAsk = null;
+    S.savedNote = { entry: entry, how: how, res: res, changes: svChanges(entry),
+                    shown: cmpDisplayed().length };
+  }
+
+  function svSaveCurrent() {
+    var list = svList();
+    var shown = {};
+    S.cmp.display.forEach(function (id) { shown[id] = 1; });
+    var entry = {
+      id: "sv-" + Date.now(),
+      name: "Analysis " + (list.length + 1),
+      saved_at: "just now", origin: "Overview",
+      bundle_id: S.bundle, statistic: "mean",
+      /* The screening surface chooses no constituent metric by contract, so an
+         Overview-saved definition records none rather than recording a guess. */
+      metrics: [],
+      slices: S.cmp.mode === "futures" && S.cmp.slices.length ? S.cmp.slices.slice()
+                                                              : [sliceId()],
+      geography: S.portfolio.map(function (m) {
+        return { key: m.key, level: m.level, name_at_save: m.name };
+      }),
+      comparison: { kind: S.cmp.mode,
+                    note: S.cmp.mode === "futures"
+                      ? "one place × " + S.cmp.slices.length + " futures"
+                      : Object.keys(shown).length + " of " + S.portfolio.length +
+                        " places displayed" },
+      release: { build: RELEASE.build, roster: RELEASE.roster, ruler: RELEASE.ruler,
+                 method: RELEASE.method },
+      legacy_results: null
+    };
+    list.unshift(entry);
+    S.savedNote = null;
+  }
+
+  /* ---- the portfolio list ------------------------------------------------- */
+  function pfListHtml() {
+    if (!S.portfolio.length) return "";
+    var shown = {};
+    cmpDisplayed().forEach(function (m) { shown[cmpIdentity(m)] = 1; });
+    var nShown = Object.keys(shown).length;
+    var full = nShown >= 4;
+    var h = "<div style='margin:11px 0 2px'><p class='drv-head'>Your portfolio · " +
+      S.portfolio.length + " collected</p><p class='sub' style='margin:0'>" +
+      (S.cmp.mode === "futures"
+        ? "One place is held fixed while you compare futures. Everything here is kept."
+        : "Showing " + nShown + " of " + S.portfolio.length + " as columns" +
+          (full && S.portfolio.length > 4
+            ? " — four is the cap on columns, not on the collection. Untick one to swap."
+            : ".")) +
+      "</p><ul class='pf-list'>";
+    S.portfolio.forEach(function (m) {
+      var id = cmpIdentity(m);
+      var on = !!shown[id];
+      var disabled = S.cmp.mode === "futures" || (!on && full);
+      h += "<li>" +
+        "<label class='pf-show'><input type='checkbox' class='pf-tick' data-pf-id='" +
+          escAttr(id) + "'" + (on ? " checked" : "") + (disabled ? " disabled" : "") +
+          "><span>Show</span></label>" +
+        "<span class='pf-body'><span class='pf-name'>" + esc(m.name) + "</span>" +
+        "<span class='pf-sub'>" + esc(m.level) + " · " + esc(m.parent) +
+          " · <code>" + esc(m.key) + "</code></span></span>" +
+        "<span class='pf-acts'>" +
+        "<button type='button' class='btn ghost cmp-remove-member' data-cmp-id='" +
+          escAttr(id) + "'>Remove</button>" +
+        (S.cmp.mode === "places"
+          ? "<button type='button' class='btn ghost cmp-futures' data-cmp-id='" +
+            escAttr(id) + "'>Futures &rsaquo;</button>" : "") +
+        "</span></li>";
+    });
+    return h + "</ul></div>";
+  }
+
+  function wirePfList(host) {
+    var ticks = host.querySelectorAll(".pf-tick");
+    for (var i = 0; i < ticks.length; i++) {
+      ticks[i].addEventListener("change", function (ev) {
+        pfToggleDisplay(ev.currentTarget.dataset.pfId);
+        render();
+      });
+    }
+  }
+
+  /* ---- the saved-analyses card ------------------------------------------- */
+  function svNoteHtml() {
+    var n = S.savedNote;
+    if (!n) return "";
+    var e = n.entry, legacy = e.release.ruler !== RELEASE.ruler;
+    var h = "<div class='sv-open" + (legacy ? " legacy" : "") + "'>" +
+      "<h3>Opened “" + esc(e.name) + "” " +
+        (n.how === "replace" ? "in place of your working set" : "merged into your working set") +
+      "</h3>" +
+      "<p class='sub' style='margin:0'>Resolved against <b>" + esc(RELEASE.build) +
+        "</b> · roster " + esc(RELEASE.roster) + " · scoring method " +
+        esc(RELEASE.method) + ". Saved against " + esc(e.release.build) + " · roster " +
+        esc(e.release.roster) + " · " + esc(e.release.method) + ".</p>";
+
+    if (legacy) {
+      h += "<p class='cmp-alert' style='margin:8px 0 0'><b>Migration notice.</b> This analysis " +
+        "predates the frozen ruler. Everything below was measured by this release; nothing you " +
+        "saw when you saved it is shown here." +
+        (e.legacy_results
+          ? " Its " + e.legacy_results.length + " stored result" +
+            (e.legacy_results.length === 1 ? "" : "s") + " " +
+            (e.legacy_results.length === 1 ? "is" : "are") + " retained in the record and " +
+            "deliberately not displayed: a number fitted inside one State/UT cannot be put on " +
+            "this colourbar, in this band, or in this rank without asserting something false."
+          : "") + "</p>";
+    }
+
+    h += "<ul>";
+    n.changes.forEach(function (c) { h += "<li>" + esc(c) + "</li>"; });
+    h += "</ul>";
+
+    h += "<dl class='kv' style='margin:8px 0 0'>" +
+      "<dt>Places restored</dt><dd>" + n.res.ok.length + " of " + e.geography.length +
+        (n.res.ok.length ? " — " + n.res.ok.map(function (r) {
+          return esc(r.member.name) + (r.renamedFrom
+            ? " (saved as " + esc(r.renamedFrom) + ")" : "") +
+            (r.coord ? " (your site “" + esc(r.coord.site) + "” at " +
+              r.coord.lat + ", " + r.coord.lon + ")" : "");
+        }).join("; ") : "") + "</dd>" +
+      "<dt>Risk Domain</dt><dd>" + esc(e.bundle_id) +
+        (e.bundle_id === S.bundle ? "" : " — not scored in this prototype") + "</dd>" +
+      "<dt>Metrics restored</dt><dd>" + (e.metrics.length
+        ? e.metrics.map(function (s) { return esc(metricLabel(s)); }).join("; ")
+        : "none were selected — the screening surface chooses no metric") + "</dd>" +
+      "<dt>Futures restored</dt><dd>" + e.slices.map(function (sid) {
+        var l = cmpSliceLabel(sid); return esc(l.scenario) + " · " + esc(l.period);
+      }).join("; ") + "</dd>" +
+      "<dt>Statistic</dt><dd>" + esc(e.statistic) + "</dd>" +
+      "<dt>Comparison as saved</dt><dd>" + esc(e.comparison.note) +
+        (e.comparison.kind === "matrix"
+          ? " — a Detailed Analysis configuration. The Overview shows at most four columns " +
+            "on one axis, so " + n.shown + " place" + (n.shown === 1 ? " is" : "s are") +
+            " displayed; the rest stay in the portfolio and the matrix configuration is kept for " +
+            "the next crossing into Detailed Analysis."
+          : "") + "</dd>" +
+      "</dl>";
+
+    n.res.unresolved.forEach(function (u) {
+      h += "<div class='sv-unres'><b>Unresolved: " + esc(u.saved) + "</b>" +
+        (u.key ? " <code>" + esc(u.key) + "</code>" : " (saved by name, no identifier)") +
+        "<br>" + esc(u.reason) +
+        (u.options.length ? "<br>Candidates: " + u.options.map(esc).join(" · ") : "") +
+        "<div class='btn-row' style='margin-top:6px'><button class='btn ghost' disabled>" +
+          esc(u.offer) + "</button></div>" +
+        "<span class='pf-sub'>Kept listed and never substituted. It is not in your portfolio " +
+        "and it was not silently dropped.</span></div>";
+    });
+
+    return h + "<div class='btn-row' style='margin-top:9px'>" +
+      "<button class='btn ghost' id='sv-dismiss'>Dismiss</button></div></div>";
+  }
+
+  function renderSaved() {
+    var host = document.getElementById("saved");
+    var list = svList();
+    var h = "<h2>Saved Analysis</h2>" +
+      "<p class='sub' style='margin:0 0 2px'>A saved analysis stores the question — the " +
+      "places, the Risk Domain, the metrics, the futures and the comparison layout. It stores no " +
+      "scores: those are retrieved from the published release when you open it, so a saved " +
+      "analysis cannot go stale into a wrong number.</p>" +
+      "<ul class='pf-list'>";
+
+    list.forEach(function (e) {
+      var legacy = e.release.ruler !== RELEASE.ruler;
+      var asking = S.savedAsk === e.id;
+      h += "<li><span class='pf-body'><span class='pf-name'>" + esc(e.name) +
+        (legacy ? " <i>&mdash; saved on the old scale</i>" : "") + "</span>" +
+        "<span class='pf-sub'>" + e.geography.length + " place" +
+          (e.geography.length === 1 ? "" : "s") + " · " + esc(e.bundle_id) + " · " +
+          (e.metrics.length ? e.metrics.length + " metric" +
+            (e.metrics.length === 1 ? "" : "s") : "no metrics") + " · " +
+          e.slices.length + " future" + (e.slices.length === 1 ? "" : "s") + " · " +
+          esc(e.comparison.note) + "</span>" +
+        "<span class='pf-sub'>Saved " + esc(e.saved_at) + " from " + esc(e.origin) +
+          " against " + esc(e.release.build) + " · " + esc(e.release.ruler) + "</span>" +
+        (asking
+          ? "<span class='pf-sub' style='margin-top:5px;color:var(--ink-2)'>Opening replaces or " +
+            "merges. Neither is the default: replacing discards the portfolio you have now, " +
+            "merging changes the analysis you asked to see.</span>" +
+            "<span class='btn-row' style='margin-top:5px'>" +
+            "<button class='btn' data-sv-open='" + escAttr(e.id) + "' data-sv-how='replace'>" +
+              "Replace working set</button>" +
+            "<button class='btn ghost' data-sv-open='" + escAttr(e.id) + "' data-sv-how='merge'>" +
+              "Merge into it</button>" +
+            "<button class='btn ghost' data-sv-cancel='1'>Cancel</button></span>"
+          : "") +
+        "</span>" +
+        "<span class='pf-acts'>" +
+        (asking ? "" : "<button type='button' class='btn ghost' data-sv-ask='" + escAttr(e.id) +
+          "'>Open</button>") +
+        "<button type='button' class='btn ghost' data-sv-rename='" + escAttr(e.id) +
+          "'>Rename</button>" +
+        "<button type='button' class='btn ghost' data-sv-del='" + escAttr(e.id) +
+          "'>Delete</button>" +
+        "</span></li>";
+    });
+
+    h += "</ul><div class='btn-row' style='margin-top:9px'>" +
+      "<button class='btn ghost' id='sv-save'" + (S.portfolio.length ? "" : " disabled") + ">" +
+      "Save this analysis</button></div>" + svNoteHtml();
+    host.innerHTML = h;
+
+    function each(sel, fn) {
+      var xs = host.querySelectorAll(sel);
+      for (var i = 0; i < xs.length; i++) xs[i].addEventListener("click", fn);
+    }
+    each("[data-sv-ask]", function (ev) {
+      S.savedAsk = ev.currentTarget.dataset.svAsk; S.savedNote = null; render();
+    });
+    each("[data-sv-cancel]", function () { S.savedAsk = null; render(); });
+    each("[data-sv-open]", function (ev) {
+      var e = svFind(ev.currentTarget.dataset.svOpen);
+      if (e) { svOpen(e, ev.currentTarget.dataset.svHow); render(); }
+    });
+    each("[data-sv-rename]", function (ev) {
+      var e = svFind(ev.currentTarget.dataset.svRename);
+      if (!e) return;
+      var name = window.prompt("Rename this analysis", e.name);
+      if (name) { e.name = name; render(); }
+    });
+    each("[data-sv-del]", function (ev) {
+      var id = ev.currentTarget.dataset.svDel;
+      S.saved = svList().filter(function (x) { return x.id !== id; });
+      if (S.savedAsk === id) S.savedAsk = null;
+      if (S.savedNote && S.savedNote.entry.id === id) S.savedNote = null;
+      render();
+    });
+    var save = document.getElementById("sv-save");
+    if (save) save.addEventListener("click", function () { svSaveCurrent(); render(); });
+    var dis = document.getElementById("sv-dismiss");
+    if (dis) dis.addEventListener("click", function () { S.savedNote = null; render(); });
+  }
+
+  /* ---- what lives how long, and the two buttons that end things ----------- */
+  function renderLifetimes() {
+    var host = document.getElementById("lifetimes");
+    host.innerHTML =
+      "<h2>What lives how long</h2>" +
+      "<p class='sub' style='margin:0'>A pinned bin is not a gesture: it is a stated filter, and " +
+      "it survives ordinary interaction until you clear it or one of the named transitions " +
+      "invalidates it. The two buttons below end different things, and each says which.</p>" +
+      "<table class='life'><tbody>" +
+      "<tr><th>Hover and tooltip</th><td>Ends when the interaction ends.</td></tr>" +
+      "<tr><th>Pinned bin filter</th><td>Until you clear it, or a Risk Domain, scenario, period, " +
+        "view, geography or analysis change invalidates it.</td></tr>" +
+      "<tr><th>Working context and portfolio</th><td>Survives navigation and a refresh. Cleared " +
+        "only by Reset and by logout.</td></tr>" +
+      "<tr><th>Named analyses</th><td>Persist until you delete them. Reset does not touch " +
+        "them.</td></tr>" +
+      "</tbody></table>" +
+      "<div class='btn-row' style='margin-top:9px'>" +
+      "<button class='btn ghost' id='btn-clear-pf'" + (S.portfolio.length ? "" : " disabled") +
+        ">Clear Portfolio</button>" +
+      "<button class='btn ghost' id='btn-reset'>Reset</button></div>" +
+      "<p class='pf-sub' style='margin:6px 0 0'><b>Clear Portfolio</b> empties the collection " +
+      "only: the geography you are on, the selectors and any filter stay exactly as they are. " +
+      "<b>Reset</b> returns to India on the public defaults — the state a first arrival " +
+      "produces — and clears the working context and the portfolio. Neither deletes a named " +
+      "analysis.</p>";
+
+    var cp = document.getElementById("btn-clear-pf");
+    if (cp) cp.addEventListener("click", function () {
+      S.portfolio = [];
+      S.cmp = { mode: "places", display: [], subject: null, slices: [], prevDisplay: [] };
+      render();
+    });
+    var rs = document.getElementById("btn-reset");
+    if (rs) rs.addEventListener("click", function () {
+      S.bundle = D.default_bundle;
+      S.scenario = D.default_scenario;
+      S.period = D.default_period;
+      S.view = "india"; S.state = null; S.district = null; S.block = null;
+      S.pinned = null; S.showAll = false; S.mode = "map";
+      S.report = null; S.coord = null; S.local = false;
+      S.ctxOpen = false; S.ctxLayer = null;
+      S.portfolio = [];
+      S.cmp = { mode: "places", display: [], subject: null, slices: [], prevDisplay: [] };
+      S.da = null; S.daNote = null; S.savedNote = null; S.savedAsk = null;
+      /* the header selectors are built once and are the source of truth, so a
+         state reset that does not write them leaves the map on one future under
+         a control naming another */
+      var ids = [["sel-bundle", S.bundle], ["sel-scenario", S.scenario],
+                 ["sel-period", S.period]];
+      ids.forEach(function (pair) {
+        var el = document.getElementById(pair[0]);
+        if (el) el.value = pair[1];
+      });
+      hideTip();
+      renderDefaultsNote();
+      render();
+    });
+  }
+
   function renderCompare() {
     var host = document.getElementById("compare");
-    if (S.cmp.mode === "places" && !S.cmp.members.length) {
+    if (S.cmp.mode === "places" && !S.portfolio.length) {
       host.innerHTML = "";
       return;
     }
@@ -3033,7 +3623,7 @@
     var futures = S.cmp.mode === "futures";
     var slots = futures
       ? S.cmp.slices.map(function (sid) { return { member: S.cmp.subject, sid: sid }; })
-      : S.cmp.members.map(function (member) { return { member: member, sid: sliceId() }; });
+      : cmpDisplayed().map(function (member) { return { member: member, sid: sliceId() }; });
     var facts = slots.map(function (slot) { return cmpFacts(slot.member, slot.sid); });
     var driverCounts = {};
     facts.forEach(function (f) {
@@ -3068,13 +3658,24 @@
         (futures
           ? "Futures mode fixes " + esc(S.cmp.subject.name) + " (" +
             esc(S.cmp.subject.level) + "). Each column keeps its own scenario and period; " +
-            "the page header selectors update the rest of Overview without rewriting this tray."
+            "the page header selectors update the rest of Overview without rewriting this tray. " +
+            (S.portfolio.length > 1
+              ? "Your other " + (S.portfolio.length - 1) + " portfolio member" +
+                (S.portfolio.length === 2 ? " is" : "s are") + " kept and simply not shown " +
+                "while one place is held fixed; Compare places brings the previous columns back."
+              : "")
           : "Places mode fixes " + esc(D.scenario_labels[S.scenario]) + " · " +
             esc(D.period_labels[S.period]) + " while locations vary.") +
         " Members are retained when the Risk Domain changes; every figure is replaced by the active Risk Domain." +
-        " Map outlines appear only for tray members inside the current geography; off-view members " +
-        "remain listed here." +
+        " Map outlines appear only for portfolio members inside the current geography; off-view " +
+        "members remain listed here." +
       "</p></div>" + modeControls + "</div>";
+
+    /* The collection, listed in full, with the four displayed columns chosen
+       explicitly. A portfolio larger than four is an ordinary thing to have and
+       the panel's job is to say which four are on screen -- never to pick them
+       silently, and never to drop the rest to make the table fit. */
+    html += pfListHtml();
 
     var nvalid = facts.map(function (f) { return f.nvalid; })
       .filter(function (n) { return n !== null && n !== undefined; });
@@ -3111,7 +3712,10 @@
     }
 
     if (!slots.length) {
-      html += "<p class='sub'>No futures are in the tray. Add a scenario and period above.</p>" +
+      html += "<p class='sub'>" + (futures
+        ? "No futures are in the tray. Add a scenario and period above."
+        : "Nothing is selected for display. Your portfolio is listed above — tick up to four " +
+          "places to compare them. Nothing has been removed.") + "</p>" +
         "</section>";
       host.innerHTML = html;
     } else {
@@ -3189,11 +3793,11 @@
       host.innerHTML = html;
     }
 
+    wirePfList(host);
     var removeMembers = host.querySelectorAll(".cmp-remove-member");
     for (var i = 0; i < removeMembers.length; i++) {
       removeMembers[i].addEventListener("click", function (ev) {
-        var id = ev.currentTarget.dataset.cmpId;
-        S.cmp.members = S.cmp.members.filter(function (m) { return cmpIdentity(m) !== id; });
+        pfRemove(ev.currentTarget.dataset.cmpId);
         render();
       });
     }
@@ -3201,7 +3805,7 @@
     for (var j = 0; j < futuresButtons.length; j++) {
       futuresButtons[j].addEventListener("click", function (ev) {
         var id = ev.currentTarget.dataset.cmpId, member = null;
-        S.cmp.members.forEach(function (m) { if (cmpIdentity(m) === id) member = m; });
+        S.portfolio.forEach(function (m) { if (cmpIdentity(m) === id) member = m; });
         if (member) enterFutures(member);
       });
     }
@@ -3587,11 +4191,10 @@
 
     document.getElementById("btn-add").addEventListener("click", function () {
       var m = currentMember();
-      if (!m || S.cmp.mode !== "places") return;
-      var at = cmpMemberIndex(m);
-      if (at >= 0) { S.cmp.members.splice(at, 1); }
-      else if (S.cmp.members.length < 4) {
-        S.cmp.members.push(m);
+      if (!m) return;
+      if (pfIndex(m) >= 0) { pfRemove(cmpIdentity(m)); }
+      else {
+        pfAdd(m);
         document.dispatchEvent(new CustomEvent("irt:show-analysis"));
       }
       render();
@@ -3721,27 +4324,23 @@
 
     var add = document.getElementById("btn-add");
     var m = currentMember();
-    var present = m ? cmpMemberIndex(m) >= 0 : false;
+    var present = m ? pfIndex(m) >= 0 : false;
     if (!m) {
       add.disabled = true; add.textContent = "+ Add to Analysis";
       add.title = "Open a State/UT, district or block first.";
-    } else if (S.cmp.mode === "futures") {
-      add.disabled = true; add.textContent = "Place fixed";
-      add.title = "The place is fixed while you are comparing futures.";
-    } else if (!present && S.cmp.members.length >= 4) {
-      add.disabled = true; add.textContent = "Tray full (4)";
-      add.title = "The comparison tray holds at most four places.";
     } else {
+      /* Never disabled by a comparison state. Collecting a place is not a
+         comparison act, and the cap it used to enforce was on columns. */
       add.disabled = false;
       add.textContent = present ? "− Remove from Analysis" : "+ Add to Analysis";
-      add.title = (present ? "Remove " : "Add ") + m.name +
-        (present ? " from" : " to") + " your analysis — the shortlist the comparison uses";
+      add.title = (present ? "Remove " + m.name + " from" : "Add " + m.name + " to") +
+        " your portfolio — the collection the comparison is built over";
     }
 
     var tab = document.getElementById("tab-analysis");
     if (tab) {
-      tab.textContent = S.cmp.members.length
-        ? "My Portfolio (" + S.cmp.members.length + ")" : "My Portfolio";
+      tab.textContent = S.portfolio.length
+        ? "My Portfolio (" + S.portfolio.length + ")" : "My Portfolio";
     }
   }
 
@@ -3769,6 +4368,8 @@
     renderInspection();
     renderContext();
     renderCompare();
+    renderSaved();
+    renderLifetimes();
     renderGeoPanel();
     syncNavButtons();
   }
@@ -3903,7 +4504,10 @@
       target: "A coordinate resolves to the block that contains it and is then an ordinary unit: same score, metrics, context, ranking position and doorways." },
     { n: 11, what: "Two doorways at every named unit",
       today: "There is no report, and no explicit route from a screening result into a deeper analysis.",
-      target: "Detailed Analysis and Download report are offered wherever a unit is named. Detailed Analysis carries roster keys rather than display names, opens already showing the score the Overview just gave, refuses the signals it has no surface for, and on the way back returns scenario, period and geography while leaving metric and statistic behind \u2014 each with its reason stated on screen." }
+      target: "Detailed Analysis and Download report are offered wherever a unit is named. Detailed Analysis carries roster keys rather than display names, opens already showing the score the Overview just gave, refuses the signals it has no surface for, and on the way back returns scenario, period and geography while leaving metric and statistic behind \u2014 each with its reason stated on screen." },
+    { n: 12, what: "A saved analysis is a question, not an answer",
+      today: "Saved Analysis holds named records with Rename and Delete, and the portfolio is the same four-place object the comparison uses — so a comparison control can empty a collection.",
+      target: "The portfolio and the comparison are separate: the collection has no cap, the comparison shows four columns chosen explicitly, and no mode switch removes a member. A saved analysis stores places, metrics, futures, statistic and layout but no scores; opening it resolves against the published release, states that release, says what changed since, and never prints a score measured on the old ruler. Renamed places restore; split, retired and ambiguous ones stay listed with their reason rather than being substituted or dropped." }
   ];
 
   var byN = {};

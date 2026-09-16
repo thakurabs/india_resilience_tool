@@ -943,21 +943,42 @@ A tray that allowed place and future to vary at once would produce confounded co
 `Warangal at SSP2-4.5 early century` beside `Kozhikode at SSP5-8.5 end century` differ in two ways
 and support no inference. The mode switch is what prevents that, and it is not optional.
 
-Tray state is:
+**The portfolio and the comparison are two different things, and they are stored separately.**
+The portfolio is the set of places the user has collected. The comparison configuration is a
+choice of what to put side by side, made over that set. Conflating them is what makes a comparison
+control destroy collected work: the user's shortlist is the expensive thing to rebuild, and a mode
+switch is a cheap and frequently reversed act.
 
 ```text
-mode          places | futures
-members       up to 4 slots
-subject       the fixed place, in futures mode only
+portfolio                    the shared collection; one per session
+  members                    stable identifier, display name, administrative level, and for a
+                             coordinate member the entered coordinates and the user's site name
+  no display cap             the portfolio is not limited to four
+
+comparison configuration     a selection over the portfolio; does not own membership
+  mode                       places | futures
+  displayed                  up to 4 members, in places mode
+  subject                    the one member held fixed, in futures mode only
+  slices                     up to 4 scenario-and-period pairs, in futures mode only
 ```
 
-Four is the cap in both modes. Beyond four, side-by-side reading fails and the question has become
-a ranking, which the Overview already answers.
+Four is the **display** cap, not the portfolio cap. Beyond four columns, side-by-side reading
+fails and the question has become a ranking, which the Overview already answers. A portfolio
+larger than four is normal and is listed in full, with the displayed four chosen explicitly; the
+Overview must never silently pick them, and must never drop the rest to fit.
 
-Entering and leaving futures mode is reversible. From places mode the user names one member as the
-subject; the tray seeds with the current scenario across all three periods and the other members
-are released. Returning to places mode leaves the subject as the sole member. Neither transition
-leaves the Overview or extends the breadcrumb.
+Entering and leaving futures mode is reversible and **non-destructive**. From places mode the user
+names one member as the subject; the tray seeds with the current scenario across all three periods.
+Every other portfolio member is retained, and is simply not displayed while one place is held
+fixed. Returning to places mode restores the previously displayed selection, not the subject
+alone. Neither transition leaves the Overview, extends the breadcrumb, or removes a member.
+
+Detailed Analysis reads the same portfolio and keeps its own, broader comparison configuration —
+several metrics, several futures and several places at once. Returning to the Overview narrows the
+*display* to one axis and at most four columns; it does not narrow the portfolio, and it does not
+discard the Detailed Analysis configuration, which is restored on the next crossing. The
+Overview's one-axis rule governs what may be shown side by side on the screening surface, never
+what the user is allowed to have collected.
 
 Adding a member is one control, `Add to Analysis`, wherever a unit is already named — the State/UT
 headline, the district and block panels, a ranked row, the Ranking Table, and geography search. No
@@ -1022,6 +1043,88 @@ place for that prohibition to be breached.
 
 The tray is the comparison context carried into Detailed Analysis where a route supports it, and
 dropped cleanly where none does.
+
+### Saved analyses
+
+A saved analysis stores a **question, not an answer**. The question is durable: it is a set of
+names and choices, and it stays meaningful across a rebuild. The answer is not: every score was
+measured against a ruler, a roster and an artifact release, and each of those can be superseded.
+Storing the answer and redisplaying it is how a stale number acquires the authority of a current
+one.
+
+The stored definition must be complete enough to reopen the analysis exactly as configured:
+
+```text
+analysis_id              stable, assigned on save
+name                     the user's own, renameable
+saved_at
+
+geography                per member: stable administrative identifier, display name as saved,
+                         administrative level
+coordinate members       the entered latitude and longitude, and the user's site name,
+                         in addition to the resolved block identifier
+bundle_id                the Risk Domain
+metric / rule ids        every constituent metric or rule signal the user had selected
+slices                   every scenario-and-period pair the user had selected
+statistic                where the surface permits a choice of statistic
+comparison config        mode, displayed members, subject, slices, column order
+
+release identity at save artifact release / build id, roster version, ruler id, scoring-method id
+```
+
+The metric and rule identifiers are not optional. An advanced comparison is defined largely by the
+metrics the user chose; a definition that stores only places would silently discard that work on
+reopening, while the interface claimed the capability was retained.
+
+**Opening a saved analysis retrieves its results from the current compatible published artifact
+release.** The surface states the release and scoring-method identity it resolved against, and
+explains what has materially changed since the analysis was saved. The release identity recorded
+at save time is what makes that explanation possible: a ruler identifier alone is not sufficient,
+because data can be revised under an unchanged ruler, and places, metrics, supported combinations
+and administrative boundaries can all change while the scale stays fixed.
+
+Opening is an explicit choice between **replacing** the current working set and **merging** into
+it. Neither is a default, because both destroy something: replacing discards an unsaved working
+portfolio, merging changes the analysis the user just asked to see.
+
+**Roster change is resolved per member, never in bulk.**
+
+```text
+renamed, same stable identifier    restores normally, under its current name; the saved display
+                                   name may be shown as the name it was saved under
+split, merged, retired identifier  unresolved: the member stays listed with the reason, and the
+                                   surface offers an explicit resolution
+ambiguous legacy name              unresolved for the same reason; a name is never resolved to a
+                                   geography on the interface's own judgement
+```
+
+A partly resolvable analysis opens its valid remainder, with every unresolved member visible and
+labelled. Geography is never silently substituted, and unresolved members are never quietly
+dropped — an analysis that opens with four of six places and no notice is indistinguishable from
+one that was saved with four.
+
+### State lifetimes
+
+Four lifetimes, and the trigger for each:
+
+```text
+hover and tooltip              ends when the interaction ends
+pinned bin filter              until explicitly cleared, or invalidated by a declared
+                               geography, view, Risk Domain, scenario, period or analysis
+                               transition
+working context and portfolio  survives navigation and refresh; cleared only by the declared
+                               Reset and logout actions
+named analyses                 persist until explicitly deleted
+```
+
+A pinned bin is not a gesture. It is a stated filter and it survives ordinary interaction; what
+ends it is either the user clearing it or one of the transitions named above, and those
+transitions are enumerated rather than left to implementation.
+
+`Reset` returns the Overview to **India on the public defaults** — the same state a first arrival
+produces — and clears the working context and the portfolio. It is not an empty application, and
+it never touches a named analysis. `Clear Portfolio` empties the portfolio only, leaving geography,
+selectors and filters exactly as they are; it is not a reset with a narrower name.
 
 ### Overview exports
 
@@ -1234,6 +1337,23 @@ hazard scores on the frozen `0-100` scale, with State/UT polygons unfilled. Stat
 blocks on that same scale, with no inherited parent hue and no change of colourbar. There is one
 score-derived fill per view and one colourbar for both.
 
+### Saved analyses and prior results
+
+Saved analyses are configuration to be migrated, not results to be re-rendered. The migration
+requirement is one sentence: **legacy results must never be presented as current-release
+results.** Reopening a migrated analysis resolves it against the current compatible release and
+shows an explicit migration notice.
+
+That requirement does not license destroying anything. Legacy records may be retained internally,
+including any stored results, without building a user-facing archive; their reproducibility value
+is real, and whether it warrants an interface is deferred rather than answered here. What is
+prohibited is a legacy score entering a current map, colourbar, band, rank, comparison column or
+export.
+
+Each migrated definition carries the artifact release, roster version, ruler and scoring-method
+identities it was saved against. Without them a change notice can only say that something changed;
+with them it can say what.
+
 Production work must also implement the canonical route registries, selector/filter/geography
 state transitions, quality states, stable administrative-ID joins, immutable roster/build identity,
 progressive geometry loading, and accessibility requirements defined above. Block geometry and
@@ -1281,9 +1401,13 @@ At minimum, synthetic and artifact-contract tests must prove:
 
 ### Comparison
 
-- the portfolio holds at most four members, and place and future never vary at once;
-- entering futures mode fixes one subject and releases other members; leaving it retains the
-  subject as the sole member;
+- the comparison displays at most four columns, and place and future never vary at once; the
+  portfolio itself carries no such cap and a portfolio larger than four is listed in full;
+- entering futures mode fixes one subject and displays it alone, retaining every other portfolio
+  member; leaving futures mode restores the previously displayed selection rather than the subject
+  alone, and no mode transition removes a member;
+- returning from a Detailed Analysis comparison narrows the display without narrowing the
+  portfolio or discarding the Detailed Analysis configuration;
 - scenario or period changes recompute every places-mode slot on the new slice;
 - a Risk Domain change retains membership and replaces every figure, with no previous Risk
   Domain's value surviving in the panel;
@@ -1294,7 +1418,17 @@ At minimum, synthetic and artifact-contract tests must prove:
 - compare emphasis never overrides a selection, and never renders as an administrative boundary
   weight; and
 - portfolio membership survives geography and view changes, and is not cleared by the
-  transient-state rules that clear bin filters and hover.
+  transient-state rules that clear bin filters and hover;
+- a saved analysis stores geography identifiers, display names, `bundle_id`, metric and rule
+  identifiers, slices, statistic and comparison configuration, and reopening restores every one of
+  them;
+- opening a saved analysis resolves against the current compatible release, states that release
+  and scoring-method identity, and requires an explicit replace-or-merge choice;
+- a saved member whose identifier was renamed restores normally, while a split, merged, retired or
+  ambiguous member stays listed as unresolved with its reason and is never substituted or dropped;
+- no legacy result is rendered in a current map, band, rank, comparison column or export; and
+- `Reset` returns to India on public defaults without touching a named analysis, and
+  `Clear Portfolio` leaves geography, selectors and filters intact.
 
 ### Maps, routing, and data states
 
