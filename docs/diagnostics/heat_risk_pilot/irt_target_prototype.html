@@ -101,6 +101,8 @@
                color: var(--ink-2); font-size: 15px; line-height: 1; padding: 0 2px; }
   .filters.shut { padding-bottom: 12px; }
   .filters .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
+  .filters .primary-filters { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 0 12px; }
+  .primary-filters .fld { min-width: 0; }
   .filters .defaults-note { margin: 2px 0 6px; font-size: 11.5px; color: var(--ink-2);
                             line-height: 1.45; }
   .filters .defaults-note b { color: var(--head); font-weight: 650; }
@@ -629,25 +631,27 @@
     <section class="filters">
       <h3>Select Resilience Filters
         <button type="button" class="fcollapse" id="fcollapse" aria-expanded="true"
-                aria-controls="fgrid" title="Collapse filters">&#9650;</button></h3>
-      <div class="fgrid" id="fgrid">
+                aria-controls="fgrid" title="Hide secondary filters">Collapse</button></h3>
+      <div class="fgrid primary-filters" id="primary-filters">
         <div class="fld">
           <label for="sel-bundle">Risk Domain <i class="info" title="The hazard domain the map, the ranking and every score on screen are computed from.">i</i></label>
           <select id="sel-bundle"></select>
         </div>
-        <div class="fld" data-delta="3">
-          <label for="f-metric">Metric <i class="info" title="The screening surface always shows the composite hazard score. Individual metrics are reached through the metric list, which opens Detailed Analysis on that metric.">i</i></label>
-          <select id="f-metric" disabled>
-            <option>Composite hazard score</option>
-          </select>
-        </div>
         <div class="fld">
-          <label for="sel-scenario">Scenario <i class="info" title="The emissions pathway. Changing it recomputes every figure on screen; your shortlist survives the change.">i</i></label>
+          <label for="sel-scenario">Scenario <i class="info" title="The emissions pathway. Updates Overview and places comparison. Futures comparison keeps its own scenario and period per column; your portfolio survives the change.">i</i></label>
           <select id="sel-scenario"></select>
         </div>
         <div class="fld">
           <label for="sel-period">Period <i class="info" title="The time period. The ruler is fitted once across all scenarios and periods, so they are comparable to each other.">i</i></label>
           <select id="sel-period"></select>
+        </div>
+      </div>
+      <div class="fgrid" id="fgrid">
+        <div class="fld" data-delta="3">
+          <label for="f-metric">Metric <i class="info" title="The screening surface always shows the composite hazard score. Individual metrics are reached through the metric list, which opens Detailed Analysis on that metric.">i</i></label>
+          <select id="f-metric" disabled>
+            <option>Composite hazard score</option>
+          </select>
         </div>
         <div class="fld" data-delta="4">
           <label for="f-stat">Statistic <i class="info" title="Averaged across the districts it contains, weighted by their area — fixed by the scale contract. Other statistics belong in Detailed Analysis, not on the screening surface.">i</i></label>
@@ -4755,15 +4759,14 @@
     if (!ev.target.checked) sheet.hidden = true;
   });
 
-  /* ---- the filter panel collapses over the map, as IRT's does ---- */
+  /* ---- collapse secondary presets; primary selectors remain editable ---- */
   var fc = document.getElementById("fcollapse");
   fc.addEventListener("click", function () {
     var open = fc.getAttribute("aria-expanded") === "true";
     fc.setAttribute("aria-expanded", String(!open));
-    fc.innerHTML = open ? "&#9660;" : "&#9650;";
-    fc.title = open ? "Expand filters" : "Collapse filters";
+    fc.textContent = open ? "Expand" : "Collapse";
+    fc.title = open ? "Show secondary filters" : "Hide secondary filters";
     document.getElementById("fgrid").hidden = open;
-    document.getElementById("defaults-note").hidden = open;
     document.querySelector(".filters").classList.toggle("shut", open);
   });
 

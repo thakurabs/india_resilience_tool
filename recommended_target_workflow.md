@@ -824,6 +824,20 @@ Detailed Analysis. `Statistic` is fixed at `Mean` and `Map Mode` at `Absolute va
 preset rather than removed, so the vendor can see they did not silently disappear. `Local
 contrast` is not one of these selectors; it sits with the colourbar, per section 1.
 
+The `Select Resilience Filters` panel retains the same editable Risk Domain, Scenario and
+Period dropdowns in both expanded and collapsed states. The collapsed panel is a compact strip
+with labelled controls and an `Expand` button; expanding reveals secondary presets (Composite
+hazard score, Mean and Absolute value). Collapsing or expanding changes presentation only and
+never changes a selection. Default-value identification remains visible in either state.
+Controls wrap onto additional rows when space is limited rather than disappearing; full scenario
+names and period ranges remain accessible through the dropdowns without expanding the panel.
+
+Changing a primary selector immediately updates Overview while preserving supported geography
+and portfolio membership. In places comparison, the header Scenario and Period govern every
+displayed place. In futures comparison, each column retains its own scenario–period pair; the
+comparison explains that header Scenario and Period update the main Overview result without
+rewriting its columns. Risk Domain continues to govern both modes.
+
 Administrative level should appear contextually through the geographic drill-down:
 
 ```text
