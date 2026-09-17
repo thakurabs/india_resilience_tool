@@ -38,6 +38,11 @@ analysis for users who want to inspect metrics, scenarios, trends, methods, or o
 controls. They should behave as two levels of one continuous workflow, not as independent
 products with duplicated state.
 
+They are one screen. Detailed Analysis is a mode of that screen, switched from the
+`Select Resilience Filters` bar, not a separate front placed before IRT. The map, the
+`Spatial Panel` and the right rail stay where they are; the bar grows from the Overview's three
+selectors to the six IRT ships today, and the right rail keeps its cards.
+
 In user-facing language, the preferred labels are:
 
 - `Overview`, rather than `Glance View`; and
@@ -127,7 +132,8 @@ through `Coordinate Analysis`. A coordinate resolves to the block containing it,
 geographic basis is stated on screen. It rejoins the spine at step 5 — the user arrives holding a
 place and needs to understand it, not to find it.
 
-**Detailed Analysis.** For a user who wants to interrogate the result. One prominent action per
+**Detailed Analysis.** For a user who wants to interrogate the result. A mode of the same screen,
+entered from the bar's `Overview | Detailed Analysis` toggle or from the one prominent action per
 result, opening on the composite metric for the active Risk Domain with geography, level,
 scenario, period and the selected metric preserved. `Back to Overview` restores the Overview
 context, including the District and Block selections. Sections 6, 7 and 8 specify this.
@@ -537,8 +543,8 @@ belongs against the legend that declares their meaning, where it cannot be hidde
 it governs stays on screen. It was briefly folded into IRT's `Map Mode` selector and moved back for
 exactly that reason.
 
-`Map Mode` itself stays as IRT ships it — auto-filled to `Absolute value` and disabled on the
-composite path — because the frozen ruler leaves it nothing to switch to. Its other as-built
+`Map Mode` is absent from the bar in Overview mode. In Detailed Analysis mode it stays as IRT
+ships it — auto-filled to `Absolute value` and disabled on the composite path — because the frozen ruler leaves it nothing to switch to. Its other as-built
 option, a change-from-baseline view, is **not** adopted here: `baseline` and `delta_vs_baseline`
 are null on the composite path in the deployed API, no historical composite slice is published, and
 a signed change needs its own diverging ruler and legend rather than the `0-100` hazard ramp. It is
@@ -866,17 +872,36 @@ The Overview should expose only three primary analysis selectors:
 3. Period
 
 Constituent metric, statistic, map mode, model controls, and detailed chart options belong in
-Detailed Analysis. `Statistic` is fixed at `Mean` and `Map Mode` at `Absolute value`, both shown
-preset rather than removed, so the vendor can see they did not silently disappear. `Local
-contrast` is not one of these selectors; it sits with the colourbar, per section 1.
+Detailed Analysis. In Overview mode the bar does not show `Metric`, `Statistic` or `Map Mode`:
+they are absent, not greyed and not deleted, and they return editable when the bar is switched to
+Detailed Analysis, exactly as IRT ships them today. `Local contrast` is not one of these
+selectors; it sits with the colourbar, per section 1.
 
-The `Select Resilience Filters` panel retains the same editable Risk Domain, Scenario and
-Period dropdowns in both expanded and collapsed states. The collapsed panel is a compact strip
-with labelled controls and an `Expand` button; expanding reveals secondary presets (Composite
-hazard score, Mean and Absolute value). Collapsing or expanding changes presentation only and
-never changes a selection. Default-value identification remains visible in either state.
-Controls wrap onto additional rows when space is limited rather than disappearing; full scenario
-names and period ranges remain accessible through the dropdowns without expanding the panel.
+#### One screen, two modes of the filter bar
+
+The layout is IRT's own, with three changes that are all presentation:
+
+- **The map is the floor of the screen.** The `Spatial Panel`, the `Select Resilience Filters`
+  bar and the right rail sit on top of it. When a panel grows or shrinks, more or less map is
+  covered; the map itself never moves, resizes or repaints because of a panel.
+- **The `Spatial Panel` is a thin strip snapped to the left edge, collapsed by default.** Expanding
+  it reveals the administrative picker, `Coordinate Analysis` and the view selector, over the map.
+  Collapsing or expanding changes nothing about the selection.
+- **The `Select Resilience Filters` bar spans the width the strip leaves.** It has no collapse or
+  expand of its own. When the `Spatial Panel` expands, the bar gives way by wrapping its selectors
+  onto a second row.
+
+The bar has two modes, switched by an `Overview | Detailed Analysis` toggle inside it. In
+Overview mode it holds `Risk Domain`, `Scenario` and `Period` only. In Detailed Analysis mode it
+holds IRT's six selectors, `Risk Domain`, `Metric`, `Statistic`, `Scenario`, `Period` and
+`Map Mode`, behaving as IRT ships them today. The toggle carries everything: geography, scenario,
+period and the portfolio. Switching back to Overview restores the Overview state that was left,
+as section 6 specifies; refinements made in Detailed Analysis do not transfer through the switch.
+Default-value identification remains visible in both modes; full scenario names and period ranges
+remain accessible through the dropdowns.
+
+Detailed Analysis needs a place, as IRT's own API does: at the national view with nothing
+inspected, the toggle is unavailable and says so.
 
 Changing a primary selector immediately updates Overview while preserving supported geography
 and portfolio membership. In places comparison, the header Scenario and Period govern every
@@ -1701,7 +1726,7 @@ control the vendor already ships costs them a rename and costs the user a relear
 | The full ranked table | `Ranking Table` | View all N |
 | The statistic control | `Mean` | Area-weighted mean |
 | The view-extent toggle | `Local contrast`, a checkbox at the colourbar | — |
-| The map colour selector | `Map Mode`, preset to `Absolute value` | — |
+| The map colour selector | `Map Mode`, Detailed Analysis mode only, preset to `Absolute value` | — |
 | The panels and filter groups | `Spatial Panel`, `Administrative Analysis`, `Coordinate Analysis`, `Select your views`, `Select Resilience Filters` | — |
 
 `Add to Analysis` adding to `My Portfolio` is a mismatch, and it is IRT's own. Inheriting it beats

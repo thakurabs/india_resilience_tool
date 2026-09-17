@@ -48,17 +48,26 @@
                 background: none; border: 0; cursor: pointer; text-decoration: underline; }
 
   /* ---------- three-zone shell ---------- */
-  .shell { display: flex; height: calc(100vh - var(--topbar)); }
-  aside.rail { background: var(--ground); flex: none; overflow: auto;
-               padding: 0 12px 24px; }
-  aside.rail.left { width: 352px; border-right: 1px solid var(--rule); }
-  aside.rail.right { width: 462px; border-left: 1px solid var(--rule); padding-top: 0; }
-  @media (max-width: 1500px) { aside.rail.right { width: 410px; } aside.rail.left { width: 320px; } }
+  .shell { position: relative; height: calc(100vh - var(--topbar)); --leftw: 44px; --rightw: 462px; }
+  body.spatial-open .shell { --leftw: 352px; }
+  aside.rail { background: var(--ground); position: absolute; top: 0; bottom: 0; z-index: 14;
+               overflow: auto; padding: 0 12px 24px; box-sizing: border-box; }
+  aside.rail.left { left: 0; width: var(--leftw); border-right: 1px solid var(--rule); }
+  body:not(.spatial-open) aside.rail.left { padding: 0; overflow: hidden; }
+  body:not(.spatial-open) aside.rail.left > :not(.rail-head) { display: none; }
+  body:not(.spatial-open) aside.rail.left .rail-head { flex-direction: column; padding: 10px 0; gap: 12px; }
+  body:not(.spatial-open) aside.rail.left .rail-title { writing-mode: vertical-rl; transform: rotate(180deg);
+                                                        font-size: 13px; }
+  .sp-toggle { width: 28px; height: 28px; border: 1px solid #c9d8e6; border-radius: 6px; background: #fff;
+               cursor: pointer; font: inherit; font-size: 16px; line-height: 1; color: var(--accent); flex: none; }
+  body.spatial-open .sp-toggle { margin-left: auto; }
+  aside.rail.right { right: 0; width: var(--rightw); border-left: 1px solid var(--rule); padding-top: 0; }
+  @media (max-width: 1500px) { .shell { --rightw: 410px; } body.spatial-open .shell { --leftw: 320px; } }
   .rail-head { display: flex; align-items: center; gap: 8px; padding: 14px 4px 10px;
                font-size: 16px; font-weight: 700; color: var(--head); position: sticky;
                top: 0; background: var(--ground); z-index: 3; }
 
-  main.stage { position: relative; flex: 1 1 auto; min-width: 0; background: #e6edf2; }
+  main.stage { position: absolute; inset: 0; background: #e6edf2; }
 
   /* ---------- cards inside the rails ---------- */
   .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px;
@@ -92,14 +101,18 @@
   /* ---------- filter panel, floating over the map ---------- */
   /* The filter panel floats above the ranked table too: switching view must
      never put the bundle, scenario and period out of reach. */
-  .filters { position: absolute; top: 12px; left: 16px; z-index: 12; width: min(700px, calc(100% - 32px));
+  .filters { position: absolute; top: 12px; left: calc(var(--leftw) + 16px); right: calc(var(--rightw) + 16px); z-index: 12;
              background: rgba(240,246,251,.97); border: 1px solid #cadbeb; border-radius: 8px;
              padding: 12px 16px 6px; box-shadow: 0 2px 10px rgba(16,40,61,.10); }
   .filters > h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; color: var(--head);
                   display: flex; align-items: center; }
-  .fcollapse { margin-left: auto; background: none; border: 0; cursor: pointer;
-               color: var(--ink-2); font-size: 15px; line-height: 1; padding: 0 2px; }
-  .filters.shut { padding-bottom: 12px; }
+  .modeswitch { margin-left: auto; display: inline-flex; border: 1px solid #c9d8e6; border-radius: 6px;
+                overflow: hidden; }
+  .modeswitch button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 11px; border: 0;
+                       background: #fff; color: var(--accent); cursor: pointer; }
+  .modeswitch button[aria-pressed="true"] { background: var(--accent); color: #fff; cursor: default; }
+  .modeswitch button:disabled { color: var(--ink-3); cursor: not-allowed; }
+  body:not(.da-on) .filters .da-only { display: none; }
   .filters .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
   .filters .primary-filters { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 0 12px; }
   .primary-filters .fld { min-width: 0; }
@@ -159,7 +172,9 @@
      IRT's MapLibre canvas already pans and zooms. The SVG stand-in must not be
      shown to the vendor having LOST a capability their product already has, so
      this is parity, not a departure -- and therefore carries no change marker. */
-  .mapnav { position: absolute; right: 16px; top: 12px; z-index: 7;
+  /* mid-height on the map's free edge: the filter bar owns the top, the
+     geography card owns the bottom, and neither may cover the zoom */
+  .mapnav { position: absolute; right: calc(var(--rightw) + 16px); top: 50%; transform: translateY(-50%); z-index: 7;
             display: flex; flex-direction: column; gap: 6px; }
   .mapnav button { width: 32px; height: 32px; display: flex; align-items: center;
                    justify-content: center; padding: 0; cursor: pointer;
@@ -214,7 +229,8 @@
   .ctx-note { color: var(--warn-ink); }
 
   /* ---------- the ranked table renders as a panel over the map, as IRT's does ---------- */
-  .tableview { position: absolute; z-index: 9; left: 16px; right: 16px; top: 12px; bottom: 16px;
+  .tableview { position: absolute; z-index: 9; left: calc(var(--leftw) + 16px); right: calc(var(--rightw) + 16px);
+               top: 12px; bottom: 16px;
                overflow: auto; margin: 0; box-shadow: 0 4px 22px rgba(16,40,61,.18); }
   .tableview h2 { margin: 0 0 2px; }
   .tv-scroll { margin-top: 10px; }
@@ -482,7 +498,6 @@
          box-shadow: 0 6px 20px rgba(0,0,0,.24); opacity: 0; transition: opacity .1s; }
   #tip.anchored { pointer-events: auto; border: 2px solid #8fc4ff; }
   #tip .popup-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  #tip .popup-parent { border-top: 1px solid #637080; padding-top: 7px; margin-top: 7px; }
   #tip b { display: block; font-size: 13px; margin-bottom: 3px; }
   #tip .t-row { color: #c3ced9; }
   #tip .t-row em { color: #fff; font-style: normal; font-weight: 600; }
@@ -498,9 +513,9 @@
   [data-delta] { position: relative; }
   /* ...but a change marker must never re-position what it marks: these two
      float over the map and out-rank the generic rule above. */
-  main.stage > .cbar { position: absolute; left: 16px; bottom: 16px; top: auto;
+  main.stage > .cbar { position: absolute; left: calc(var(--leftw) + 16px); bottom: 16px; top: auto;
                        width: min(420px, 55%); }
-  .mapwrap > .map-ctxbar { position: absolute; right: 16px; bottom: 16px; top: auto;
+  .mapwrap > .map-ctxbar { position: absolute; right: calc(var(--rightw) + 16px); bottom: 16px; top: auto;
                            width: min(300px, 40%); }
   body.deltas-on [data-delta] { outline: 1px dashed var(--delta-line); outline-offset: 3px; }
   .dpin { position: absolute; top: -9px; left: -9px; z-index: 12; min-width: 19px; height: 19px;
@@ -559,12 +574,14 @@
 
   <!-- ============ LEFT: Spatial Panel ============ -->
   <aside class="rail left">
-    <div class="rail-head">Spatial Panel</div>
+    <div class="rail-head"><span class="rail-title">Spatial Panel</span>
+      <button type="button" class="sp-toggle" id="spatial-toggle" aria-expanded="false"
+              title="Expand the Spatial Panel" aria-label="Expand the Spatial Panel">&#8250;</button></div>
 
     <div class="card panel-card" data-delta="2">
       <h3>Administrative Analysis</h3>
       <p class="hint" id="geo-hint">India is open. Pick a State/UT to go down a level &mdash;
-        Use the map to inspect a place.</p>
+        or click the map and press Explore.</p>
 
       <div class="fld">
         <label for="geo-search">Search</label>
@@ -610,11 +627,12 @@
     <details class="protonote">
       <summary>Two departures in this prototype</summary>
       <p><b>1. Only Telangana opens below the national view.</b> Its 588 blocks are scored on the
-        frozen ruler and painted for real. Districts across India can be hovered, inspected and added to Analysis.
+        frozen ruler and painted for real. Every State/UT can be hovered for its mean and pinned for its profile.
         Only Telangana offers Explore navigation, because no block outside
         Telangana has been scored. One worked State/UT demonstrates the workflow.</p>
-      <p><b>2. Detailed Analysis is a stub &mdash; but the whole seam is not.</b> The
-        destination is undesigned. What the doorway carries, the answer the destination must
+      <p><b>2. Detailed Analysis is a mode of this screen, and its destination is still a stub.</b>
+        The bar switches to IRT's six selectors; the map, the panels and the right rail stay. What
+        that mode renders beyond the composite is undesigned. What the doorway carries, the answer the destination must
         reproduce on arrival, the signals that have nowhere to go, and what a refinement made
         inside does on the way back are all real and all demonstrated. One metric in every
         list is marked as a demonstration of a signal with no destination. Saved Analysis is real:
@@ -634,8 +652,10 @@
 
     <section class="filters">
       <h3>Select Resilience Filters
-        <button type="button" class="fcollapse" id="fcollapse" aria-expanded="true"
-                aria-controls="fgrid" title="Hide secondary filters">Collapse</button></h3>
+        <div class="modeswitch" role="group" aria-label="Analysis mode">
+          <button type="button" id="mode-overview" aria-pressed="true">Overview</button>
+          <button type="button" id="mode-detailed" aria-pressed="false">Detailed Analysis</button>
+        </div></h3>
       <div class="fgrid primary-filters" id="primary-filters">
         <div class="fld">
           <label for="sel-bundle">Risk Domain <i class="info" title="The hazard domain the map, the ranking and every score on screen are computed from.">i</i></label>
@@ -649,22 +669,21 @@
           <label for="sel-period">Period <i class="info" title="The time period. The ruler is fitted once across all scenarios and periods, so they are comparable to each other.">i</i></label>
           <select id="sel-period"></select>
         </div>
-      </div>
-      <div class="fgrid" id="fgrid">
-        <div class="fld" data-delta="3">
-          <label for="f-metric">Metric <i class="info" title="The screening surface always shows the composite hazard score. Individual metrics are reached through the metric list, which opens Detailed Analysis on that metric.">i</i></label>
-          <select id="f-metric" disabled>
-            <option>Composite hazard score</option>
+        <div class="fld da-only" data-delta="3">
+          <label for="f-metric">Metric <i class="info" title="Absent in Overview mode: screening always paints the composite hazard score. In Detailed Analysis mode, pick a constituent metric here, as IRT does today.">i</i></label>
+          <select id="f-metric">
+            <option value="">Composite hazard score</option>
           </select>
         </div>
-        <div class="fld" data-delta="4">
-          <label for="f-stat">Statistic <i class="info" title="Averaged across the districts it contains, weighted by their area — fixed by the scale contract. Other statistics belong in Detailed Analysis, not on the screening surface.">i</i></label>
-          <select id="f-stat" disabled>
-            <option>Mean</option>
+        <div class="fld da-only" data-delta="4">
+          <label for="f-stat">Statistic <i class="info" title="Absent in Overview mode: the screening surface is fixed to the area-weighted mean by the scale contract. In Detailed Analysis mode, Mean or Median as IRT offers today; Median is refused on the composite, which is published already aggregated.">i</i></label>
+          <select id="f-stat">
+            <option value="mean">Mean</option>
+            <option value="median">Median</option>
           </select>
         </div>
-        <div class="fld" data-delta="5">
-          <label for="f-mapmode">Map Mode <i class="info" title="The map always paints the absolute score on the frozen national ruler. There is no per-selection rescale to switch to.">i</i></label>
+        <div class="fld da-only" data-delta="5">
+          <label for="f-mapmode">Map Mode <i class="info" title="Absent in Overview mode. In Detailed Analysis mode it stays as IRT ships it: Absolute value, disabled on the composite path, because the frozen ruler leaves nothing to switch to.">i</i></label>
           <select id="f-mapmode" disabled>
             <option>Absolute value</option>
           </select>
@@ -1189,7 +1208,8 @@
     return S.view === "india" ? "State/UT" : S.view === "state" ? "District" : "Block";
   }
 
-  /* Ranking actions navigate; map clicks pin a popup without changing scope. */
+  /* Ranking actions navigate; a map click pins the tooltip and opens the
+     profile, and navigation is the Explore action inside that pinned tooltip. */
   function openRankedUnit(key) {
     if (S.view === "india") { selectState(key); return; }
     if (S.view === "state") { openDistrict(key); return; }
@@ -1941,40 +1961,54 @@
     tip.style.top = Math.max(8, Math.min(screen.y + 16, window.innerHeight - r.height - 8)) + "px";
   }
 
+  /* A click pins the hover tooltip where it was, opens that unit's profile in
+     the right rail, and offers the two ways onward: Explore (the camera moves
+     and the cohort changes) and Detailed Analysis. The click itself moves
+     nothing: camera, breadcrumb, histogram and portfolio stay as they were. */
   function anchorPopup(level, key, ev) {
+    if (!makeCmpMember(level, key)) return;
     closePopup();
     var point = svg.createSVGPoint(); point.x = ev.clientX; point.y = ev.clientY;
     point = point.matrixTransform(svg.getScreenCTM().inverse());
     popup = { level: level, key: key, x: point.x, y: point.y, scope: popupScope() };
-    renderPopup();
-    document.getElementById("popup-inspect").focus({ preventScroll: true });
+    S.inspection = { level: level, key: key, scope: [S.view, S.state, S.district].join("|") };
+    S.block = level === "Block" ? key : null;
+    S.da = null; S.daNote = null; S.report = null;
+    render();
+    document.getElementById("tab-profile").click();
+    document.querySelector(".rail.right").scrollTop = 0;
+    var first = document.getElementById("popup-explore") || document.getElementById("popup-da");
+    if (first) first.focus({ preventScroll: true });
   }
 
   function renderPopup() {
     if (!popup) return;
     if (popup.scope !== popupScope() || S.da) { closePopup(); return; }
     var member = makeCmpMember(popup.level, popup.key);
-    var isBlock = popup.level === "Block";
-    var unit = isBlock ? blockByKey[popup.key] : byKey[popup.key];
-    var parent = makeCmpMember(isBlock ? "District" : "State/UT", isBlock ? unit.dk : unit.s);
-    var facts = daArrival(member.level, member.key), parentFacts = daArrival(parent.level, parent.key);
-    function scoreText(f) { return f && Number.isFinite(f.score) ? fmt(f.score) + " · " + band(f.score) : "No data"; }
+    if (!member) { closePopup(); return; }
+    var isBlock = popup.level === "Block", isState = popup.level === "State/UT";
+    var stateName = isState ? popup.key : (isBlock ? blockByKey[popup.key] : byKey[popup.key]).s;
+    var canExplore = !isBlock && isLive(stateName);
     tip.classList.add("anchored"); tip.setAttribute("role", "dialog");
-    tip.setAttribute("aria-label", "Inspect place or parent geography");
+    tip.setAttribute("aria-label", member.name + " pinned: Explore or open Detailed Analysis");
     tip.setAttribute("aria-hidden", "false"); tip.style.opacity = "1";
-    tip.innerHTML = "<b>" + esc(member.name) + " · " + esc(member.level) + "</b>" +
-      "<div class='t-row'>Hazard score <em>" + esc(scoreText(facts)) + "</em></div>" +
-      "<div class='popup-parent'><b>" + esc(parent.name) + " · " + esc(parent.level) + "</b>" +
-      "<div class='t-row'>" + (isBlock ? "District hazard score" : "Area-weighted mean district score") +
-      " <em>" + esc(scoreText(parentFacts)) + "</em></div></div>" +
-      "<div class='popup-actions'><button class='btn' id='popup-inspect'>Inspect " +
-      (isBlock ? "block" : "district") + "</button><button class='btn' id='popup-parent'>Inspect " +
-      (isBlock ? "district" : "State/UT") + "</button>" +
-      "<button class='btn' id='popup-close' aria-label='Close anchored popup'>Close</button></div>";
-    var node = nodes[(isBlock ? "B:" : "") + popup.key];
-    if (node) node.classList.add("hl");
-    document.getElementById("popup-inspect").onclick = function () { inspectPlace(member.level, member.key); };
-    document.getElementById("popup-parent").onclick = function () { inspectPlace(parent.level, parent.key); };
+    tip.innerHTML = unitTipHtml(popup.level, popup.key) +
+      "<div class='popup-actions'>" +
+      (isBlock ? "" : "<button class='btn' id='popup-explore'" +
+        (canExplore ? "" : " disabled title='Only " + esc(D.live_state) +
+          " navigation is demonstrated in this prototype'") + ">Explore " + esc(member.name) + "</button>") +
+      "<button class='btn' id='popup-da'>Detailed Analysis</button>" +
+      "<button class='btn' id='popup-close' aria-label='Close pinned tooltip'>Close</button></div>";
+    for (var k in nodes) nodes[k].classList.remove("hl");
+    highlightUnit(popup.level, popup.key);
+    var ex = document.getElementById("popup-explore");
+    if (ex) ex.onclick = function () {
+      if (isState) selectState(popup.key); else openDistrict(popup.key);
+    };
+    document.getElementById("popup-da").onclick = function () {
+      daOpen(member.level, member.key, member.name + (isState ? "" : ", " + member.parent), null);
+      render();
+    };
     document.getElementById("popup-close").onclick = function () { closePopup(); svg.focus({ preventScroll: true }); };
     positionPopup();
   }
@@ -2010,15 +2044,53 @@
     if (!d) { hideTip(); return; }
     for (var k in nodes) nodes[k].classList.remove("hl");
 
-    nodes[d.k].classList.add("hl");
-    var v = dScores()[d.k];
-    showTip("<b>" + esc(d.n) + " · District</b><div class='t-row'>" + esc(d.s) +
-      "</div><div class='t-row'>Hazard score <em>" + fmt(v) + "</em> · " +
-      (Number.isFinite(v) ? esc(band(v)) : "No data") +
-      "</div><div class='t-row t-go'>Click to pin · inspect place or parent</div>", ev);
+    /* the national tooltip is State-level: districts are painted, but the
+       State/UT is the unit this view ranks and the unit a click opens */
+    highlightUnit("State/UT", d.s);
+    showTip(unitTipHtml("State/UT", d.s) + tipHint("State/UT", d.s), ev);
   }
 
-  /* Hover describes the painted feature; the card persists independently. */
+  /* Hover and click describe the unit one level below the view -- the State/UT
+     at India, the district at State, the block at District. That is the unit the
+     view ranks and the unit Explore opens, so the highlight covers all of it. */
+  function highlightUnit(level, key) {
+    if (level === "State/UT") {
+      (statesOf[key] || []).forEach(function (x) { nodes[x.k].classList.add("hl"); });
+    } else if (level === "District") {
+      (blocksOfDistrict[key] || []).forEach(function (x) {
+        var node = nodes["B:" + x.k];
+        if (node) node.classList.add("hl");
+      });
+    } else {
+      var node = nodes["B:" + key];
+      if (node) node.classList.add("hl");
+    }
+  }
+  function unitTipHtml(level, key) {
+    var m = makeCmpMember(level, key), f = daArrival(level, key);
+    if (!m) return "";
+    var html = "<b>" + esc(m.name) + " · " + esc(level) + "</b>" +
+      "<div class='t-row'>" + esc(m.parent) + "</div>";
+    if (!f || !Number.isFinite(f.score)) return html + "<div class='t-row'>No data</div>";
+    html += "<div class='t-row'>" + (level === "State/UT" ? "Mean district hazard score" : "Hazard score") +
+      " <em>" + fmt(f.score) + "</em> · " + esc(band(f.score)) + "</div>" +
+      "<div class='t-row'>Rank <em>" + f.rank + "</em> of " + f.total + " " + esc(f.scope) + "</div>";
+    if (level === "State/UT") html += "<div class='t-row'>" + f.n + " districts with data</div>";
+    if (level === "District" && S.view === "state") {
+      html += "<div class='t-row'>" + (blocksOfDistrict[key] || []).length + " blocks painted</div>";
+    }
+    return html;
+  }
+  function tipHint(level, key) {
+    var m = makeCmpMember(level, key);
+    var canExplore = level !== "Block" && m && isLive(level === "State/UT" ? key : byKey[key].s);
+    return "<div class='t-row t-go'>Click to pin: opens the profile" +
+      (canExplore ? ", Explore, " : ", ") + "Detailed Analysis</div>" +
+      (level !== "Block" && !canExplore
+        ? "<div class='t-row t-off'>Explore is unavailable — only " + esc(D.live_state) +
+          " is scored below district level in this prototype</div>" : "");
+  }
+
   function onBlockHover(ev) {
     if (popup) return;
     var t = ev.target;
@@ -2028,17 +2100,12 @@
     if (S.view === "district" && b.dk !== S.district) { hideTip(); return; }
     for (var k in nodes) nodes[k].classList.remove("hl");
 
-    nodes["B:" + b.k].classList.add("hl");
-    var v = bScores()[b.k];
-    var parent = byKey[b.dk];
-    showTip(
-      "<b>" + esc(b.n) + "</b>" +
-      "<div class='t-row'>" + esc(parent ? parent.n : "") + " · " + esc(b.s) + "</div>" +
-      (!Number.isFinite(v)
-        ? "<div class='t-row'>No data</div>"
-        : "<div class='t-row'>Score <em>" + fmt(v) + "</em> · " + esc(band(v)) + "</div>" +
-          blockRankRow(b.k)) +
-      "<div class='t-row t-go'>Click to pin · inspect place or parent</div>", ev);
+    /* State view: blocks are painted but the district is the unit this view
+       ranks and opens. District view: the block is itself that unit. */
+    var level = S.view === "state" ? "District" : "Block";
+    var key = S.view === "state" ? b.dk : b.k;
+    highlightUnit(level, key);
+    showTip(unitTipHtml(level, key) + tipHint(level, key), ev);
   }
 
   function onMapClick(ev) {
@@ -2047,7 +2114,7 @@
     if (!t.dataset || !t.dataset.key || S.view !== "india") return;
     var d = byKey[t.dataset.key];
     if (!d) return;
-    anchorPopup("District", d.k, ev);
+    anchorPopup("State/UT", d.s, ev);
   }
 
   function onBlockClick(ev) {
@@ -2057,7 +2124,8 @@
     var b = blockByKey[t.dataset.block];
     if (!b) return;
     if (S.view === "district" && b.dk !== S.district) return;
-    anchorPopup("Block", b.k, ev);
+    if (S.view === "state") anchorPopup("District", b.dk, ev);
+    else anchorPopup("Block", b.k, ev);
   }
 
   /* Inspection never changes the camera, breadcrumb, cohort or portfolio. */
@@ -3057,8 +3125,6 @@
             "another slice.</p>") +
         "</div>";
 
-      var metOpts = { "": "Composite hazard score" };
-      Object.keys(D.metric_labels).forEach(function (k) { metOpts[k] = D.metric_labels[k]; });
       var upLabel = da.level === "Block"
         ? "Up to " + (blockByKey[da.lookupKey] && byKey[blockByKey[da.lookupKey].dk]
             ? byKey[blockByKey[da.lookupKey].dk].n : "its district") + " (district)"
@@ -3071,12 +3137,8 @@
 
       html +=
         "<div class='stub'><h3>3 &middot; Refine here, then go back</h3>" +
-        "<p style='margin:0 0 8px'>Change the refinement controls, then press Back to Overview. Back restores the Overview you left; these refinements do not change it.</p>" +
+        "<p style='margin:0 0 8px'>Metric, Statistic, Scenario and Period are refined in the <b>Select Resilience Filters</b> bar above, which holds IRT's six selectors in this mode; geography is refined here. Then press Back to Overview, or switch the bar back to Overview. Back restores the Overview you left; these refinements do not change it.</p>" +
         "<div class='da-refine'>" +
-          daSel("da-scn", "Scenario", D.scenario_labels, rf.scenario) +
-          daSel("da-per", "Period", D.period_labels, rf.period) +
-          daSel("da-met", "Metric", metOpts, rf.metric) +
-          daSel("da-stat", "Statistic", { mean: "Mean", median: "Median" }, rf.stat) +
           daSel("da-geo", "Geography", geoOpts, rf.geo) +
         "</div>" +
         "<p class='sub' style='margin:8px 0 0'>Detailed Analysis is now on <b>" +
@@ -3109,7 +3171,7 @@
     wireCmpControls(host);
     wireActions(host);
     var c = document.getElementById("close-insp");
-    if (c) c.addEventListener("click", function () { S.inspection = null; S.block = null; S.da = null; render(); });
+    if (c) c.addEventListener("click", function () { closePopup(); S.inspection = null; S.block = null; S.da = null; render(); });
     var explore = document.getElementById("inspect-explore");
     if (explore) explore.addEventListener("click", function () {
       var target = S.inspection;
@@ -3123,8 +3185,7 @@
     if (bo) bo.addEventListener("click", function () { daBack(); render(); });
     var dn = document.getElementById("clear-danote");
     if (dn) dn.addEventListener("click", function () { S.daNote = null; render(); });
-    [["da-scn", "scenario"], ["da-per", "period"], ["da-met", "metric"],
-     ["da-stat", "stat"], ["da-geo", "geo"]].forEach(function (pair) {
+    [["da-geo", "geo"]].forEach(function (pair) {
       var el = document.getElementById(pair[0]);
       if (!el) return;
       el.addEventListener("change", function () {
@@ -4337,15 +4398,15 @@
     if (S.view === "india") {
       title = "Colours show district hazard scores";
       sub = "Thick State/UT boundary, thin district boundary. State/UT polygons are never " +
-            "filled. Click a district to pin its popup; use Explore to navigate.";
+            "filled. Click a State/UT to pin its tooltip and open its profile; Explore from there.";
     } else if (S.view === "state") {
       title = S.state + " — colours show block hazard scores";
       sub = "Thick district boundary, thin block boundary. Blocks are painted; districts are " +
-            "what this view ranks. Click a block to pin its popup; use Explore to navigate.";
+            "what this view ranks. Click a district to pin its tooltip and open its profile; Explore from there.";
     } else {
       title = byKey[S.district].n + " — its blocks painted";
       sub = "The same blocks on the same ruler against the same colourbar, at this district's " +
-            "extent. Click a block to pin its popup and choose what to inspect.";
+            "extent. Click a block to pin its tooltip and open its profile.";
     }
     svg.setAttribute("aria-label", S.view === "india" ? "District hazard scores; click to pin a popup" : "Block hazard scores; click to pin a popup");
     document.getElementById("map-title").textContent = title;
@@ -4581,7 +4642,34 @@
     }
   }
 
+  /* Detailed Analysis needs a place, as IRT's own API does (a State is
+     mandatory there): the inspected place if there is one, else the open
+     State/UT or district, and nothing at the national view. */
+  function daDefaultTarget() {
+    if (S.inspection) {
+      var m = makeCmpMember(S.inspection.level, S.inspection.key);
+      return m ? { level: m.level, key: S.inspection.key, name: m.name } : null;
+    }
+    if (S.view === "district" && byKey[S.district]) return { level: "District", key: S.district, name: byKey[S.district].n };
+    if (S.view === "state" && S.state) return { level: "State/UT", key: S.state, name: S.state };
+    return null;
+  }
+
+  function syncModeBar() {
+    var ov = document.getElementById("mode-overview"), dt = document.getElementById("mode-detailed");
+    var target = S.da ? null : daDefaultTarget();
+    ov.setAttribute("aria-pressed", String(!S.da));
+    dt.setAttribute("aria-pressed", String(!!S.da));
+    dt.disabled = !S.da && !target;
+    dt.title = dt.disabled ? "Detailed Analysis needs a place: inspect or explore one first"
+      : (S.da ? "Detailed Analysis is open" : "Open Detailed Analysis on " + target.name);
+    document.getElementById("f-metric").value = S.da ? (S.da.refine.metric || "") : "";
+    document.getElementById("f-stat").value = S.da ? S.da.refine.stat : "mean";
+  }
+
   function render() {
+    document.body.classList.toggle("da-on", !!S.da);
+    syncModeBar();
     /* extent first: paintMap() reads it, so it cannot be a by-product of the
        histogram the way the bracket range used to be */
     var pv = paintedValues();
@@ -4657,6 +4745,12 @@
 
     function onSliceChange() {
       S.scenario = sc.value; S.period = pe.value;
+      if (S.da) {
+        /* Detailed Analysis mode: the bar's selectors are the refinement
+           controls. The map follows them; the snapshot Back restores does not. */
+        S.da.refine.scenario = sc.value; S.da.refine.period = pe.value;
+        S.pinned = null; hideTip(); renderDefaultsNote(); render(); return;
+      }
       /* geography survives; transient emphasis and the DA stub do not */
       S.pinned = null; S.showAll = false; S.da = null;
       hideTip();
@@ -4666,6 +4760,30 @@
     sc.addEventListener("change", onSliceChange);
     pe.addEventListener("change", onSliceChange);
   }
+
+  /* ---- the bar's two modes: Overview (three selectors) | Detailed Analysis (IRT's six) ----
+     The mode IS whether a Detailed Analysis is open, so every existing doorway
+     flips the bar for free and Back to Overview flips it back. */
+  document.getElementById("mode-overview").addEventListener("click", function () {
+    if (!S.da) return;
+    daBack(); render();
+  });
+  document.getElementById("mode-detailed").addEventListener("click", function () {
+    if (S.da) return;
+    var t = daDefaultTarget();
+    if (!t) return;
+    daOpen(t.level, t.key, t.name, null);
+    render();
+  });
+  /* In Detailed Analysis mode the bar's Metric and Statistic are the refinement
+     controls that used to sit inside the card. */
+  var fMet = document.getElementById("f-metric"), fStat = document.getElementById("f-stat");
+  Object.keys(D.metric_labels).forEach(function (k) {
+    var o = document.createElement("option");
+    o.value = k; o.textContent = D.metric_labels[k]; fMet.appendChild(o);
+  });
+  fMet.addEventListener("change", function () { if (!S.da) return; S.da.refine.metric = fMet.value; render(); });
+  fStat.addEventListener("change", function () { if (!S.da) return; S.da.refine.stat = fStat.value; render(); });
 
   function renderDefaultsNote() {
     var isDefault = S.scenario === D.default_scenario && S.period === D.default_period;
@@ -4722,13 +4840,13 @@
       target: "India → State/UT → district are navigation levels. Explicit Explore actions and geography pickers navigate; map clicks pin a popup offering place or parent inspection without moving. A block card adds no navigation level. Existing IRT map popups are extended with explicit actions and persistence rules; linked ranking/map hover is deferred." },
     { n: 3, what: "Metric is not chosen on the screening surface",
       today: "Metric is the second gate of the cascade and must be picked before a scenario can be.",
-      target: "Screening always paints the composite hazard score. A metric is reached by clicking the metric that names it, which opens Detailed Analysis already on that metric." },
+      target: "Screening always paints the composite hazard score. A metric is reached by clicking the metric that names it, which opens Detailed Analysis already on that metric. In Overview mode the Metric selector is absent from the bar, not greyed; it returns, editable, when the bar is switched to Detailed Analysis." },
     { n: 4, what: "Statistic is fixed to the mean",
       today: "A free choice of statistic (Mean, and others) sits in the cascade.",
-      target: "Fixed by the scale contract — the mean, weighted by area — so two units are always aggregated the same way. Other statistics belong in Detailed Analysis." },
+      target: "Fixed by the scale contract — the mean, weighted by area — so two units are always aggregated the same way. The selector is absent in Overview mode and returns in Detailed Analysis mode, as IRT ships it." },
     { n: 5, what: "Map Mode is fixed to Absolute value",
       today: "Map Mode is a free user choice, and on the composite path it is auto-filled and disabled.",
-      target: "The ruler is frozen, so there is no per-selection rescale to switch to. The control stays visible, and preset, so the vendor can see it did not simply disappear. Local contrast is not folded in here — it belongs with the colourbar, which is the only thing it changes." },
+      target: "The ruler is frozen, so there is no per-selection rescale to switch to. The control is absent in Overview mode and returns in Detailed Analysis mode exactly as IRT ships it, preset and disabled on the composite path. Local contrast is not folded in here — it belongs with the colourbar, which is the only thing it changes." },
     { n: 6, what: "One frozen 0–100 ruler, never rescaled by the selection",
       today: "The legend fits itself to whatever is on screen — 21.99–76.39 for a single district — so the same colour means a different score in two sessions.",
       target: "The domain is 0–100 for every unit, Risk Domain, scenario and period. The bracket shows where the painted units fall inside it; Local contrast is an opt-in view and never the landing state." },
@@ -4837,16 +4955,16 @@
     if (!ev.target.checked) sheet.hidden = true;
   });
 
-  /* ---- collapse secondary presets; primary selectors remain editable ---- */
-  var fc = document.getElementById("fcollapse");
-  fc.addEventListener("click", function () {
-    var open = fc.getAttribute("aria-expanded") === "true";
-    fc.setAttribute("aria-expanded", String(!open));
-    fc.textContent = open ? "Expand" : "Collapse";
-    fc.title = open ? "Show secondary filters" : "Hide secondary filters";
-    document.getElementById("fgrid").hidden = open;
-    document.querySelector(".filters").classList.toggle("shut", open);
+  /* ---- the Spatial Panel strip: collapsed by default, over the map ---- */
+  var spt = document.getElementById("spatial-toggle");
+  spt.addEventListener("click", function () {
+    var open = document.body.classList.toggle("spatial-open");
+    spt.setAttribute("aria-expanded", String(open));
+    spt.innerHTML = open ? "&#8249;" : "&#8250;";
+    var lab = (open ? "Collapse" : "Expand") + " the Spatial Panel";
+    spt.title = lab; spt.setAttribute("aria-label", lab);
   });
+
 
   /* ---- right-rail tabs ---- */
   var tabP = document.getElementById("tab-profile");
