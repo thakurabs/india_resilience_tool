@@ -111,7 +111,9 @@ from india_resilience_tool.compute.heat_stress_gridfirst import (
     stull_twb_c,
 )
 from india_resilience_tool.compute.drought_risk_gridfirst import (
+    compute_aridity_rows_for_metric,
     compute_drought_risk_rows_for_metric,
+    is_aridity_gridfirst,
     is_drought_gridfirst,
 )
 from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
@@ -1727,6 +1729,35 @@ def standardised_precipitation_evapotranspiration_index(
     )
 
 
+def aridity_index_p_over_pet(
+    pr_da,
+    tasmax_da,
+    tasmin_da,
+    mask,
+    **_ignored_params,
+):
+    """Registry-resolvable name for the aridity index; grid-first only.
+
+    The metric is dispatched through
+    :func:`india_resilience_tool.compute.drought_risk_gridfirst.compute_aridity_rows_for_metric`
+    for both supported levels, so this per-unit-mask entry point is never
+    reached in the pipeline. It exists because
+    :func:`process_metric_for_model_scenario` resolves ``metric["compute"]``
+    against this module's globals before the grid-first dispatch runs.
+
+    It deliberately raises instead of offering a mask-based implementation. A
+    second implementation of the same index would have to average tasmax, tasmin
+    and latitude over a polygon before computing PET rather than after, which is
+    a different number for any unit with internal relief, and having two answers
+    to the same question on disk is the failure mode the frozen-ruler work
+    exists to remove.
+    """
+    raise NotImplementedError(
+        "aridity_index_p_over_pet is computed grid-first; see "
+        "india_resilience_tool.compute.drought_risk_gridfirst.compute_aridity_rows_for_metric"
+    )
+
+
 # --------------------------------------------------------------------------
 # SPI / SPEI (Option A): scientifically standard SPI using monthly accumulations
 # --------------------------------------------------------------------------
@@ -1810,7 +1841,11 @@ def _metric_role_varnames(
     if primary_var:
         if is_heat_risk_gridfirst(str(metric.get("slug") or ""), level) and compute_name in HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
             roles["baseline"] = (primary_var,)
-        if is_drought_gridfirst(str(metric.get("slug") or ""), level):
+        if is_drought_gridfirst(str(metric.get("slug") or ""), level) and not is_aridity_gridfirst(
+            str(metric.get("slug") or ""), level
+        ):
+            # The aridity index is an absolute ratio; it is never standardised
+            # against a reference window, so it consumes no baseline role.
             roles["baseline"] = (primary_var,)
         if is_extreme_rainfall_gridfirst(str(metric.get("slug") or ""), level) and metric.get("slug") in {
             "r95p_very_wet_precip",
@@ -4493,36 +4528,50 @@ def process_metric_for_model_scenario(
                 )
                 return
 
-            baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
-                metric=metric,
-                primary_var=primary_var,
-                model=model,
-                scenario=scenario,
-                scenario_conf=SCENARIOS,
-                year_to_paths=year_to_paths,
-            )
-            if missing_baseline or not baseline_year_to_paths:
-                logging.warning(f"[{slug}] Missing Drought Risk v2 historical baseline for {model}/{scenario}")
-                return
-
             metric_for_drought = dict(metric)
             drought_params = dict(metric.get("params") or {})
             drought_params["grid_id"] = grid.grid_id
             metric_for_drought["params"] = drought_params
 
-            rows, period_rows = compute_drought_risk_rows_for_metric(
-                metric=metric_for_drought,
-                model=model,
-                scenario=scenario,
-                scenario_conf=scenario_conf,
-                year_to_paths=year_to_paths,
-                baseline_year_to_paths=baseline_year_to_paths,
-                weights=weights,
-                level=level,
-                cache_root=_drought_risk_internal_root(),
-                index_range=grid_index_range,
-                grid=grid,
-            )
+            if is_aridity_gridfirst(slug, level):
+                rows, period_rows = compute_aridity_rows_for_metric(
+                    metric=metric_for_drought,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=scenario_conf,
+                    year_to_paths=year_to_paths,
+                    weights=weights,
+                    level=level,
+                    cache_root=_drought_risk_internal_root(),
+                    index_range=grid_index_range,
+                    grid=grid,
+                )
+            else:
+                baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                    metric=metric,
+                    primary_var=primary_var,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=SCENARIOS,
+                    year_to_paths=year_to_paths,
+                )
+                if missing_baseline or not baseline_year_to_paths:
+                    logging.warning(f"[{slug}] Missing Drought Risk v2 historical baseline for {model}/{scenario}")
+                    return
+
+                rows, period_rows = compute_drought_risk_rows_for_metric(
+                    metric=metric_for_drought,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=scenario_conf,
+                    year_to_paths=year_to_paths,
+                    baseline_year_to_paths=baseline_year_to_paths,
+                    weights=weights,
+                    level=level,
+                    cache_root=_drought_risk_internal_root(),
+                    index_range=grid_index_range,
+                    grid=grid,
+                )
             return _write_metric_rows_outputs(
                 rows=rows,
                 period_rows=period_rows,
@@ -4857,8 +4906,9 @@ def process_metric_for_model_scenario(
                     if len(req_vars) <= 1:
                         v = compute_fn(da_by_var[primary_var], mask, **params)
                     else:
-                        # Multi-var metrics (currently assumes two vars)
-                        v = compute_fn(da_by_var[req_vars[0]], da_by_var[req_vars[1]], mask, **params)
+                        # Multi-var metrics: variables are passed positionally in
+                        # the registry's declared `vars` order, then the mask.
+                        v = compute_fn(*(da_by_var[name] for name in req_vars), mask, **params)
 
                     row = {
                         "year": year,
@@ -6148,12 +6198,16 @@ def partition_drought_reps(
     """
     reps: list[ProcessingTask] = []
     remainder: list[ProcessingTask] = []
-    seen_groups: set[tuple[str, str]] = set()
+    seen_groups: set[tuple[str, str, str]] = set()
     for task in tasks:
         if not is_drought_gridfirst(task.slug, level):
             remainder.append(task)
             continue
-        group = (task.model, task.scenario)
+        # The aridity index reads a different pair of cubes (its own precip span
+        # plus a PET cube) from the SPI slugs, so it forms its own pre-warm group
+        # rather than warm-hitting a rep that never built what it needs.
+        family = "aridity" if is_aridity_gridfirst(task.slug, level) else "spi"
+        group = (task.model, task.scenario, family)
         if group in seen_groups:
             remainder.append(task)
         else:
@@ -6170,6 +6224,10 @@ def _run_rep_prepass(
     results: list,
 ) -> tuple[int, int]:
     """Serially run the Option C (CHG-0113) cube pre-warm reps in the parent process.
+
+    CHG-0475: no longer called by :func:`run_pipeline`, which now runs the reps through the worker
+    pool (they never share a cube, so serialising them only cost wall clock). Kept as the
+    reference single-process semantics; safe to delete in a later cleanup.
 
     Each rep is wrapped exactly like :func:`_worker_process_task` so its ``slug``/``duration`` survive
     into the CHG-0112 ``[compute-rollup]`` and the ``completed``/``failed`` accounting stays
@@ -6480,33 +6538,26 @@ def run_pipeline_parallel(
             # (total=len(tasks)) is updated across both phases with no double/under-count (G-C2).
             reps, remainder = partition_drought_reps(tasks, level)
             compute_progress.start()
+            # CHG-0475: reps are one per cube group by construction, so no two reps share a cube
+            # and they can safely run concurrently (the cube cache write is atomic: temp file +
+            # replace). Phase 1 warms every cube in the pool; phase 2 forks then warm-hit them.
+            # The previous parent-side serial pre-pass (_run_rep_prepass) made a single-slug
+            # grid-first run fully serial -- every task was its own rep and the pool got nothing.
+            # Reps are drawn from `tasks` (the to-execute set), so on a resumed run only groups that
+            # still have drought forks get a rep (G-C6 resume: degrade-not-corrupt by construction).
             if reps:
-                # G-C5: a NEW parent-side boundary load -- the worker pool loads gdf per-worker via
-                # init_fn, not in the parent. Small and unavoidable for Approach B; dwarfed by the cube
-                # rebuild it removes. Reps are drawn from `tasks` (the to-execute set), so on a resumed
-                # run only groups that still have drought forks get a rep -- the warming work matches the
-                # forks that need it (G-C6 resume: degrade-not-corrupt by construction).
-                prewarm_gdf = load_boundaries(
-                    get_boundary_path(level),
-                    state_filter=state,
-                    level=level,
-                )
                 logging.info(
-                    "Pre-warming drought monthly cube: %d representative task(s) of %d total",
+                    "Pre-warming drought monthly cube: %d representative task(s) of %d total (parallel)",
                     len(reps), len(tasks),
                 )
-                rep_completed, rep_failed = _run_rep_prepass(
-                    reps, prewarm_gdf, progress=compute_progress, results=results
-                )
-                completed += rep_completed
-                failed += rep_failed
             with Pool(num_workers, initializer=init_fn) as pool:
-                for r in pool.imap_unordered(_worker_process_task, remainder):
-                    results.append(r)
-                    completed += 1
-                    if r["status"] == "failed":
-                        failed += 1
-                    compute_progress.update(failed_increment=1 if r["status"] == "failed" else 0)
+                for phase in (reps, remainder):
+                    for r in pool.imap_unordered(_worker_process_task, phase):
+                        results.append(r)
+                        completed += 1
+                        if r["status"] == "failed":
+                            failed += 1
+                        compute_progress.update(failed_increment=1 if r["status"] == "failed" else 0)
 
         compute_progress.finish()
 
