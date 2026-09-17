@@ -569,16 +569,33 @@ specification, subject to these requirements.
 
 Inspection and geographic navigation are separate actions. On the India map, hover describes
 that painted **district**: name, parent State/UT, hazard score and band (or `No data`), with a
-subtle district outline and `Click to inspect`. In State and District views, block fill means
+subtle district outline and `Click to pin · inspect place or parent`. In State and District views, block fill means
 hover describes the **block**, not its parent district. An optional District fill must likewise
 inspect districts. Hover never replaces an open inspection card.
 
-Click or tap opens one persistent inspection card for the painted place. It does not change
+Click or tap pins the tooltip at the clicked geographic point; it does not open the full
+inspection card automatically. The anchored popup keeps the painted place's score and band
+prominent, then shows a separately labelled parent summary: State/UT area-weighted mean district
+score for a district, or district hazard score for a block. Offer `Inspect district` and
+`Inspect State/UT` nationally, and `Inspect block` and `Inspect district` on block maps.
+Each opens the persistent inspection card for exactly that geography, without navigation.
+Parent context must never substitute for the score explaining the painted feature's colour.
+
+Only one popup is anchored. Suppress other hover popups until it is closed or another feature
+is clicked. Pointer movement does not replace it; panning/zooming keeps it attached to the clicked
+map point, with screen-edge clamping. Filter changes refresh its values. Close or Escape clears
+only the anchor, preserving any existing inspection card. Choosing an inspection action consumes
+the popup. Geographic navigation, switching to Ranking Table, Reset and entering Detailed Analysis
+clear it; an anchor is not restored by the Detailed Analysis return snapshot. Buttons support
+keyboard activation and click/tap; hover is not required to reach either inspection action.
+
+Opening the inspection card does not change
 map extent, geographic level, breadcrumbs, headline, ranking cohort or histogram. The card shows
 place level and parent, current domain/scenario/period, score, band and correctly scoped rank
 with denominator. Missing values show `No data`, without fabricated bands or ranks. Its actions are:
 
-- `Explore <State/UT>` for a district inspected from India;
+- `Explore <State/UT>` for a district or State/UT inspected from India;
+- `Explore <district>` for a parent district inspected from a block map;
 - `Explore <district>` for a block inspected from the State view;
 - `Add to Analysis`, reusing IRT's existing portfolio action and acting on the inspected place;
 - secondary `Detailed Analysis`, opening that inspected place's composite through the existing
@@ -593,7 +610,7 @@ place remains visible even outside a pinned histogram bin, without changing the 
 Ranked rows use explicit, keyboard-operable `Explore <State/UT>`, `Explore <district>` or
 `Inspect block` buttons and identify their geographic level. Row bodies do not navigate.
 The first two actions enter the appropriate geographic view; the last opens the same inspection
-card as a map click without changing scope. Ranking-to-map hover/focus highlighting is deferred;
+card as the popup’s inspection action without changing scope. Ranking-to-map hover/focus highlighting is deferred;
 it is not required by this implementation. Map and Ranking Table can remain alternative views.
 
 Visible labels distinguish `Colours show district hazard scores` / `Colours show block hazard
@@ -601,13 +618,14 @@ scores` from `State/UTs ranked by area-weighted mean district score`, `Districts
 or `Blocks in <district>`. Histogram filtering continues to use its stated ranking cohort and
 never replaces constituent score colours with an aggregate/bin colour.
 
-**Alignment and scope (CHG-0508).** The web IRT already has hover tooltips, a map-click information
+**Alignment and scope (CHG-0508, CHG-0510).** The web IRT already has hover tooltips, a map-click information
 surface with identity/score/rank and Add to Analysis, and a ranking table with portfolio actions
 ([recorded 2026-09-14](qa/reports/CURRENT_UX_FLOW.md), §§3 and 5). Extend those surfaces rather than
 commissioning separate features. Card lifetime and no-camera-change behaviour are explicit target
 requirements; the recorded QA does not prove their current implementation. Explicit Explore
 buttons support the already-planned Overview hierarchy. Cohort discovery and navigation extend
 the existing selection-only ranking. The Detailed Analysis button reuses the target transition.
+CHG-0510 adds a pinned-popup choice of place or parent, reusing the tooltip and inspection card.
 Linked ranking/map highlighting is additional deferred scope. Retest the separately recorded
 map-interactivity gating defect: selecting from a dropdown must not disable inspection or
 portfolio addition for other visible places. This prototype does not establish a deployed fix.
@@ -804,7 +822,7 @@ District inspection panel
     The score range of its blocks, with the block count
 ```
 
-A map click inspects the painted place. A ranked district’s explicit Explore action or a
+A map click anchors a popup offering inspection of the painted place or its parent. A ranked district’s explicit Explore action or a
 geographic search opens the District view, which ranks its blocks. A distribution bin filters
 the ranking; it does not select or navigate to a district. The block range shown
 in the inspection panel is a minimum, maximum and count on the frozen scale — a summary, not the
@@ -817,7 +835,7 @@ retired the five-band chart at this scope: the median district holds 8 blocks an
 to 38, so ten bins over 8 units is noise rather than a distribution.
 
 Navigation context and inspection are independent. At most one place is inspected at a time.
-A district inspected from India does not create a District breadcrumb; a block inspected within
+A State/UT or district inspected from India does not change the breadcrumb; a block inspected within
 a State does not enter its parent district. Only explicit navigation changes those levels.
 Closing inspection never navigates. The existing geographic hierarchy remains India > State/UT
 > District, with block inspection adding no breadcrumb level.
@@ -1241,7 +1259,8 @@ one that was saved with four.
 Four lifetimes, and the trigger for each:
 
 ```text
-hover and tooltip              ends when the interaction ends
+hover tooltip                  ends when the interaction ends
+anchored map popup             closes on dismiss, inspection, navigation, Reset or Detailed Analysis
 pinned bin filter              until explicitly cleared, or invalidated by a declared
                                geography, view, Risk Domain, scenario, period or analysis
                                transition
