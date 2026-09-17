@@ -151,7 +151,7 @@ These hold at every step and inside every doorway.
 - **Three primary controls only.** Risk Domain, scenario, period. Everything else is in Detailed
   Analysis. The one control that is neither is `Local contrast`, and it does not sit with the
   three: it lives with the colourbar, because the colourbar is the only thing it changes.
-- **The ranked list ranks what you would click next.** India ranks State/UTs, a State/UT ranks its
+- **The ranked list provides explicit navigation and inspection actions.** India ranks State/UTs, a State/UT ranks its
   districts, a district ranks its blocks. Blocks are ranked only within their own district, where
   one administration drew them all.
 - **One statistic.** The State/UT figure is the area-weighted mean of its district scores. The
@@ -314,8 +314,7 @@ display rule over unchanged scores and can be reinstated without touching an art
 If `n_valid = 0`, show `No data` and no score, band, rank, or metrics. A geography may remain
 available for drill-down when usable lower-level data exists.
 
-Ranking is hierarchical and comparison-set-specific, and each view ranks the units the user
-would click next:
+Ranking is hierarchical and comparison-set-specific, and each view ranks the units exposed by its explicit row actions:
 
 ```text
 National view
@@ -568,22 +567,54 @@ specification, subject to these requirements.
 
 ### National map interaction
 
-In the pan-India view, hovering anywhere within a state should highlight the whole state and show
-state-level information only:
+Inspection and geographic navigation are separate actions. On the India map, hover describes
+that painted **district**: name, parent State/UT, hazard score and band (or `No data`), with a
+subtle district outline and `Click to inspect`. In State and District views, block fill means
+hover describes the **block**, not its parent district. An optional District fill must likewise
+inspect districts. Hover never replaces an open inspection card.
 
-- state or union-territory name;
-- the area-weighted mean of its districts' hazard scores, and its five-band classification;
-- national rank and the number of ranked State/UTs; and
-- a quality flag, when one applies.
+Click or tap opens one persistent inspection card for the painted place. It does not change
+map extent, geographic level, breadcrumbs, headline, ranking cohort or histogram. The card shows
+place level and parent, current domain/scenario/period, score, band and correctly scoped rank
+with denominator. Missing values show `No data`, without fabricated bands or ranks. Its actions are:
 
-District names, district hazard scores, and district score bands should not appear in the
-pan-India tooltip even though districts are individually painted. Districts become inspectable
-only after a State/UT is selected.
+- `Explore <State/UT>` for a district inspected from India;
+- `Explore <district>` for a block inspected from the State view;
+- `Add to Analysis`, reusing IRT's existing portfolio action and acting on the inspected place;
+- secondary `Detailed Analysis`, opening that inspected place's composite through the existing
+  target handoff. Back restores the inspection as well as the Overview navigation context.
 
-Clicking anywhere within a state should select and zoom to that state, load that State/UT's block
-geometry and attributes, and repaint the map from **block** hazard scores. The district boundary
-becomes the coarse stroke and the block boundary the fine stroke. The colourbar, its title and its
-domain do not change.
+The card survives pointer movement, panning, portfolio additions and supported filter changes;
+filter changes refresh its facts. Another inspection replaces it. Close clears inspection only.
+Explicit geographic navigation and Reset clear it. Geographic selectors/search remain navigation
+shortcuts; block search opens its parent District view with that block inspected. A selected
+place remains visible even outside a pinned histogram bin, without changing the ranking filter.
+
+Ranked rows use explicit, keyboard-operable `Explore <State/UT>`, `Explore <district>` or
+`Inspect block` buttons and identify their geographic level. Row bodies do not navigate.
+The first two actions enter the appropriate geographic view; the last opens the same inspection
+card as a map click without changing scope. Ranking-to-map hover/focus highlighting is deferred;
+it is not required by this implementation. Map and Ranking Table can remain alternative views.
+
+Visible labels distinguish `Colours show district hazard scores` / `Colours show block hazard
+scores` from `State/UTs ranked by area-weighted mean district score`, `Districts in <State/UT>`
+or `Blocks in <district>`. Histogram filtering continues to use its stated ranking cohort and
+never replaces constituent score colours with an aggregate/bin colour.
+
+**Alignment and scope (CHG-0508).** The web IRT already has hover tooltips, a map-click information
+surface with identity/score/rank and Add to Analysis, and a ranking table with portfolio actions
+([recorded 2026-09-14](qa/reports/CURRENT_UX_FLOW.md), §§3 and 5). Extend those surfaces rather than
+commissioning separate features. Card lifetime and no-camera-change behaviour are explicit target
+requirements; the recorded QA does not prove their current implementation. Explicit Explore
+buttons support the already-planned Overview hierarchy. Cohort discovery and navigation extend
+the existing selection-only ranking. The Detailed Analysis button reuses the target transition.
+Linked ranking/map highlighting is additional deferred scope. Retest the separately recorded
+map-interactivity gating defect: selecting from a dropdown must not disable inspection or
+portfolio addition for other visible places. This prototype does not establish a deployed fix.
+
+Prototype coverage remains limited: district inspection works nationally; only Telangana's
+State/District navigation and block inspection are demonstrated. Unavailable navigation is
+explained or disabled, without disabling inspection of nationally scored districts.
 
 A `District fill` toggle is available in the State view for users who want the map to match the
 district ranking exactly; block fill is the default.
@@ -656,10 +687,9 @@ State view      the selected State/UT's district hazard scores
                 filters the district ranking shortlist
 ```
 
-This keeps the histogram, the ranking column and the click target addressing one object: a bar
-counts State/UTs, the ranking ranks State/UTs, and clicking one selects it. A histogram over the
-painted units would break that chain — a bar would count districts while the only clickable thing
-beneath it is a State/UT.
+The histogram and ranking address one comparison set. A national bar counts State/UTs;
+its filter narrows the State/UT ranking and emphasises their constituent districts without
+recolouring them. Map inspection independently describes whichever painted feature is selected.
 
 The widget uses **ten fixed bins of width 10 across the full `0-100` domain**, all ten always
 drawn even when empty, on the same frozen scale as the map. Width 10 rather than the five bands'
@@ -732,13 +762,12 @@ Headline
     Districts with data + national rank
 
 Map
-    Continuous block composite-score colour + district interaction
+    Continuous block composite-score colour + block inspection
     Thick district boundary, thin block boundary
 
 Supporting evidence
     Ten-bin district score distribution + ranked district list + top metrics
-    District inspection panel when a district is selected; block panel beneath it when a
-    block within that district is selected
+    One persistent card for the inspected place; explicit actions navigate or open analysis
 
 Context and Evidence
     Collapsed exposure, hydrology, data-quality, and optional-overlay content
@@ -751,7 +780,7 @@ Navigation
 The district ranking denominator is the number of districts with data in the selected State/UT,
 not the number expected when some scores are invalid.
 
-A district selection is a **navigation level**, and the breadcrumb reads
+Explicitly exploring a district opens a **navigation level**, and the breadcrumb reads
 `India > State/UT > District`. This reverses the 2026-09-09 withdrawal. The withdrawal reasoned
 from the map alone — a District view repaints the same blocks, on the same ruler, against the same
 colourbar, at a smaller extent — and that reasoning still holds for the map. It was the wrong test.
@@ -761,10 +790,9 @@ is a place the user navigates to rather than a state they inspect from elsewhere
 is unchanged on entry: block fill is retained, and the colourbar, its title and its domain do not
 change.
 
-A **block** remains an inspection state and adds no breadcrumb level, because it ranks nothing and
-paints nothing of its own.
+A **block** remains an inspection state and adds no breadcrumb level, because inspecting it does not open a new ranked cohort or map extent.
 
-Selecting a district promotes its outline to the accent selection stroke and shows:
+Inspecting a district promotes its outline to the accent selection stroke and shows:
 
 ```text
 District inspection panel
@@ -776,8 +804,9 @@ District inspection panel
     The score range of its blocks, with the block count
 ```
 
-A district may be selected from the map, from the district distribution, or from the ranked
-district list. Selecting it opens the District view, which ranks its blocks. The block range shown
+A map click inspects the painted place. A ranked district’s explicit Explore action or a
+geographic search opens the District view, which ranks its blocks. A distribution bin filters
+the ranking; it does not select or navigate to a district. The block range shown
 in the inspection panel is a minimum, maximum and count on the frozen scale — a summary, not the
 ranking itself.
 
@@ -787,12 +816,11 @@ rule of the histogram contract is deliberately relaxed, and the reason is the sa
 retired the five-band chart at this scope: the median district holds 8 blocks and the range runs 1
 to 38, so ten bins over 8 units is noise rather than a distribution.
 
-Districts and blocks are two independent inspection targets within one view, and their precedence
-is explicit. Selecting a district clears any selected block. Selecting a block inside the selected
-district retains the district selection and adds the block panel beneath it. Selecting a block
-outside it replaces the district selection with that block's parent district, so the block panel
-always sits under its own district. At most one district and one block are selected at a time,
-either may be cleared without leaving the State view, and neither adds a breadcrumb level.
+Navigation context and inspection are independent. At most one place is inspected at a time.
+A district inspected from India does not create a District breadcrumb; a block inspected within
+a State does not enter its parent district. Only explicit navigation changes those levels.
+Closing inspection never navigates. The existing geographic hierarchy remains India > State/UT
+> District, with block inspection adding no breadcrumb level.
 
 A selected block shows its name, parent district and State/UT, its hazard score, five-band
 classification, its rank within its own district, relevant data-quality state, and valid
@@ -1393,7 +1421,7 @@ canonical metric/rule-to-Detailed-Analysis route registry controls clickability.
 - Risk Domain;
 - scenario;
 - period;
-- the selected District navigation level and Block inspection state, where applicable;
+- the selected District navigation level and independent district/block inspection, where applicable;
 - map/table mode and the Overview comparison mode, displayed places, fixed subject, future pairs,
   and the previous places selection held during futures mode;
 - map extent; and

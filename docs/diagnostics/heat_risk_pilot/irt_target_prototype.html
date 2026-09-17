@@ -344,7 +344,7 @@
                   padding: 0 6px 6px; border-bottom: 1px solid var(--rule); }
   table.rank th.num, table.rank td.num { text-align: right; }
   table.rank td { padding: 6px; border-bottom: 1px solid #f0f2f5; }
-  table.rank tbody tr { cursor: pointer; }
+  table.rank tbody tr { cursor: default; }
   table.rank tbody tr:hover { background: var(--accent-soft); }
   table.rank tr.selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
   .rk { color: var(--ink-3); font-variant-numeric: tabular-nums; width: 34px; }
@@ -361,8 +361,9 @@
   .rl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
              margin: 14px 0 6px; font-weight: 650; font-size: 13px; color: var(--ink-2); }
   .rl-head .rl-sub { font-weight: 400; font-size: 11.5px; color: var(--ink-3); }
-  .rl-item { display: flex; align-items: center; gap: 9px; padding: 6px 7px; border-radius: 6px;
-             cursor: pointer; border: 1px solid transparent; }
+  .rl-item { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 6px 7px; border-radius: 6px;
+             cursor: default; border: 1px solid transparent; }
+  .rl-item > [data-rank-open] { flex-basis: 100%; text-align: right; }
   .rl-item:hover { background: #f2f7fb; border-color: #d9e4ee; }
   .rl-item .rl-rk { flex: none; width: 22px; text-align: right; color: var(--ink-3);
                     font-variant-numeric: tabular-nums; font-size: 12px; }
@@ -560,7 +561,7 @@
     <div class="card panel-card" data-delta="2">
       <h3>Administrative Analysis</h3>
       <p class="hint" id="geo-hint">India is open. Pick a State/UT to go down a level &mdash;
-        or click the map.</p>
+        Use the map to inspect a place.</p>
 
       <div class="fld">
         <label for="geo-search">Search</label>
@@ -606,8 +607,8 @@
     <details class="protonote">
       <summary>Two departures in this prototype</summary>
       <p><b>1. Only Telangana opens below the national view.</b> Its 588 blocks are scored on the
-        frozen ruler and painted for real. Every other State/UT hovers normally &mdash; whole-state
-        highlight, State-level tooltip &mdash; but is not selectable, because no block outside
+        frozen ruler and painted for real. Districts across India can be hovered, inspected and added to Analysis.
+        Only Telangana offers Explore navigation, because no block outside
         Telangana has been scored. One worked State/UT demonstrates the workflow.</p>
       <p><b>2. Detailed Analysis is a stub &mdash; but the whole seam is not.</b> The
         destination is undesigned. What the doorway carries, the answer the destination must
@@ -731,6 +732,7 @@
 
     <div id="detailed-analysis" aria-live="polite"></div>
     <div id="pane-profile">
+      <div id="inspection" aria-live="polite"></div>
       <div class="card headline" id="headline" data-delta="11" hidden></div>
       <div class="card">
         <h2 id="hist-title">Distribution</h2>
@@ -747,7 +749,6 @@
         <p class="painted" id="painted"></p>
       </div>
       <div class="card" id="ranking"></div>
-      <div id="inspection"></div>
       <div class="card" id="context" hidden></div>
       <div class="card">
         <details class="method-wrap">
@@ -790,6 +791,7 @@
     state: null,
     district: null,
     block: null,
+    inspection: null,      /* independent of the geographic navigation context */
     pinned: null,
     showAll: false,
     mode: "map",           /* "map" | "table" — the ranked table is a view of the same cohort */
@@ -1120,7 +1122,7 @@
     var sc = D.district_scores[sid] || {};
     var rows = (statesOf[state] || []).map(function (d) {
       return { key: d.k, name: d.n, state: d.s, score: sc[d.k] };
-    }).filter(function (r) { return r.score !== undefined; });
+    }).filter(function (r) { return Number.isFinite(r.score); });
     rows.sort(function (a, b) { return b.score - a.score; });
     var prev = null, prevRank = 0;
     rows.forEach(function (r, i) {
@@ -1150,7 +1152,7 @@
     var rows = (blocksOfDistrict[districtKey] || []).map(function (b) {
       return { key: b.k, name: b.n, score: scores[b.k] };
     }).filter(function (r) {
-      return r.score !== undefined && r.score !== null && !isNaN(r.score);
+      return Number.isFinite(r.score);
     });
     rows.sort(function (a, b) { return b.score - a.score || a.name.localeCompare(b.name); });
     var rank = 0, prev = null, seen = 0;
@@ -1184,11 +1186,11 @@
     return S.view === "india" ? "State/UT" : S.view === "state" ? "District" : "Block";
   }
 
-  /* One behaviour, two doors: a ranked row does exactly what a map click does. */
+  /* Ranking actions navigate; map clicks inspect without changing scope. */
   function openRankedUnit(key) {
     if (S.view === "india") { selectState(key); return; }
     if (S.view === "state") { openDistrict(key); return; }
-    S.block = key; S.da = null; S.report = null; render();
+    inspectPlace("Block", key);
   }
 
   /* The histogram, the pinned-bin filter, the ranked list and the map emphasis all
@@ -1734,8 +1736,8 @@
       if (national) {
         p.setAttribute("fill", mapColour(dsc[d.k]));
         p.classList.remove("out");
-        p.classList.toggle("locked", !isLive(d.s));
-        p.classList.toggle("muted", emphDistricts !== null && !emphDistricts[d.k]);
+        p.classList.remove("locked");
+        p.classList.toggle("muted", emphDistricts !== null && !emphDistricts[d.k] && !(S.inspection && S.inspection.key === d.k));
       } else {
         /* neighbours stay as a faint backdrop so the State reads in context */
         p.setAttribute("fill", "#eceff2");
@@ -1754,7 +1756,7 @@
       var emph = emphBlocks !== null ? !!emphBlocks[b.k]
                : (emphDistricts === null || !!emphDistricts[b.dk]);
       var inDistrict = S.view !== "district" || b.dk === S.district;
-      p.classList.toggle("muted", !emph || !inDistrict);
+      p.classList.toggle("muted", (!emph || !inDistrict) && !(S.inspection && S.inspection.key === b.k));
       p.classList.remove("hl");
     });
 
@@ -1801,7 +1803,8 @@
     /* ---- selection stroke ---- */
     var selPath = document.getElementById("g-sel");
     var selKey = S.block ? ("B:" + S.block) : null;
-    if (selKey && blockByKey[S.block]) selPath.setAttribute("d", blockByKey[S.block].d);
+    if (S.inspection && S.inspection.level === "District" && byKey[S.inspection.key]) selPath.setAttribute("d", byKey[S.inspection.key].d);
+    else if (selKey && blockByKey[S.block]) selPath.setAttribute("d", blockByKey[S.block].d);
     else if (S.view === "district" && byKey[S.district]) selPath.setAttribute("d", byKey[S.district].d);
     else selPath.setAttribute("d", "");
 
@@ -1932,29 +1935,15 @@
     if (!d) { hideTip(); return; }
     for (var k in nodes) nodes[k].classList.remove("hl");
 
-    /* the national tooltip is State-level only, though districts are painted */
-    (statesOf[d.s] || []).forEach(function (x) { nodes[x.k].classList.add("hl"); });
-    var st = sStats()[d.s];
-    if (!st) { showTip("<b>" + esc(d.s) + "</b><div class='t-row'>No data</div>", ev); return; }
-    var total = Object.keys(sStats()).length;
-    showTip(
-      "<b>" + esc(d.s) + "</b>" +
-      "<div class='t-row'>Mean district hazard score <em>" + fmt(st.mean) + "</em> · " +
-      esc(band(st.mean)) + "</div>" +
-      "<div class='t-row'>Rank <em>" + st.rank + "</em> of " + total + " State/UTs</div>" +
-      "<div class='t-row'>" + st.n_valid + " districts with data</div>" +
-      (isLive(d.s)
-        ? "<div class='t-row t-go'>Select to open the State view</div>"
-        : "<div class='t-row t-off'>Not selectable — only " + esc(D.live_state) +
-          " is scored below district level in this prototype</div>"), ev);
+    nodes[d.k].classList.add("hl");
+    var v = dScores()[d.k];
+    showTip("<b>" + esc(d.n) + " · District</b><div class='t-row'>" + esc(d.s) +
+      "</div><div class='t-row'>Hazard score <em>" + fmt(v) + "</em> · " +
+      (Number.isFinite(v) ? esc(band(v)) : "No data") +
+      "</div><div class='t-row t-go'>Click to inspect</div>", ev);
   }
 
-  /* Hover always describes the unit this view can *select*, never the unit it
-     paints. Nationally that means districts are painted but a hover reports the
-     State/UT and highlights the whole State/UT. The State view inherits exactly
-     that: blocks are painted, but a hover reports the parent district and
-     highlights all of that district's blocks. Only in the District view, where
-     the block is itself the selectable unit, does a hover report the block. */
+  /* Hover describes the painted feature; the card persists independently. */
   function onBlockHover(ev) {
     var t = ev.target;
     if (!t.dataset || !t.dataset.block || S.view === "india") { hideTip(); return; }
@@ -1963,40 +1952,17 @@
     if (S.view === "district" && b.dk !== S.district) { hideTip(); return; }
     for (var k in nodes) nodes[k].classList.remove("hl");
 
-    if (S.view === "state") {
-      var d = byKey[b.dk];
-      var sibs = blocksOfDistrict[b.dk] || [];
-      sibs.forEach(function (x) {
-        var node = nodes["B:" + x.k];
-        if (node) node.classList.add("hl");
-      });
-      if (!d) { hideTip(); return; }
-      var info = districtRank(b.dk);
-      showTip(
-        "<b>" + esc(d.n) + "</b>" +
-        "<div class='t-row'>" + esc(d.s) + "</div>" +
-        (info === null
-          ? "<div class='t-row'>No data</div>"
-          : "<div class='t-row'>Hazard score <em>" + fmt(info.score) + "</em> · " +
-            esc(band(info.score)) + "</div>" +
-            "<div class='t-row'>Rank <em>" + info.rank + "</em> of " + info.total +
-            " districts with data in " + esc(d.s) + "</div>") +
-        "<div class='t-row'>" + sibs.length + " blocks painted</div>" +
-        "<div class='t-row t-go'>Select to open the District view</div>", ev);
-      return;
-    }
-
     nodes["B:" + b.k].classList.add("hl");
     var v = bScores()[b.k];
     var parent = byKey[b.dk];
     showTip(
       "<b>" + esc(b.n) + "</b>" +
       "<div class='t-row'>" + esc(parent ? parent.n : "") + " · " + esc(b.s) + "</div>" +
-      (v === undefined
+      (!Number.isFinite(v)
         ? "<div class='t-row'>No data</div>"
         : "<div class='t-row'>Score <em>" + fmt(v) + "</em> · " + esc(band(v)) + "</div>" +
           blockRankRow(b.k)) +
-      "<div class='t-row t-go'>Select to open Detailed Analysis</div>", ev);
+      "<div class='t-row t-go'>Click to inspect</div>", ev);
   }
 
   function onMapClick(ev) {
@@ -2004,8 +1970,8 @@
     var t = ev.target;
     if (!t.dataset || !t.dataset.key || S.view !== "india") return;
     var d = byKey[t.dataset.key];
-    if (!d || !isLive(d.s)) return;
-    selectState(d.s);
+    if (!d) return;
+    inspectPlace("District", d.k);
   }
 
   function onBlockClick(ev) {
@@ -2014,33 +1980,47 @@
     if (!t.dataset || !t.dataset.block || S.view === "india") return;
     var b = blockByKey[t.dataset.block];
     if (!b) return;
-    if (S.view === "state") { openDistrict(b.dk); return; }
-    if (b.dk !== S.district) return;
-    S.block = b.k;
-    daOpen("Block", b.k, b.n + ", " + (byKey[b.dk] ? byKey[b.dk].n : ""), null);
+    if (S.view === "district" && b.dk !== S.district) return;
+    inspectPlace("Block", b.k);
+  }
+
+  /* Inspection never changes the camera, breadcrumb, cohort or portfolio. */
+  function inspectPlace(level, key) {
+    if (!makeCmpMember(level, key)) return;
+    S.inspection = { level: level, key: key, scope: [S.view, S.state, S.district].join("|") };
+    S.block = level === "Block" ? key : null;
+    S.da = null; S.daNote = null; S.report = null;
+    hideTip();
     render();
+    document.getElementById("tab-profile").click();
+    document.querySelector(".rail.right").scrollTop = 0;
   }
 
   /* ================= state transitions ================= */
   function selectState(name) {
+    S.inspection = null; S.report = null; S.daNote = null; S.pinned = null;
+    if (!isLive(name)) return;
     S.view = "state"; S.state = name;
     S.district = null; S.block = null;
     S.pinned = null; S.showAll = false; S.da = null;
     render();
   }
   function goIndia() {
-    S.view = "india"; S.state = null; S.district = null; S.block = null;
+    S.inspection = null; S.report = null; S.daNote = null; S.pinned = null;
+    S.view = "india"; S.state = null; S.district = null; S.block = null; S.inspection = null;
     S.pinned = null; S.showAll = false; S.da = null;
     S.local = false;        /* the landing state is always the frozen domain */
     render();
   }
   function goState() {
+    S.inspection = null; S.report = null; S.daNote = null; S.pinned = null;
     S.view = "state"; S.district = null; S.block = null;
     S.showAll = false; S.da = null;
     render();
   }
   /* The third navigation level: a district opens its blocks. */
   function openDistrict(key) {
+    S.inspection = null; S.report = null; S.daNote = null; S.pinned = null;
     var d = byKey[key];
     if (!d || !isLive(d.s)) return;
     S.view = "district"; S.state = d.s; S.district = key;
@@ -2425,7 +2405,7 @@
 
   function daSnapshot() {
     var from = {};
-    ["view", "state", "district", "block", "bundle", "scenario", "period", "showAll",
+    ["view", "state", "district", "block", "inspection", "bundle", "scenario", "period", "showAll",
      "mode", "local", "ctxOpen", "ctxLayer", "coord", "cmp"].forEach(function (k) {
       from[k] = daCopy(S[k]);
     });
@@ -2718,19 +2698,19 @@
       return items.map(function (r) {
         var member = makeCmpMember(level, r.key);
         return "<div class='rl-item " + cls + "' data-key='" + escAttr(r.key) + "' " +
-          "role='button' tabindex='0' title='Open " + escAttr(r.name) + "'>" +
+          ">" +
           "<span class='rl-rk'>" + r.rank + "</span>" +
-          "<span class='rl-nm'>" + esc(r.name) + "</span>" +
+          "<span class='rl-nm'>" + esc(r.name) + "<small> · " + esc(level) + "</small></span>" +
           "<span class='bandcell'>" + band(r.score) + "</span>" +
           "<span class='rl-sc'>" + shownScore[r.key] + "</span>" +
-          "<span class='cmp-cell'>" + cmpControl(member, true) + "</span>" +
+          "<span class='cmp-cell'>" + cmpControl(member, true) + "</span>" + rankAction(r) +
           "</div>";
       }).join("");
     }
 
     var html =
-      "<h2>Ranked " + rankingUnit(true) + " — " + esc(rankingScopeLabel()) + "</h2>" +
-      "<p class='sub'>Hazard score on the frozen national scale. Select any row to open it.</p>";
+      "<h2>" + (S.view === "india" ? "State/UTs ranked by area-weighted mean district score" : "Ranked " + rankingUnit(true) + " — " + esc(rankingScopeLabel())) + "</h2>" +
+      "<p class='sub'>Hazard score on the frozen national scale. Use Explore to navigate, or Inspect to open a block card.</p>";
 
     if (!n) {
       html += "<p class='sub'>No " + rankingUnit(true) + " in this filter.</p>";
@@ -2757,19 +2737,17 @@
     if (ot) ot.addEventListener("click", function () { S.mode = "table"; render(); });
   }
 
+  function rankAction(row) {
+    var blocked = S.view === "india" && !isLive(row.key);
+    return "<button type='button' class='linkbtn' data-rank-open='" + escAttr(row.key) +
+      "'" + (blocked ? " disabled title='Only Telangana navigation is demonstrated in this prototype'" : "") +
+      ">" + (S.view === "district" ? "Inspect block" : "Explore " + esc(row.name)) + "</button>";
+  }
+
   function wireRankRows(host) {
-    var items = host.querySelectorAll("[data-key][role='button'], tr[data-key]");
-    for (var i = 0; i < items.length; i++) {
-      items[i].addEventListener("click", function (ev) {
-        if (ev.target.closest(".cmp-toggle")) return;
-        openRankedUnit(ev.currentTarget.dataset.key);
-      });
-      items[i].addEventListener("keydown", function (ev) {
-        if (ev.key !== "Enter" && ev.key !== " ") return;
-        ev.preventDefault();
-        openRankedUnit(ev.currentTarget.dataset.key);
-      });
-    }
+    host.querySelectorAll("[data-rank-open]").forEach(function (button) {
+      button.addEventListener("click", function () { openRankedUnit(button.dataset.rankOpen); });
+    });
   }
 
   /* The full ranked table: the same cohort at working density, in place of the map.
@@ -2790,18 +2768,18 @@
     rows.forEach(function (r) { tied[r.rank] = (tied[r.rank] || 0) + 1; });
 
     var html =
-      "<h2>Ranked " + rankingUnit(true) + " — " + esc(rankingScopeLabel()) + "</h2>" +
+      "<h2>" + (S.view === "india" ? "State/UTs ranked by area-weighted mean district score" : "Ranked " + rankingUnit(true) + " — " + esc(rankingScopeLabel())) + "</h2>" +
       "<p class='sub'>" + rows.length + " ranked " + rankingUnit(true) +
         " on the frozen national scale, competition ranks over full precision" +
         (S.pinned !== null ? " · filtered to one distribution bin, original ranks kept" : "") +
-        ". Select a row to open it." + (S.view === "district"
+        ". Use the explicit Explore or Inspect action." + (S.view === "district"
           ? " Blocks are ranked here only because every block in a district is drawn by the " +
             "same administration."
           : "") +
       "</p>" +
       "<div class='tv-scroll'><table class='rank'><thead><tr>" +
         "<th class='rk'>#</th><th>" + rankingUnit(false) + "</th>" +
-        "<th class='num'>Score</th><th>Band</th><th class='cmp-cell'>Analysis</th>" +
+        "<th class='num'>Score</th><th>Band</th><th class='cmp-cell'>Analysis</th><th>Action</th>" +
         "</tr></thead><tbody>";
 
     rows.forEach(function (r) {
@@ -2813,7 +2791,7 @@
         "<td>" + esc(r.name) + "</td>" +
         "<td class='num sc'>" + shownScore[r.key] + "</td>" +
         "<td class='bandcell'>" + band(r.score) + "</td>" +
-        "<td class='cmp-cell'>" + cmpControl(member, true) + "</td></tr>";
+        "<td class='cmp-cell'>" + cmpControl(member, true) + "</td><td>" + rankAction(r) + "</td></tr>";
     });
     html += "</tbody></table></div>";
     if (!rows.length) html = html.replace("</tbody></table></div>",
@@ -2846,7 +2824,7 @@
     var overviewHost = document.getElementById("inspection");
     var detailHost = document.getElementById("detailed-analysis");
     overviewHost.innerHTML = ""; detailHost.innerHTML = "";
-    var host = S.da || S.daNote ? detailHost : overviewHost;
+    var host = S.da ? detailHost : overviewHost;
     var html = "";
 
     /* Coming back is half the doorway. The Overview reopens exactly where it was
@@ -2865,36 +2843,38 @@
         "</button></div></div>";
     }
 
-    if (!S.da && S.view === "district" && S.block && blockByKey[S.block]) {
-      var b = blockByKey[S.block];
-      var v = bScores()[b.k];
-      var parent = byKey[b.dk];
-      var blockMember = makeCmpMember("Block", b.k);
-      html +=
-        "<div class='card insp'>" +
-        "<button class='close' id='close-insp' aria-label='Clear block selection'>×</button>" +
-        "<h2>Block inspection</h2>" +
-        "<div class='place'>" + esc(b.n) + "<small>" + esc(parent ? parent.n : "") +
-          " · " + esc(b.s) + "</small></div>" +
-        "<div class='scoreline'><span class='bigscore'>" + fmt(v) + "</span>" +
-          (v === undefined ? "" : bandPill(v)) + "</div>" +
-        "<div class='btn-row'>" + cmpControl(blockMember, false) + "</div>" +
-        "<dl class='kv'>" +
-          "<dt>Rank</dt><dd>" + (function () {
-            var br = blockRank(b.k);
-            return br
-              ? "<b>" + br.rank + "</b> of " + br.total + " blocks with data in " +
-                esc(br.district) + ". Scoped to this district, because one administration " +
-                "drew all of its blocks. Ranks of blocks in different districts are not " +
-                "comparable — compare their scores, which share one ruler."
-              : "No rank — this block has no score in the selected scenario and period.";
-          })() + "</dd>" +
-          "<dt>Coverage</dt><dd>Complete — all 9 headline metrics valid</dd>" +
-        "</dl>" +
-        driverList(bDrivers()[b.k] || [], "Block", b.k,
-                   b.n + ", " + (parent ? parent.n : "")) +
-        unitActions("Block", b.k, b.n) +
-        "</div>";
+    if (S.daNote && !S.da) { detailHost.innerHTML = html; html = ""; }
+
+    if (!S.da && S.inspection) {
+      var inspected = makeCmpMember(S.inspection.level, S.inspection.key);
+      var facts = daArrival(inspected.level, inspected.key);
+      var isBlock = inspected.level === "Block";
+      var unit = isBlock ? blockByKey[inspected.key] : byKey[inspected.key];
+      var parentName = isBlock ? byKey[unit.dk].n : unit.s;
+      var canExplore = isLive(unit.s) && (!isBlock || S.view !== "district");
+      html += "<div class='card insp' role='region' aria-label='Place inspection'>" +
+        "<button class='close' id='close-insp' aria-label='Close inspection'>×</button>" +
+        "<h2>" + esc(inspected.level) + " inspection</h2><div class='place'>" + esc(inspected.name) +
+        "<small>" + esc(inspected.parent) + "</small></div>" +
+        "<p class='sub'>" + esc(S.bundle) + " · " + esc(D.scenario_labels[S.scenario]) + " · " +
+          esc(D.period_labels[S.period]) + "</p>" +
+        (facts ? "<div class='scoreline'><span class='bigscore'>" + fmt(facts.score) +
+          "</span>" + bandPill(facts.score) + "</div><p>Rank " + facts.rank + " of " + facts.total +
+          " " + esc(facts.scope) + " with data.</p>" : "<p>No data for this selection; no band or rank.</p>") +
+        "<div class='btn-row'>" +
+        (canExplore ? "<button class='btn' id='inspect-explore'>Explore " + esc(parentName) + "</button>" : "") +
+        cmpControl(inspected, false) + "</div>" +
+        (!isLive(unit.s) ? "<p class='sub'>Parent navigation is unavailable here: only Telangana has block data in this prototype.</p>" : "") +
+        (facts ? driverList((isBlock ? bDrivers() : dDrivers())[unit.k] || [], inspected.level, unit.k, unit.n) : "") +
+        (!isBlock ? (function () {
+          var range = cmpRange(blocksOfDistrict[unit.k] || [], bScores());
+          return range.n ? "<p class='sub'>" + range.n + " blocks with data · score range " +
+            fmt(range.lo) + "–" + fmt(range.hi) + ". The district score is not their average.</p>"
+            : "<p class='sub'>Block detail is unavailable for this district in the prototype.</p>";
+        })() : "") +
+        "<button class='btn ghost' data-act='da' data-lvl='" + escAttr(inspected.level) +
+          "' data-key='" + escAttr(inspected.key) + "' data-unit='" + escAttr(inspected.name) +
+          "'>Detailed Analysis</button></div>";
     }
 
     if (S.report) {
@@ -3047,7 +3027,13 @@
     wireCmpControls(host);
     wireActions(host);
     var c = document.getElementById("close-insp");
-    if (c) c.addEventListener("click", function () { S.block = null; S.da = null; render(); });
+    if (c) c.addEventListener("click", function () { S.inspection = null; S.block = null; S.da = null; render(); });
+    var explore = document.getElementById("inspect-explore");
+    if (explore) explore.addEventListener("click", function () {
+      var target = S.inspection;
+      if (target.level === "District") selectState(byKey[target.key].s);
+      else openDistrict(blockByKey[target.key].dk);
+    });
     var bo = document.getElementById("back-ov");
     if (bo) bo.addEventListener("click", function () { daBack(); render(); });
     var dn = document.getElementById("clear-danote");
@@ -3747,7 +3733,7 @@
       S.bundle = D.default_bundle;
       S.scenario = D.default_scenario;
       S.period = D.default_period;
-      S.view = "india"; S.state = null; S.district = null; S.block = null;
+      S.view = "india"; S.state = null; S.district = null; S.block = null; S.inspection = null;
       S.pinned = null; S.showAll = false; S.mode = "map";
       S.report = null; S.coord = null; siteDraft = null; siteCsvDraft = ""; S.local = false;
       S.ctxOpen = false; S.ctxLayer = null;
@@ -4258,23 +4244,24 @@
       document.getElementById("map-title").textContent =
         "Ranked table — " + rankingScopeLabel();
       document.getElementById("map-sub").textContent =
-        "The same " + rankingUnit(true) + " the map paints, at working density. " +
+        "The " + rankingUnit(true) + " ranked in this view, at working density. " +
         "Switch back to Map at any time; the selection is kept.";
       return;
     }
     if (S.view === "india") {
-      title = "National view — districts painted";
+      title = "Colours show district hazard scores";
       sub = "Thick State/UT boundary, thin district boundary. State/UT polygons are never " +
-            "filled. Hover reports the State/UT; only " + D.live_state + " opens.";
+            "filled. Click a district to inspect; use Explore to navigate.";
     } else if (S.view === "state") {
-      title = S.state + " — blocks painted";
+      title = S.state + " — colours show block hazard scores";
       sub = "Thick district boundary, thin block boundary. Blocks are painted; districts are " +
-            "what this view ranks, hovers report and clicks open.";
+            "what this view ranks. Click a block to inspect; use Explore to navigate.";
     } else {
       title = byKey[S.district].n + " — its blocks painted";
       sub = "The same blocks on the same ruler against the same colourbar, at this district's " +
-            "extent. Select a block to open Detailed Analysis.";
+            "extent. Click a block to inspect.";
     }
+    svg.setAttribute("aria-label", S.view === "india" ? "District hazard scores; click to inspect" : "Block hazard scores; click to inspect");
     document.getElementById("map-title").textContent = title;
     document.getElementById("map-sub").textContent = sub;
   }
@@ -4290,7 +4277,7 @@
      does today. Change marker 2 records the difference that matters: in the
      product as built this selection is a filter over one map, not a move
      between views. The picker and the map are two faces of one position —
-     clicking the map updates the dropdowns, and vice versa. */
+     explicit navigation updates dropdowns; map inspection leaves them unchanged. */
   var GEOIDX = {};
 
   function admLevel() {
@@ -4308,8 +4295,8 @@
     if (!b) return;
     S.view = "district"; S.state = b.s; S.district = b.dk; S.block = b.k;
     S.showAll = false;
-    daOpen("Block", b.k, b.n + ", " + (byKey[b.dk] ? byKey[b.dk].n : ""), null);
-    render();
+    S.pinned = null;
+    inspectPlace("Block", b.k);
   }
 
   function buildGeoPanel() {
@@ -4414,7 +4401,7 @@
       lvl = "district";
     }
     /* A selected block implies block level; the radio follows the map. */
-    if (S.block && canBlock && lvl === "district") {
+    if (S.block && S.view === "district" && canBlock && lvl === "district") {
       blockRadio.checked = true;
       lvl = "block";
     }
@@ -4474,7 +4461,7 @@
     var hint = document.getElementById("geo-hint");
     if (S.view === "india") {
       hint.textContent = "India is open. Pick a State/UT to go down a level — " +
-        "or click the map.";
+        "Use the map to inspect a place.";
     } else if (S.view === "state") {
       hint.textContent = lvl === "block"
         ? S.state + " is open. Pick the district first — blocks are listed within it."
@@ -4516,6 +4503,10 @@
     LX.hi = pv.vals.length ? pv.vals[pv.vals.length - 1] : 100;
     LX.on = !!S.local && pv.vals.length > 1 && LX.hi > LX.lo;
 
+    if (S.inspection && S.inspection.scope !== [S.view, S.state, S.district].join("|")) S.inspection = null;
+    if (!S.inspection && S.block && blockByKey[S.block]) {
+      S.inspection = { level: "Block", key: S.block, scope: [S.view, S.state, S.district].join("|") };
+    }
     renderCrumbs();
     renderViewToggle();
     renderMapHead();
@@ -4555,7 +4546,7 @@
       S.bundle = b.value;
       /* Locations and futures are the durable shortlist. A bundle change only
          clears transient UI state and recomputes every visible figure. */
-      S.pinned = null; S.showAll = false; S.da = null; S.block = null;
+      S.pinned = null; S.showAll = false; S.da = null;
       hideTip();
       renderDefaultsNote();
       render();
@@ -4580,7 +4571,7 @@
     function onSliceChange() {
       S.scenario = sc.value; S.period = pe.value;
       /* geography survives; transient emphasis and the DA stub do not */
-      S.pinned = null; S.showAll = false; S.da = null; S.block = null;
+      S.pinned = null; S.showAll = false; S.da = null;
       hideTip();
       renderDefaultsNote();
       render();
@@ -4641,7 +4632,7 @@
       target: "India opens painted on public defaults, and says in as many words that they are defaults and not the user’s selections." },
     { n: 2, what: "Geography is navigation, not a filter",
       today: "One map camera flies to whatever is selected. There is no India view, State view or district view, and no way back up.",
-      target: "India → State/UT → district → block are real levels, each with its own comparison set, ranking, distribution and breadcrumb. The picker and the map stay in sync; either one moves you." },
+      target: "India → State/UT → district are navigation levels. Explicit Explore actions and geography pickers navigate; map clicks inspect without moving. A block card adds no navigation level. Existing IRT map popups are extended with explicit actions and persistence rules; linked ranking/map hover is deferred." },
     { n: 3, what: "Metric is not chosen on the screening surface",
       today: "Metric is the second gate of the cascade and must be picked before a scenario can be.",
       target: "Screening always paints the composite hazard score. A metric is reached by clicking the metric that names it, which opens Detailed Analysis already on that metric." },
@@ -4656,12 +4647,12 @@
       target: "The domain is 0–100 for every unit, Risk Domain, scenario and period. The bracket shows where the painted units fall inside it; Local contrast is an opt-in view and never the landing state." },
     { n: 7, what: "Ranking Table is the same comparison set at a different density",
       today: "Map View and Ranking Table are two destinations; the table renders over the map as a separate thing to read.",
-      target: "The table is the “view all” of exactly what the map paints — same units, same order, same scores — and a row click navigates, so switching costs nothing." },
+      target: "The table shows the full ranked cohort, which can differ from the painted level. Native Explore or Inspect buttons provide the action; clicking the row body does not navigate." },
     { n: 8, what: "Resilience Profile carries the screening answer",
-      today: "The right rail holds Saved Analysis, My Portfolio and Compare Portfolio only.",
+      today: "The Resilience Profile already shows a selected place’s score and bare rank; My Analysis holds saved analyses and the portfolio.",
       target: "The open unit’s score, band, rank, count with data, metrics, distribution and ranked lists live here. It is the “understand” step of the journey, not a filing cabinet." },
     { n: 9, what: "Add to Analysis wherever a unit is named",
-      today: "Add to Analysis is one button in the Spatial Panel, enabled only once both cascades are complete.",
+      today: "Add to Analysis already exists in the map-click information surface and Spatial Panel; the ranking table also has a portfolio action.",
       target: "Every place a unit appears — map, ranked lists, ranked table, block inspection, coordinate result — can put it in the tray, and one compare surface serves both places and futures." },
     { n: 10, what: "A coordinate lands in the same profile",
       today: "Coordinate Analysis is a separate path with its own result.",
