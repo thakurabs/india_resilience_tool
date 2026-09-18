@@ -419,11 +419,75 @@ $$\text{R95pTOT} = \frac{\text{R95p}}{\text{PRCPTOT}} \times 100 \quad (\%)$$
 
 where PRCPTOT is the annual total precipitation on wet days (≥ 1 mm). Both indices use baseline period 1990–2010.
 
-### 5.3 Drought Indices (SPI)
+### 5.3 Drought Indices: Dry Spells, Aridity, and SPI
 
-Where §5.2 captures rainfall excess, drought concerns sustained dry conditions and rainfall deficits. The published Drought Risk composite uses consecutive dry days (CDD): the longest annual run with precipitation below 1 mm/day, averaged over the analysis period. IRT also computes the **Standardised Precipitation Index** (SPI; McKee et al. 1993), which expresses accumulated monthly precipitation relative to its locally fitted distribution. SPI-3, SPI-6, and SPI-12 describe deficits over different accumulation timescales; they remain available indicators but do not enter the current thematic composite (§6.4).
+Where §5.2 captures rainfall excess, drought concerns sustained dry conditions and rainfall deficits. Drought is not a single quantity, and IRT computes three families that answer different physical questions:
 
-**Derivation**
+| Family | Physical question | Frame |
+|---|---|---|
+| Consecutive dry days (CDD) | How long does the longest rainless run last? | Absolute — days, meaning the same everywhere |
+| Aridity index (P/PET) | Over a year, how much water does the sky supply against how much the atmosphere can evaporate? | Absolute — a dimensionless ratio, meaning the same everywhere |
+| SPI-3 / SPI-6 / SPI-12 | How unusual is this accumulation for *this* place? | Relative — a departure from local climatology |
+
+The first two are absolute statements about the physical world: 152 dry days, or a supply-to-demand ratio of 0.07, mean the same thing in Rajasthan and in Kerala. SPI is a departure from each unit's own history, so a humid place having an unusually dry year and a desert having an unusually dry year register at similar SPI values. That distinction governs which indicators can carry a national composite score (→ §6.1, §6.2).
+
+**Consecutive dry days (CDD)**
+
+CDD is the longest run of consecutive days with precipitation below 1 mm within the year, averaged over the analysis period (Climdex definition; Zhang et al. 2011 — full catalogue entry in A.6). It measures *dry-spell persistence*: how long a place must go without resupply. It is the current published Drought Risk score (§6.4).
+
+Its known limitation is that it conflates aridity with seasonality. A sharply seasonal but adequately watered regime records a long dry spell for the same reason a desert does, so Nagpur (≈128 days) sits near the Thar (≈152 days) despite receiving several times the rainfall. Closing that gap is the purpose of the aridity index below.
+
+**Aridity index (P/PET)**
+
+The aridity index states the water balance directly: annual precipitation divided by annual **potential evapotranspiration** (PET), both in millimetres, so the ratio is dimensionless. PET is the water a continuously moist surface *could* evaporate given the available energy — the atmosphere's demand, set against precipitation's supply. A ratio of 1 means a year's rainfall exactly meets a year's demand; below 1 the atmosphere demands more than the sky delivers.
+
+*Potential evapotranspiration.* PET is computed with the **Hargreaves–Samani** equation as published in FAO-56 (Hargreaves and Samani 1985; Allen et al. 1998, eq. 52). FAO recommends it for precisely this data-limited case — daily maximum and minimum temperature and latitude, with no wind, humidity, or measured radiation — which is what the downscaled archive carries:
+
+$$\mathrm{PET} = 0.0023\,\bigl(T_{\text{mean}} + 17.8\bigr)\,\sqrt{T_{\max} - T_{\min}}\;R_a$$
+
+with $T_{\text{mean}} = (T_{\max} + T_{\min})/2$ by the FAO-56 definition (not daily mean temperature), and PET in mm day⁻¹.
+
+Every term is physical. $R_a$ is **extraterrestrial radiation**, the solar energy arriving at the top of the atmosphere, which depends only on latitude and day of year and is therefore computed from orbital geometry rather than from any model field (FAO-56 eqs. 21–25):
+
+$$R_a=\frac{24(60)}{\pi}\,G_{sc}\,d_r\bigl[\omega_s\sin\varphi\,\sin\delta+\cos\varphi\,\cos\delta\,\sin\omega_s\bigr]$$
+
+where $G_{sc}=0.0820$ MJ m⁻² min⁻¹ is the solar constant, $\varphi$ the latitude in radians, $\delta$ the solar declination, $d_r$ the inverse relative Earth–Sun distance, and $\omega_s$ the sunset hour angle. $R_a$ emerges in MJ m⁻² day⁻¹ and is converted into the depth of water that energy could evaporate by dividing through the latent heat of vaporisation, 2.45 MJ kg⁻¹ — a factor of 0.408. FAO-56 eq. 52 expects $R_a$ in mm day⁻¹, and omitting this conversion would inflate PET by a factor of about 2.45.
+
+The term $(T_{\text{mean}}+17.8)$ scales demand with temperature. The $\sqrt{T_{\max}-T_{\min}}$ term uses the **diurnal temperature range as a proxy for cloudiness**: under clear skies the surface heats strongly by day and radiates freely by night, so a wide daily range implies that a large share of $R_a$ actually reached the ground, while an overcast day has a narrow range. This is how the method recovers a radiation signal from temperature alone, and it is why no measured radiation field is required.
+
+Two floors are applied, both confined to conditions where PET is near zero in any case. The diurnal range is floored at zero, since a negative range can only arise from model or regridding artefacts and would leave the square root undefined; and PET itself is floored at zero, since the equation returns negative values below −17.8 °C, which within a supply-to-demand ratio would read as negative atmospheric demand. Over India both bind only in the high Himalaya in winter.
+
+The implementation is verified against the FAO-56 worked examples: $R_a$ at 20° S on day 246 computes to 32.19 MJ m⁻² day⁻¹ against the published 32.2 (Example 8), and Hargreaves reference evapotranspiration for Lyon in July to 5.04 mm day⁻¹ against the published ≈5.0 (Example 19).
+
+*Forming the ratio.* Daily PET is summed to calendar-month totals under the same ≥90% daily-coverage rule applied to precipitation in the SPI derivation below, so a month too sparse to yield a precipitation total is also too sparse to yield a PET total, and the ratio never pairs a full month of supply with a partial month of demand. Both monthly series are placed on a contiguous month axis and trimmed to whole January–December years; a year contributes only where it carries twelve finite months on both sides:
+
+$$\text{P/PET}_{y}=\frac{\sum_{m=1}^{12} P_{m,y}}{\sum_{m=1}^{12} \mathrm{PET}_{m,y}}$$
+
+The ratio is formed **within each grid cell, before any spatial aggregation** (→ §4.1). PET is a non-linear function of temperature and latitude, so averaging temperature across a district and then computing PET would answer a different — and incorrect — question from averaging the per-cell ratios. Aggregating the finished ratio also keeps the two administrative levels mutually consistent: an area-weighted rollup of a district's block values reproduces the district value to within numerical precision (→ §8.2).
+
+*Reading the value.* Because PET is the demand of a permanently moist surface, a condition that rarely obtains, the dryland boundary sits well below 1: rainfall is seasonal and soil stores it, so a place receiving two-thirds of its annual demand still supports rainfed cropping and closed-canopy forest. The index carries the absolute UNEP/FAO desertification classes (Middleton and Thomas 1992), and it is this fixed, externally defined class structure — rather than any property of the Indian distribution — that makes the index poolable onto a national reference scale (§6.2), in the same way that 1 mm of rain or 35 °C wet-bulb anchors other metrics in this note:
+
+| Class | P/PET |
+|---|---|
+| Hyper-arid | < 0.05 |
+| Arid | 0.05 – 0.20 |
+| Semi-arid | 0.20 – 0.50 |
+| Dry sub-humid | 0.50 – 0.65 |
+| Humid | ≥ 0.65 |
+
+The index is oriented **lower-is-worse** — a low ratio is a water-scarce climate — and it is unbounded above, with humid districts running past 1 (Kerala districts fall between roughly 1.3 and 1.9). It separates regimes that CDD cannot: Nagpur at ≈0.62 (dry sub-humid) against Jaisalmer at ≈0.07 (arid) is close to a ninefold separation, where the same two places differ by a factor of 1.2 in CDD.
+
+*Two caveats, both material to interpretation.* First, **a rising annual P/PET is not a falling drought hazard.** Across the ensemble, projected Indian precipitation rises considerably faster than projected PET, because CMIP6 robustly intensifies the summer monsoon; the annual water balance therefore improves under both SSPs, including over the Thar. That is what the driving models project and the index reports it faithfully, but the projected change in Indian drought is largely *intra-seasonal* — longer dry spells within a wetter year — and no annual supply-versus-demand statistic can represent it. The index should be read as a statement of *where* water is scarce, with CDD carrying the complementary *how long without rain* signal.
+
+Second, **PET-based indices are known to overstate future drying.** PET treats atmospheric demand as purely energy-driven and takes no account of stomatal closure under elevated CO₂, which reduces actual transpiration for a given evaporative demand (Roderick et al. 2015; Milly and Dunne 2016). Any drying trend read from a PET-based index should be treated as an upper bound.
+
+*Ensemble note.* PET requires both `tasmax` and `tasmin`. One of the 24 models (IITM-ESM, §2.1) publishes neither, so the aridity index is a 23-model ensemble mean where the precipitation-only indices in this section use 24 (→ §4.3).
+
+**Standardised Precipitation Index (SPI)**
+
+IRT also computes the **Standardised Precipitation Index** (SPI; McKee et al. 1993), which expresses accumulated monthly precipitation relative to its locally fitted distribution. SPI-3, SPI-6, and SPI-12 describe deficits over different accumulation timescales; they remain available indicators but do not enter the current thematic composite (§6.4), for the reason given in §6.1 — being referenced to each unit's own climatology, they cannot place two places on one national scale.
+
+**SPI derivation**
 
 For each grid cell, the daily precipitation field (`pr`, converted to mm) is first summed to calendar-month totals — a month is retained only if at least 90% of its days carry finite values, otherwise it is set missing — yielding a contiguous monthly precipitation series trimmed to whole calendar (January–December) years. This monthly series is the input to the **Standardised Precipitation Index** computation, which IRT performs with the open-source `climate_indices` Python package (Adams 2021). Monthly totals are accumulated over rolling $k$-month windows (where $k = 3$, $6$, or $12$), and the resulting series for each cell is fitted to a two-parameter **Gamma distribution** over the calibration period 1990–2010 using the Method of Moments estimator:
 
@@ -441,7 +505,7 @@ $$\text{SPI} = \Phi^{-1}\!\bigl(H(x)\bigr)$$
 
 The Gamma parameters ($\alpha$, $\beta$, $q$) are estimated once from the 1990–2010 historical run and applied unchanged to SSP future data, preserving cross-period comparability of SPI values.
 
-**Bundle metrics**
+**SPI bundle metrics**
 
 The monthly SPI series is not used directly in composites. Two annual aggregation statistics are derived per cell, per year:
 
@@ -505,13 +569,13 @@ The six thematic bundles and the hazard dimension each captures:
 | Heat Risk | Daytime/nocturnal thermal extremes and background heat | Background means, absolute & percentile extremes, threshold-frequency, heatwave characteristics |
 | Heat Stress | Humid-heat physiological stress | Wet-bulb means/extremes and dry-heat persistence |
 | Cold Risk | Winter cold extremes and cold-spell persistence | Background cold, absolute extremes, cold-day thresholds, percentile-relative cold, cold-spell characteristics |
-| Drought Risk | Dry-spell persistence | CDD contributes to the composite; SPI-3/6/12 describe rainfall deficits separately |
+| Drought Risk | Dry-spell persistence and annual water balance | CDD contributes to the composite; the aridity index P/PET describes supply against atmospheric demand and SPI-3/6/12 describe rainfall deficits separately |
 | Extreme Rainfall \| Flash Flood Risk | Extreme precipitation and wet-spell persistence | Peak intensity, heavy-rain frequency, very-wet contribution, wet-spell persistence |
 | Riverine Flood | Static RP-100 inundation severity | Riverine flood severity, depth and extent|
 
 The indicator catalogue describes the available measures of each hazard; §6.4 identifies the indicators combined to calculate each thematic score. A bundle can contain indicators of magnitude, frequency, persistence, and departure from local climatic conditions without every indicator contributing to its composite. The contributing set is fixed for the published reference version.
 
-**Drought Risk** currently uses consecutive dry days (CDD) to describe dry-spell persistence on a common physical basis. SPI indicators describe rainfall deficits relative to local climatic conditions and remain part of the indicator catalogue, but do not contribute to this composite. The CDD score should therefore be read as dry-spell pressure, not as a comprehensive measure of drought or water availability. **Riverine Flood** also uses one contributing indicator: its published score is the JRC severity value transformed through the national ruler. Depth and extent provide additional context without contributing directly to the score.
+**Drought Risk** currently uses consecutive dry days (CDD) to describe dry-spell persistence on a common physical basis. The CDD score should therefore be read as dry-spell pressure, not as a comprehensive measure of drought or water availability; in particular it does not distinguish a seasonal climate from an arid one (§5.3). The **aridity index P/PET** is the complementary absolute measure of that missing dimension and is computed for the same geographies and slices; a forthcoming revision of this composite is expected to combine the two, and §6.4 states the contributing set for the published reference version. **SPI** indicators describe rainfall deficits relative to local climatic conditions and remain part of the indicator catalogue, but do not contribute to this composite: because each unit is scored against its own history rather than against a common physical scale, SPI cannot rank two places on the single national reference distribution that §6.2 requires. **Riverine Flood** also uses one contributing indicator: its published score is the JRC severity value transformed through the national ruler. Depth and extent provide additional context without contributing directly to the score.
 
 ### 6.2 Normalization: Frozen National Reference Distributions
 
@@ -596,7 +660,7 @@ The tables give the effective weights of the indicators used in each composite w
 |---|---:|
 | Consecutive dry days (precipitation < 1 mm/day) | 100% |
 
-The published score is CDD transformed through its frozen national ruler. The SPI event and spell indicators do not enter this composite (§6.1).
+The published score is CDD transformed through its frozen national ruler. The aridity index P/PET and the SPI event and spell indicators do not enter this composite in the current reference version (§6.1). Any change to the contributing set is published as a new reference version, and the version identifier carried with the scores is what distinguishes the two (§6.2).
 
 #### Extreme Rainfall | Flash Flood Risk
 
@@ -906,10 +970,11 @@ Abbreviations: DOY = day-of-year percentile threshold; MAM = March–May; DJF = 
 
 ### A.3 Drought Risk
 
-All SPI metrics use Gamma distribution fitted by MoM over the calibration period 1990–2010. Event/spell metrics apply the SPI < −1 threshold (moderate drought onset).
+All SPI metrics use a Gamma distribution fitted by MoM over the calibration period 1990–2010. Event/spell metrics apply the SPI < −1 threshold (moderate drought onset). The aridity index is the exception in this table: it is an absolute ratio and is standardised against no baseline at all. CDD, which determines the current published Drought Risk score, is catalogued in A.6 because it is also a sectoral input.
 
 | Label | Scale | Definition | Units | Period rollup | Bundle(s) |
 |---|---|---|---|---|---|
+| Aridity index (P/PET) | Annual | Annual precipitation total divided by annual Hargreaves–Samani potential evapotranspiration total, formed per grid cell before aggregation (§5.3); lower is drier | dimensionless | Period mean | Drought Risk |
 | SPI-3 drought events | 3 months | Mean annual count of contiguous SPI episodes below −1 | events/yr | Period mean | Drought Risk |
 | SPI-6 drought events | 6 months | As above at 6-month scale | events/yr | Period mean | Drought Risk |
 | SPI-12 drought events | 12 months | As above at 12-month scale | events/yr | Period mean | Drought Risk |
@@ -982,6 +1047,8 @@ The distinct impact bands used by the §7 rules, deduplicated across the bundles
 
 Adams, J. (2021). *climate_indices: An open source Python library providing reference implementations of commonly used climate indices* [Computer software]. https://github.com/monocongo/climate_indices
 
+Allen, R. G., Pereira, L. S., Raes, D., and Smith, M. (1998). *Crop evapotranspiration — Guidelines for computing crop water requirements.* FAO Irrigation and Drainage Paper 56. Food and Agriculture Organization of the United Nations, Rome.
+
 Anandhi, A., Frei, A., Pierson, D. C., Schneiderman, E. M., Zion, M. S., Lounsbury, D., and Matonse, A. H. (2011). Examination of change factor methodologies for climate change impact assessment. *Water Resources Research*, 47, W03501. https://doi.org/10.1029/2010WR009104
 
 Baugh, C., Colonese, J., D'Angelo, C., Dottori, F., Neal, J., Prudhomme, C., and Salamon, P. (2024). Global river flood hazard maps (Version 2.1) [Dataset]. European Commission, Joint Research Centre (JRC). https://doi.org/10.2905/JRC.VD32YWG
@@ -996,6 +1063,8 @@ Government of India (2008). *National Action Plan on Climate Change.* Prime Mini
 
 Government of India, Ministry of Finance (2018). *Economic Survey 2017–18, Volume I*, Chapter 6: "Climate, Climate Change, and Agriculture: Coping with Climate Change." Department of Economic Affairs, New Delhi.
 
+Hargreaves, G. H., and Samani, Z. A. (1985). Reference crop evapotranspiration from temperature. *Applied Engineering in Agriculture*, 1(2), 96–99. https://doi.org/10.13031/2013.26773
+
 Hawkins, E., and Sutton, R. (2012). Time of emergence of climate signals. *Geophysical Research Letters*, 39, L01702. https://doi.org/10.1029/2011GL050087
 
 IPCC (2022). *Summary for Policymakers.* In *Climate Change 2022: Impacts, Adaptation and Vulnerability* (Working Group II contribution to the Sixth Assessment Report). Cambridge University Press.
@@ -1008,11 +1077,17 @@ Maurer, E. P., Hidalgo, H. G., Das, T., Dettinger, M. D., and Cayan, D. R. (2010
 
 McKee, T. B., Doesken, N. J., and Kleist, J. (1993). The relationship of drought frequency and duration to time scales. *Proceedings of the 8th Conference on Applied Climatology*, 17–22 January, Anaheim, California. American Meteorological Society, 179–184.
 
+Middleton, N., and Thomas, D. S. G. (eds.) (1992). *World Atlas of Desertification.* United Nations Environment Programme / Edward Arnold, London.
+
+Milly, P. C. D., and Dunne, K. A. (2016). Potential evapotranspiration and continental drying. *Nature Climate Change*, 6, 946–949. https://doi.org/10.1038/nclimate3046
+
 OECD and European Commission, Joint Research Centre (2008). *Handbook on Constructing Composite Indicators: Methodology and User Guide.* OECD Publishing, Paris. https://doi.org/10.1787/9789264043466-en
 
 Raymond, C., Matthews, T., and Horton, R. M. (2020). The emergence of heat and humidity too severe for human tolerance. *Science Advances*, 6(19), eaaw1838. https://doi.org/10.1126/sciadv.aaw1838
 
 Reserve Bank of India (RBI) (2023). *Report on Currency and Finance 2022–23: Towards a Greener Cleaner India.* RBI, Mumbai.
+
+Roderick, M. L., Greve, P., and Farquhar, G. D. (2015). On the assessment of aridity with changes in atmospheric CO₂. *Water Resources Research*, 51(7), 5450–5463.
 
 Santer, B. D., Mears, C., Doutriaux, C., Caldwell, P., Gleckler, P. J., Wigley, T. M. L., Solomon, S., Gillett, N. P., Ivanova, D., Karl, T. R., Lanzante, J. R., Meehl, G. A., Stott, P. A., Taylor, K. E., Thorne, P. W., McCarthy, M. P., and Wehner, M. F. (2011). Separating signal and noise in atmospheric temperature changes: The importance of timescale. *Journal of Geophysical Research: Atmospheres*, 116, D22105. https://doi.org/10.1029/2011JD016263
 
@@ -1036,5 +1111,5 @@ Zhang, X., Alexander, L., Hegerl, G. C., Jones, P., Klein Tank, A., Peterson, T.
 
 ---
 
-*Document last updated: 2026-06-29*  
+*Document last updated: 2026-09-18*  
 *Maintained by: Abu Bakar Siddiqui Thakur*
