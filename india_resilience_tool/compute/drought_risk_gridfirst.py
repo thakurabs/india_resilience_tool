@@ -19,16 +19,24 @@ from india_resilience_tool.compute.gridfirst_spatial import (
     GridSpec,
     _assert_grid_alignment,
     _hash_paths,
+    grid_metric_cache_path,
     read_grid_metric_cache,
     subcell_idw_fill,
     write_grid_metric_cache,
 )
 from india_resilience_tool.compute.heat_risk_gridfirst import concat_years
+from india_resilience_tool.compute.evapotranspiration import (
+    extraterrestrial_radiation_mm,
+    hargreaves_pet_mm_per_day,
+    kelvin_to_celsius,
+)
 from india_resilience_tool.compute.spi_adapter import Distribution, compute_spi_climate_indices
 
 
 DROUGHT_GRIDFIRST_METHOD_VERSION = "drought-risk-v2-gridfirst-1"
 DROUGHT_MONTHLY_CUBE_METHOD_VERSION = "drought-monthly-cube-1"
+ARIDITY_GRIDFIRST_METHOD_VERSION = "aridity-index-gridfirst-1"
+ARIDITY_PET_CUBE_METHOD_VERSION = "aridity-monthly-pet-cube-1"
 DROUGHT_GRIDFIRST_SLUGS = frozenset(
     {
         "spi3_count_events_lt_minus1",
@@ -40,6 +48,10 @@ DROUGHT_GRIDFIRST_SLUGS = frozenset(
     }
 )
 DROUGHT_GRIDFIRST_ADMIN_ONLY_SLUGS = frozenset({"spi3_count_months_lt_minus1"})
+# The aridity index shares the grid-first dispatch but not the SPI machinery: it
+# needs no standardisation baseline, so it is kept in its own set and routed to
+# :func:`compute_aridity_rows_for_metric` instead.
+ARIDITY_GRIDFIRST_SLUGS = frozenset({"aridity_index_p_over_pet"})
 
 
 def is_drought_gridfirst(slug: str, level: str) -> bool:
@@ -48,8 +60,16 @@ def is_drought_gridfirst(slug: str, level: str) -> bool:
     slug_norm = str(slug or "").strip()
     level_norm = str(level or "").strip().lower()
     return level_norm in {"district", "block"} and (
-        slug_norm in DROUGHT_GRIDFIRST_SLUGS or slug_norm in DROUGHT_GRIDFIRST_ADMIN_ONLY_SLUGS
+        slug_norm in DROUGHT_GRIDFIRST_SLUGS
+        or slug_norm in DROUGHT_GRIDFIRST_ADMIN_ONLY_SLUGS
+        or slug_norm in ARIDITY_GRIDFIRST_SLUGS
     )
+
+
+def is_aridity_gridfirst(slug: str, level: str) -> bool:
+    """Return whether a slug is the aridity index, which skips the SPI baseline path."""
+
+    return str(level or "").strip().lower() in {"district", "block"} and str(slug or "").strip() in ARIDITY_GRIDFIRST_SLUGS
 
 
 def climate_indices_version() -> str:
@@ -661,6 +681,388 @@ def compute_drought_risk_rows_for_metric(
                 distribution=distribution,
                 scenario=scenario,
                 period=str(period_name),
+            )
+            period_ds = read_grid_metric_cache(period_path, expected_sidecar=period_sidecar)
+        if period_ds is None:
+            period_ds = period_rollup_grid(
+                annual_ds["value"],
+                period_name=str(period_name),
+                years=tuple(period_years),
+                rollup=rollup,
+                min_years_per_period_fraction=min_period_fraction,
+            )
+            if period_path is not None:
+                write_grid_metric_cache(period_ds, period_path, sidecar=period_sidecar)
+        values = aggregate_grid_values_with_retention(
+            period_ds["value"],
+            weights,
+            min_polygon_cell_weight_fraction=min_polygon_fraction,
+            grid=grid,
+        )
+        fills = subcell_idw_fill(period_ds["value"], weights, grid=grid)
+        year_counts = aggregate_grid_counts(
+            period_ds["years_used_count"],
+            weights,
+            min_polygon_cell_weight_fraction=min_polygon_fraction,
+            grid=grid,
+        )
+        for unit_key, (value, retained) in values.items():
+            years_used, _count_retained = year_counts.get(unit_key, (np.nan, retained))
+            fill_method = "native"
+            if unit_key in fills:
+                value, fill_method = fills[unit_key], "idw"
+            row = {
+                "period": str(period_name),
+                "value": value,
+                value_col: value,
+                "years_used_count": years_used,
+                "years_requested": int(np.nanmax(period_ds["years_requested"].values)),
+                "retained_weight_fraction": retained,
+                "climate_fill_method": fill_method,
+            }
+            _add_unit_fields(row, level=level, unit_key=unit_key)
+            period_rows.append(row)
+    return rows, period_rows
+
+
+# =============================================================================
+# Aridity index P/PET (grid-first)
+#
+# CDD answers "how long is the longest rainless run"; it says nothing about how
+# hard the atmosphere is pulling water out while that run lasts, and it barely
+# moves under warming. P/PET is the complementary statement -- annual water
+# supply against annual atmospheric demand -- and because PET rises with
+# temperature it carries the scenario signal CDD lacks. It is absolute in the
+# same sense CDD is: the UNEP/FAO class boundaries (hyper-arid, arid, semi-arid,
+# dry sub-humid) are fixed physical thresholds, not percentiles of a local
+# baseline, so the index is poolable on the national ruler.
+# =============================================================================
+
+_CELSIUS_UNIT_NAMES = {"degc", "c", "celsius", "degrees_celsius", "degreec", "deg_c"}
+_KELVIN_UNIT_NAMES = {"k", "kelvin", "degk", "degrees_kelvin"}
+
+
+def temperature_to_celsius_strict(da: xr.DataArray) -> xr.DataArray:
+    """Convert a temperature field to Celsius with strict unit parsing.
+
+    Deliberately refuses to guess. A silent Kelvin/Celsius mix-up shifts PET by
+    a factor of roughly fifteen and would still produce a plausible-looking map.
+    """
+    units = str(getattr(da, "attrs", {}).get("units", "") or "").strip().lower().replace(" ", "")
+    if units in _KELVIN_UNIT_NAMES:
+        return kelvin_to_celsius(da)
+    if units in _CELSIUS_UNIT_NAMES:
+        return da
+    raise ValueError(f"Unsupported temperature units for the aridity index: {units or '<blank>'}")
+
+
+def daily_pet_hargreaves_grid(tasmax: xr.DataArray, tasmin: xr.DataArray) -> xr.DataArray:
+    """Per-cell daily Hargreaves PET in mm/day from daily tasmax and tasmin.
+
+    Extraterrestrial radiation is derived from the grid's own latitude
+    coordinate and the calendar day, so no radiation, wind or humidity input is
+    required. The returned array carries the (time, lat, lon) shape of the
+    inputs.
+    """
+    tmax_c = temperature_to_celsius_strict(tasmax)
+    tmin_c = temperature_to_celsius_strict(tasmin)
+    if "lat" not in tmax_c.coords:
+        raise ValueError("Aridity PET requires a 'lat' coordinate; run normalize_lat_lon first")
+    ra_mm = extraterrestrial_radiation_mm(tmax_c["lat"], tmax_c["time"].dt.dayofyear)
+    return hargreaves_pet_mm_per_day(tmax_c, tmin_c, ra_mm).rename("pet")
+
+
+def daily_to_monthly_pet_totals(
+    tasmax: xr.DataArray,
+    tasmin: xr.DataArray,
+    *,
+    min_daily_coverage: float = 0.90,
+) -> xr.DataArray:
+    """Aggregate daily Hargreaves PET to monthly totals on the same coverage floor as precip.
+
+    The floor matches :func:`daily_to_monthly_totals` so a month that is too
+    sparse to give a precipitation total is also too sparse to give a PET total,
+    and the ratio never mixes a full month of supply with a partial month of
+    demand.
+    """
+    daily = daily_pet_hargreaves_grid(tasmax, tasmin)
+    totals = daily.resample(time="MS").sum(skipna=True)
+    counts = daily.resample(time="MS").count()
+    required = xr.DataArray(
+        [
+            math.ceil(min_daily_coverage * calendar.monthrange(int(t.dt.year), int(t.dt.month))[1])
+            for t in totals["time"]
+        ],
+        coords={"time": totals["time"]},
+        dims=("time",),
+    )
+    return totals.where(counts >= required)
+
+
+def aridity_pet_cube_cache_path(
+    cache_root: Path,
+    *,
+    model: str,
+    scenario: str,
+    grid_id: str,
+    years_needed: Sequence[int],
+) -> Path:
+    """Return the monthly-PET-cube cache path, keyed exactly like the precip cube."""
+    ys = [int(y) for y in years_needed]
+    span = f"{min(ys)}-{max(ys)}" if ys else "empty"
+    return Path(cache_root) / "monthly_cube" / model / grid_id / scenario / span / "pet_monthly.nc"
+
+
+def load_or_build_monthly_pet_cube(
+    *,
+    model: str,
+    scenario: str,
+    grid_id: str,
+    index_range: tuple[int, int, int, int] | None,
+    year_to_paths: Mapping[int, Mapping[str, Path]],
+    years_needed: Sequence[int],
+    min_daily_coverage: float = 0.90,
+    cache_root: Path | None = None,
+) -> xr.DataArray:
+    """Load+resample the monthly PET cube, memoized on disk beside the precip cube.
+
+    Unlike the SPI precipitation cube this takes no baseline years: the aridity
+    index is an absolute ratio and is never standardised against a reference
+    window, so only the scenario's own years are ever read.
+    """
+
+    def _build() -> xr.DataArray:
+        tasmax = concat_years(year_to_paths, "tasmax", list(years_needed), index_range=index_range)
+        tasmin = concat_years(year_to_paths, "tasmin", list(years_needed), index_range=index_range)
+        return daily_to_monthly_pet_totals(tasmax, tasmin, min_daily_coverage=min_daily_coverage)
+
+    if cache_root is None:
+        return _build()
+
+    cube_input_file_hashes = _hash_paths(
+        [p for mapping in year_to_paths.values() for p in mapping.values()]
+    )
+    sidecar = {
+        "cube_method_version": ARIDITY_PET_CUBE_METHOD_VERSION,
+        "model": model,
+        "scenario": scenario,
+        "grid_id": grid_id,
+        "index_range": list(index_range) if index_range is not None else None,
+        "min_daily_coverage": float(min_daily_coverage),
+        "years_needed": [int(y) for y in years_needed],
+        "input_file_hashes": cube_input_file_hashes,
+    }
+    path = aridity_pet_cube_cache_path(
+        Path(cache_root),
+        model=model,
+        scenario=scenario,
+        grid_id=grid_id,
+        years_needed=years_needed,
+    )
+    existing = read_grid_metric_cache(path, expected_sidecar=sidecar)
+    if os.environ.get("IRT_DEBUG", "0") != "0":
+        ys = [int(y) for y in years_needed]
+        logging.debug(
+            "[pet-cube] %s model=%s scen=%s grid=%s span=%s",
+            "HIT" if existing is not None else "MISS-build",
+            model,
+            scenario,
+            grid_id,
+            f"{min(ys)}-{max(ys)}" if ys else "empty",
+        )
+    if existing is not None:
+        return existing["pet_monthly"].rename("pet")
+    monthly = _build()
+    write_grid_metric_cache(monthly.to_dataset(name="pet_monthly"), path, sidecar=sidecar)
+    # Read-after-write so cold writer and warm readers consume byte-identical bytes.
+    served = read_grid_metric_cache(path, expected_sidecar=sidecar)
+    return served["pet_monthly"].rename("pet") if served is not None else monthly
+
+
+def annual_aridity_index_grid(
+    monthly_precip: xr.DataArray,
+    monthly_pet: xr.DataArray,
+    *,
+    min_months_per_year: int = 12,
+) -> xr.Dataset:
+    """Per-cell annual P/PET from aligned monthly precipitation and PET totals.
+
+    Both inputs are put on a contiguous month-start axis and trimmed to whole
+    Jan-Dec years before summing, so a partial first or last year can never
+    enter the ratio. A year is emitted only when both sides carry at least
+    ``min_months_per_year`` finite months; the default of 12 means an annual
+    total is a true annual total.
+    """
+    precip = _trim_to_full_calendar_years(_to_contiguous_monthly_index(monthly_precip))
+    pet = _trim_to_full_calendar_years(_to_contiguous_monthly_index(monthly_pet))
+    common = np.intersect1d(precip["time"].values, pet["time"].values)
+    if common.size == 0:
+        raise ValueError("Aridity index requires overlapping months in the precip and PET cubes")
+    precip = precip.sel(time=common)
+    pet = pet.sel(time=common)
+
+    precip_annual = precip.groupby("time.year").sum(dim="time", skipna=True)
+    pet_annual = pet.groupby("time.year").sum(dim="time", skipna=True)
+    precip_months = precip.groupby("time.year").count(dim="time")
+    pet_months = pet.groupby("time.year").count(dim="time")
+
+    complete = (precip_months >= int(min_months_per_year)) & (pet_months >= int(min_months_per_year))
+    # PET is strictly positive anywhere the sun rises; a zero or negative annual
+    # total is an artefact, and dividing by it would manufacture an infinity.
+    usable = complete & (pet_annual > 0.0)
+    aridity = (precip_annual / pet_annual).where(usable)
+    return xr.Dataset(
+        {
+            "value": aridity,
+            "precip_mm": precip_annual.where(usable),
+            "pet_mm": pet_annual.where(usable),
+            "months_used_count": np.minimum(precip_months, pet_months),
+        }
+    )
+
+
+
+def _safe_period_token(period_name: object) -> str:
+    """Filesystem-safe token for a period label used in a cache filename."""
+    return "".join(ch if ch.isalnum() else "-" for ch in str(period_name)).strip("-") or "period"
+
+
+def compute_aridity_rows_for_metric(
+    *,
+    metric: Mapping[str, object],
+    model: str,
+    scenario: str,
+    scenario_conf: Mapping[str, object],
+    year_to_paths: Mapping[int, Mapping[str, Path]],
+    weights: pd.DataFrame,
+    level: str = "district",
+    cache_root: Path | None = None,
+    index_range: tuple[int, int, int, int] | None = None,
+    grid: GridSpec | None = None,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Compute yearly and pre-rolled period rows for the grid-first aridity index.
+
+    Mirrors :func:`compute_drought_risk_rows_for_metric` exactly in shape,
+    caching and polygon aggregation, and differs only in the science: no SPI, no
+    standardisation baseline, and three source variables (pr, tasmax, tasmin)
+    instead of one.
+    """
+    params = dict(metric.get("params") or {})
+    slug = str(metric.get("slug") or "")
+    value_col = str(metric.get("value_col") or "value")
+    min_polygon_fraction = float(params.get("min_polygon_cell_weight_fraction", 0.50))
+    grid_id = str(params.get("grid_id") or "unknown-grid")
+    min_daily_coverage = float(params.get("min_daily_coverage", 0.90))
+    min_months_per_year = int(params.get("min_months_per_year", 12))
+
+    years_needed = sorted(int(y) for y in year_to_paths)
+    monthly_precip = load_or_build_monthly_cube(
+        model=model,
+        scenario=scenario,
+        grid_id=grid_id,
+        index_range=index_range,
+        baseline_year_to_paths={},
+        year_to_paths=year_to_paths,
+        years_needed=years_needed,
+        min_daily_coverage=min_daily_coverage,
+        cache_root=cache_root,
+    )
+    monthly_pet = load_or_build_monthly_pet_cube(
+        model=model,
+        scenario=scenario,
+        grid_id=grid_id,
+        index_range=index_range,
+        year_to_paths=year_to_paths,
+        years_needed=years_needed,
+        min_daily_coverage=min_daily_coverage,
+        cache_root=cache_root,
+    )
+    annual_ds = annual_aridity_index_grid(
+        monthly_precip,
+        monthly_pet,
+        min_months_per_year=min_months_per_year,
+    )
+    input_file_hashes = _hash_paths([p for mapping in year_to_paths.values() for p in mapping.values()])
+
+    if cache_root is not None:
+        for year in annual_ds["year"].values:
+            year_int = int(year)
+            if year_int not in year_to_paths:
+                continue
+            sidecar = {
+                "methodology_version": ARIDITY_GRIDFIRST_METHOD_VERSION,
+                "slug": slug,
+                "model": model,
+                "grid_id": grid_id,
+                "scenario": scenario,
+                "year": year_int,
+                "min_months_per_year": min_months_per_year,
+                "input_file_hashes": input_file_hashes,
+            }
+            path = grid_metric_cache_path(
+                Path(cache_root),
+                slug=slug,
+                model=model,
+                grid_id=grid_id,
+                scenario=scenario,
+                year=year_int,
+            )
+            if read_grid_metric_cache(path, expected_sidecar=sidecar) is None:
+                write_grid_metric_cache(annual_ds.sel(year=[year_int]), path, sidecar=sidecar)
+
+    rows: list[dict[str, object]] = []
+    annual_years = {int(y) for y in annual_ds["year"].values}
+    for year in sorted(year_to_paths):
+        if int(year) not in annual_years:
+            continue
+        annual_field = annual_ds["value"].sel(year=year)
+        values = aggregate_grid_values_with_retention(
+            annual_field,
+            weights,
+            min_polygon_cell_weight_fraction=min_polygon_fraction,
+            grid=grid,
+        )
+        fills = subcell_idw_fill(annual_field, weights, grid=grid)
+        for unit_key, (value, retained) in values.items():
+            fill_method = "native"
+            if unit_key in fills:
+                value, fill_method = fills[unit_key], "idw"
+            row = {
+                "year": int(year),
+                "value": value,
+                value_col: value,
+                "retained_weight_fraction": retained,
+                "climate_fill_method": fill_method,
+            }
+            _add_unit_fields(row, level=level, unit_key=unit_key)
+            rows.append(row)
+
+    period_rows: list[dict[str, object]] = []
+    rollup = str(params.get("period_rollup", "period_mean"))
+    min_period_fraction = float(params.get("min_years_per_period_fraction", 0.75))
+    for period_name, period_years in dict(scenario_conf.get("periods") or {}).items():
+        period_sidecar = {
+            "methodology_version": ARIDITY_GRIDFIRST_METHOD_VERSION,
+            "slug": slug,
+            "model": model,
+            "grid_id": grid_id,
+            "scenario": scenario,
+            "period": str(period_name),
+            "period_years": [int(period_years[0]), int(period_years[1])],
+            "rollup": rollup,
+            "min_years_per_period_fraction": min_period_fraction,
+            "input_file_hashes": input_file_hashes,
+        }
+        period_ds = None
+        period_path = None
+        if cache_root is not None:
+            period_path = grid_metric_cache_path(
+                Path(cache_root),
+                slug=slug,
+                model=model,
+                grid_id=grid_id,
+                scenario=scenario,
+                year=f"period_{_safe_period_token(period_name)}",
             )
             period_ds = read_grid_metric_cache(period_path, expected_sidecar=period_sidecar)
         if period_ds is None:

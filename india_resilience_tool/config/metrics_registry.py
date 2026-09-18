@@ -1682,6 +1682,39 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "group": "rain",
         "description": "Annual count of months with SPI12 below -2 (severe long-term drought persistence).",
     },
+    {
+        "name": "Aridity Index (P/PET)",
+        "slug": "aridity_index_p_over_pet",
+        "vars": ["pr", "tasmax", "tasmin"],
+        "value_col": "aridity_index_p_over_pet",
+        "periods_metric_col": "aridity_index_p_over_pet",
+        "units": "ratio",
+        # Higher P/PET is a wetter place, so a high value is a LOW drought risk.
+        # This is the same orientation SPI carries and the frozen ruler inverts.
+        "rank_higher_is_worse": False,
+        "compute": "aridity_index_p_over_pet",
+        "params": {
+            "min_daily_coverage": 0.90,
+            "min_months_per_year": 12,
+            "period_rollup": "period_mean",
+            "min_years_per_period_fraction": 0.75,
+            "min_polygon_cell_weight_fraction": 0.50,
+        },
+        "group": "rain",
+        "description": (
+            "Annual precipitation divided by annual potential evapotranspiration: water supply "
+            "against atmospheric demand. PET is Hargreaves-Samani (FAO-56 eq. 52), which needs "
+            "only daily tasmax, tasmin and latitude and is the FAO-recommended estimator when "
+            "wind, humidity and measured radiation are unavailable. The UNEP/FAO drylands classes "
+            "are fixed physical thresholds -- hyper-arid below 0.05, arid 0.05-0.20, semi-arid "
+            "0.20-0.50, dry sub-humid 0.50-0.65 -- so the index is absolute rather than referenced "
+            "to each unit's own baseline. Unlike CDD it separates aridity from seasonality: a "
+            "sharply seasonal but adequately watered regime scores far from a true desert. "
+            "Computed grid-first, then area-weighted to admin units. Requires tasmax/tasmin, so "
+            "the ensemble is 23 models rather than the 24 available for precipitation-only "
+            "metrics."
+        ),
+    },
     # {
     #     "name": "Standardised Precip-Evapotranspiration Index 3-month (SPEI3)",
     #     "slug": "spei3_drought_index",
@@ -2820,6 +2853,9 @@ DOMAINS: dict[str, list[str]] = {
         # interval soil moisture, wells and tanks must carry with no recharge.
         # Same 1mm convention as CWD in the flash-flood bundle, opposite sign.
         "pr_consecutive_dry_days_lt1mm",
+        # Supply against atmospheric demand. Separates aridity from seasonality,
+        # which CDD alone conflates.
+        "aridity_index_p_over_pet",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",

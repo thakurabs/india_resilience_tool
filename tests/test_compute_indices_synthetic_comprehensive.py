@@ -755,15 +755,25 @@ def _call_compute_for_metric(metric: dict[str, Any]) -> None:
         # Some metrics might not declare var; treat as a failure so it doesn't hide.
         raise AssertionError(f"Metric {metric.get('slug')} declares no var/vars")
 
-    if len(req_vars) == 1:
-        da, mask = _make_data_for_var(_var_spec(req_vars[0]))
-        _ = fn(da, mask, **params)
-    else:
-        da1, mask1 = _make_data_for_var(_var_spec(req_vars[0]))
-        da2, mask2 = _make_data_for_var(_var_spec(req_vars[1]))
-        # Ensure same mask (they should be identical shapes)
-        mask = mask1
-        _ = fn(da1, da2, mask, **params)
+    # Variables are passed positionally in the registry's declared order, then
+    # the mask -- the same contract the pipeline's default dispatch uses. Do not
+    # reintroduce a two-variable assumption here: the aridity index takes three.
+    arrays = [_make_data_for_var(_var_spec(name))[0] for name in req_vars]
+    mask = _make_data_for_var(_var_spec(req_vars[0]))[1]
+    try:
+        _ = fn(*arrays, mask, **params)
+    except NotImplementedError:
+        # A metric may deliberately refuse a per-unit-mask implementation because
+        # it is computed grid-first and a second implementation would answer the
+        # same question differently. The equivalent guarantee for those is that
+        # the grid-first dispatcher actually claims the slug, so the metric
+        # cannot simply be unreachable.
+        from india_resilience_tool.compute.drought_risk_gridfirst import is_drought_gridfirst
+
+        slug = str(metric.get("slug") or "")
+        assert is_drought_gridfirst(slug, "district"), (
+            f"{slug} refuses the per-mask compute but no grid-first dispatcher claims it"
+        )
 
 
 class TestBundleMetricSmokeCoverage:

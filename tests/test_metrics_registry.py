@@ -313,7 +313,12 @@ def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
 
 
 def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
-    from india_resilience_tool.compute.drought_risk_gridfirst import DROUGHT_GRIDFIRST_SLUGS, is_drought_gridfirst
+    from india_resilience_tool.compute.drought_risk_gridfirst import (
+        ARIDITY_GRIDFIRST_SLUGS,
+        DROUGHT_GRIDFIRST_SLUGS,
+        is_aridity_gridfirst,
+        is_drought_gridfirst,
+    )
 
     assert "spi3_count_events_lt_minus1" in METRICS_BY_SLUG
     assert "spi6_count_events_lt_minus1" in METRICS_BY_SLUG
@@ -332,9 +337,11 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
 
     drought_metrics = get_metrics_for_bundle("Drought Risk", spatial_family="admin", level="district")
     # CDD carries the published headline; the SPI metrics are the anomaly lens.
+    # The aridity index is the absolute water-balance statement CDD cannot make.
     assert drought_metrics == [
         "composite_drought_risk",
         "pr_consecutive_dry_days_lt1mm",
+        "aridity_index_p_over_pet",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
@@ -355,6 +362,18 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
     assert "pr_consecutive_dry_days_lt1mm" not in DROUGHT_GRIDFIRST_SLUGS
     assert is_drought_gridfirst("spi3_count_events_lt_minus1", "district") is True
     assert is_drought_gridfirst("spi3_count_events_lt_minus1", "basin") is False
+
+    # The aridity index is grid-first dispatched but is not an SPI metric: it needs
+    # no standardisation baseline, so it must stay out of DROUGHT_GRIDFIRST_SLUGS
+    # or the pipeline would resolve a baseline role it never reads.
+    aridity = METRICS_BY_SLUG["aridity_index_p_over_pet"]
+    assert aridity.vars == ("pr", "tasmax", "tasmin")
+    assert aridity.rank_higher_is_worse is False
+    assert "aridity_index_p_over_pet" not in DROUGHT_GRIDFIRST_SLUGS
+    assert ARIDITY_GRIDFIRST_SLUGS == frozenset({"aridity_index_p_over_pet"})
+    assert is_drought_gridfirst("aridity_index_p_over_pet", "district") is True
+    assert is_aridity_gridfirst("aridity_index_p_over_pet", "block") is True
+    assert is_aridity_gridfirst("spi3_count_events_lt_minus1", "district") is False
 
 
 def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:

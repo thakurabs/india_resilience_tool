@@ -12,10 +12,15 @@ from india_resilience_tool.compute.drought_risk_gridfirst import (
     _trim_to_full_calendar_years,
     aggregate_grid_counts,
     aggregate_grid_values_with_retention,
+    annual_aridity_index_grid,
     annual_spi_metric_grid,
     compute_spi_grid,
+    daily_pet_hargreaves_grid,
+    daily_to_monthly_pet_totals,
+    is_aridity_gridfirst,
     is_drought_gridfirst,
     period_rollup_grid,
+    temperature_to_celsius_strict,
 )
 from india_resilience_tool.compute.gridfirst_spatial import read_grid_metric_cache, write_grid_metric_cache
 
@@ -436,3 +441,117 @@ def test_grid_metric_cache_invalidates_when_input_file_hash_changes(tmp_path):
     different_set = dict(sidecar)
     different_set["input_file_hashes"] = {"/data/pr_2021.nc": "deadbeef"}
     assert read_grid_metric_cache(path, expected_sidecar=different_set) is None
+
+
+# ---------------------------------------------------------------------------
+# Aridity index P/PET (grid-first)
+# ---------------------------------------------------------------------------
+
+
+def _monthly(values, start="2000-01-01", *, units=None, name="x"):
+    time = pd.date_range(start, periods=len(values), freq="MS")
+    arr = np.asarray(values, dtype=float).reshape(len(values), 1, 1)
+    da = xr.DataArray(
+        arr, coords={"time": time, "lat": [20.0], "lon": [77.0]}, dims=("time", "lat", "lon"), name=name
+    )
+    if units is not None:
+        da.attrs["units"] = units
+    return da
+
+
+def _daily_temperature(days, value_k, *, units="K", start="2000-01-01"):
+    time = pd.date_range(start, periods=days, freq="D")
+    arr = np.full((days, 1, 1), float(value_k))
+    da = xr.DataArray(arr, coords={"time": time, "lat": [20.0], "lon": [77.0]}, dims=("time", "lat", "lon"))
+    da.attrs["units"] = units
+    return da
+
+
+def test_aridity_slug_is_grid_first_and_is_identified_as_its_own_family():
+    assert is_drought_gridfirst("aridity_index_p_over_pet", "district")
+    assert is_drought_gridfirst("aridity_index_p_over_pet", "block")
+    assert is_aridity_gridfirst("aridity_index_p_over_pet", "district")
+    # The SPI slugs must not be pulled into the aridity branch, which resolves no baseline.
+    assert not is_aridity_gridfirst("spi12_max_spell_lt_minus1", "district")
+    assert not is_aridity_gridfirst("aridity_index_p_over_pet", "state")
+
+
+def test_temperature_units_are_parsed_strictly_not_guessed():
+    """A silent Kelvin/Celsius mix-up shifts PET by roughly a factor of fifteen and still
+    produces a plausible-looking map, so a blank or unknown unit must fail loudly."""
+    kelvin = _daily_temperature(1, 300.0, units="K")
+    assert float(temperature_to_celsius_strict(kelvin).item()) == pytest.approx(26.85)
+
+    celsius = _daily_temperature(1, 26.85, units="degC")
+    assert float(temperature_to_celsius_strict(celsius).item()) == pytest.approx(26.85)
+
+    blank = _daily_temperature(1, 300.0, units="")
+    with pytest.raises(ValueError, match="Unsupported temperature units"):
+        temperature_to_celsius_strict(blank)
+
+    with pytest.raises(ValueError, match="Unsupported temperature units"):
+        temperature_to_celsius_strict(_daily_temperature(1, 300.0, units="fahrenheit"))
+
+
+def test_daily_pet_grid_uses_the_grids_own_latitude():
+    """PET must vary with latitude through Ra even when the temperatures are identical,
+    otherwise the whole radiation term has silently dropped out."""
+    time = pd.date_range("2000-06-15", periods=1, freq="D")
+    coords = {"time": time, "lat": [8.0, 34.0], "lon": [77.0]}
+    tmax = xr.DataArray(np.full((1, 2, 1), 308.0), coords=coords, dims=("time", "lat", "lon"))
+    tmin = xr.DataArray(np.full((1, 2, 1), 296.0), coords=coords, dims=("time", "lat", "lon"))
+    tmax.attrs["units"] = "K"
+    tmin.attrs["units"] = "K"
+    pet = daily_pet_hargreaves_grid(tmax, tmin)
+    assert float(pet.sel(lat=34.0).item()) > float(pet.sel(lat=8.0).item())
+
+
+def test_monthly_pet_totals_respect_the_same_coverage_floor_as_precipitation():
+    """A month too sparse for a precipitation total must also be too sparse for a PET
+    total, or the ratio mixes a full month of supply with a partial month of demand."""
+    tmax = _daily_temperature(31, 308.0)
+    tmin = _daily_temperature(31, 296.0)
+    full = daily_to_monthly_pet_totals(tmax, tmin, min_daily_coverage=0.90)
+    assert np.isfinite(float(full.isel(time=0).item()))
+
+    sparse_max = tmax.isel(time=slice(0, 20))
+    sparse_min = tmin.isel(time=slice(0, 20))
+    sparse = daily_to_monthly_pet_totals(sparse_max, sparse_min, min_daily_coverage=0.90)
+    assert np.isnan(float(sparse.isel(time=0).item()))
+
+
+def test_annual_aridity_index_is_annual_precipitation_over_annual_pet():
+    precip = _monthly([100.0] * 12)
+    pet = _monthly([200.0] * 12)
+    result = annual_aridity_index_grid(precip, pet)
+    assert float(result["value"].sel(year=2000).item()) == pytest.approx(1200.0 / 2400.0)
+    assert float(result["precip_mm"].sel(year=2000).item()) == pytest.approx(1200.0)
+    assert float(result["pet_mm"].sel(year=2000).item()) == pytest.approx(2400.0)
+
+
+def test_a_year_missing_a_month_on_either_side_is_not_emitted():
+    """A partial annual total silently understates supply or demand; a 11/12 year would
+    still look like a complete ratio."""
+    precip = _monthly([100.0] * 12)
+    pet = _monthly([200.0] * 12)
+    precip = precip.where(precip["time"].dt.month != 7)
+    assert np.isnan(float(annual_aridity_index_grid(precip, pet)["value"].sel(year=2000).item()))
+
+    precip_full = _monthly([100.0] * 12)
+    pet_gap = pet.where(pet["time"].dt.month != 3)
+    assert np.isnan(float(annual_aridity_index_grid(precip_full, pet_gap)["value"].sel(year=2000).item()))
+
+
+def test_zero_annual_pet_is_gated_rather_than_producing_an_infinity():
+    precip = _monthly([100.0] * 12)
+    pet = _monthly([0.0] * 12)
+    value = float(annual_aridity_index_grid(precip, pet)["value"].sel(year=2000).item())
+    assert np.isnan(value)
+
+
+def test_aridity_only_uses_whole_calendar_years():
+    """Fourteen months of input must yield one year, not two partial ones."""
+    precip = _monthly([100.0] * 14, start="1999-12-01")
+    pet = _monthly([200.0] * 14, start="1999-12-01")
+    years = [int(y) for y in annual_aridity_index_grid(precip, pet)["year"].values]
+    assert years == [2000]
