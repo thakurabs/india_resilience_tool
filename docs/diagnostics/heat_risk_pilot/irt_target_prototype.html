@@ -48,10 +48,15 @@
                 background: none; border: 0; cursor: pointer; text-decoration: underline; }
 
   /* ---------- three-zone shell ---------- */
-  .shell { position: relative; height: calc(100vh - var(--topbar)); --leftw: 44px; --rightw: 462px; }
+  /* --apl / --apr are the map's APERTURE: the collapsed left strip and the open
+     right rail. They are CONSTANTS, deliberately not --leftw / --rightw, so that
+     opening the Spatial Panel or collapsing the results rail floats over the map
+     and never moves it. (CHG-0517) */
+  .shell { position: relative; height: calc(100vh - var(--topbar));
+           --leftw: 44px; --rightw: 462px; --apl: 44px; --apr: 462px; }
   body.spatial-open .shell { --leftw: 352px; }
   aside.rail { background: var(--ground); position: absolute; top: 0; bottom: 0; z-index: 14;
-               overflow: auto; padding: 0 12px 24px; box-sizing: border-box; }
+               overflow: auto; padding: 0 12px 14px; box-sizing: border-box; }
   aside.rail.left { left: 0; width: var(--leftw); border-right: 1px solid var(--rule); }
   body:not(.spatial-open) aside.rail.left { padding: 0; overflow: hidden; }
   body:not(.spatial-open) aside.rail.left > :not(.rail-head) { display: none; }
@@ -62,19 +67,49 @@
                cursor: pointer; font: inherit; font-size: 16px; line-height: 1; color: var(--accent); flex: none; }
   body.spatial-open .sp-toggle { margin-left: auto; }
   aside.rail.right { right: 0; width: var(--rightw); border-left: 1px solid var(--rule); padding-top: 0; }
-  @media (max-width: 1500px) { .shell { --rightw: 410px; } body.spatial-open .shell { --leftw: 320px; } }
+  /* The results rail collapses to a labelled strip -- the same pattern the
+     Spatial Panel already uses. It is never made transparent: panel text over a
+     coloured map is unreadable. (CHG-0518) */
+  body.results-closed .shell { --rightw: 44px; }
+  body.results-closed aside.rail.right { padding: 8px 0; overflow: hidden;
+                                         display: flex; flex-direction: column; }
+  body.results-closed aside.rail.right > :not(.rr-strip):not(.tabs) { display: none; }
+  body.results-closed .tabs { order: -1; flex-direction: column; padding: 0; gap: 8px;
+                              background: none; position: static; }
+  body.results-closed .tabs .tab, body.results-closed .tabs .dpin.inline { display: none; }
+  body.results-closed .rr-toggle { margin: 0 auto; }
+  .rr-toggle { margin-left: auto; }
+  .rr-strip { display: none; }
+  body.results-closed .rr-strip { display: flex; flex-direction: column; align-items: center;
+                                  gap: 10px; padding: 12px 0; }
+  body.results-closed .rr-strip .rail-title { writing-mode: vertical-rl; transform: rotate(180deg);
+        font-size: 13px; font-weight: 700; color: var(--head); }
+  /* a closed strip that is holding something says so, rather than reading as
+     empty */
+  .rr-dot { display: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+            flex: none; }
+  body.results-closed.rail-has-content .rr-dot { display: block; }
+  /* a standing cue that the rail continues below the fold, shown only when it
+     actually does */
+  .shell::after { content: ""; position: absolute; right: 0; bottom: 0; width: var(--rightw);
+                  height: 30px; z-index: 15; pointer-events: none; opacity: 0;
+                  transition: opacity .18s ease;
+                  background: linear-gradient(to top, var(--ground), rgba(233,241,248,0)); }
+  body.rail-more .shell::after { opacity: 1; }
+  @media (max-width: 1500px) { .shell { --rightw: 410px; --apr: 410px; }
+                               body.spatial-open .shell { --leftw: 320px; } }
   .rail-head { display: flex; align-items: center; gap: 8px; padding: 14px 4px 10px;
                font-size: 16px; font-weight: 700; color: var(--head); position: sticky;
                top: 0; background: var(--ground); z-index: 3; }
 
-  main.stage { position: absolute; inset: 0; background: #e6edf2; }
+  main.stage { position: absolute; inset: 0; background: var(--ground); }
 
   /* ---------- cards inside the rails ---------- */
   .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px;
-          padding: 14px 16px; margin-bottom: 12px; }
-  .card > h2 { margin: 0 0 3px; font-size: 13px; text-transform: uppercase;
-               letter-spacing: .06em; color: var(--ink-3); font-weight: 650; }
-  .card > .sub { margin: 0 0 12px; font-size: 12px; color: var(--ink-3); }
+          padding: 10px 14px; margin-bottom: 8px; }
+  .card > h2 { margin: 0 0 2px; font-size: 11.5px; text-transform: uppercase;
+               letter-spacing: .05em; color: var(--ink-3); font-weight: 650; }
+  .card > .sub { margin: 0 0 8px; font-size: 12px; color: var(--ink-3); }
   .panel-card > h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; color: var(--head);
                      display: flex; align-items: center; gap: 8px; }
   .panel-card .hint { margin: -4px 0 12px; font-size: 12.5px; color: var(--ink-2); }
@@ -101,28 +136,70 @@
   /* ---------- filter panel, floating over the map ---------- */
   /* The filter panel floats above the ranked table too: switching view must
      never put the bundle, scenario and period out of reach. */
-  .filters { position: absolute; top: 12px; left: calc(var(--leftw) + 16px); right: calc(var(--rightw) + 16px); z-index: 12;
-             background: rgba(240,246,251,.97); border: 1px solid #cadbeb; border-radius: 8px;
-             padding: 12px 16px 6px; box-shadow: 0 2px 10px rgba(16,40,61,.10); }
-  .filters > h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; color: var(--head);
-                  display: flex; align-items: center; }
+  /* One thin capsule. It still states the three current choices and they stay
+     editable in it -- a collapsed control the user cannot reach is worse than a
+     tall one. (CHG-0518) */
+  .filters { position: absolute; top: 12px; left: calc(var(--leftw) + 16px); right: calc(var(--apr) + 16px); z-index: 12;
+             border: 1px solid #cadbeb; border-radius: 21px; padding: 4px 8px 4px 14px; }
+  .filters .f-row { display: flex; align-items: center; flex-wrap: nowrap; gap: 12px;
+                    min-width: 0; }
+  .filters .f-awake { display: flex; align-items: baseline; gap: 9px; margin: 3px 7px 2px; }
+  .filters:not(:hover):not(:focus-within) .f-awake { display: none; }
+  .filters .f-title { flex: none; font-size: 11.5px; font-weight: 650; color: var(--head);
+                      white-space: nowrap; }
   .modeswitch { margin-left: auto; display: inline-flex; border: 1px solid #c9d8e6; border-radius: 6px;
-                overflow: hidden; }
-  .modeswitch button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 11px; border: 0;
+                overflow: hidden; flex: none; }
+  .modeswitch button { white-space: nowrap; }
+  .modeswitch button { font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border: 0;
                        background: #fff; color: var(--accent); cursor: pointer; }
   .modeswitch button[aria-pressed="true"] { background: var(--accent); color: #fff; cursor: default; }
   .modeswitch button:disabled { color: var(--ink-3); cursor: not-allowed; }
   body:not(.da-on) .filters .da-only { display: none; }
-  .filters .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
-  .filters .primary-filters { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 0 12px; }
-  .primary-filters .fld { min-width: 0; }
-  .filters .defaults-note { margin: 2px 0 6px; font-size: 11.5px; color: var(--ink-2);
-                            line-height: 1.45; }
+  /* Detailed Analysis puts six boxes in the capsule instead of three. They are
+     allowed a second line there rather than being crushed to nothing -- two
+     lines in the dense mode, one in the screening mode. */
+  body.da-on .filters .fgrid { flex-wrap: wrap; }
+  body.da-on .filters .fld select { max-width: 160px; }
+  .filters .fgrid { display: flex; align-items: center; flex-wrap: nowrap; gap: 12px;
+                    flex: 1 1 auto; min-width: 0; }
+  .filters .fld { display: flex; align-items: center; gap: 7px; margin: 0; min-width: 0;
+                  flex: 0 1 auto; }
+  .filters .fld > label { margin: 0; font-size: 11px; font-weight: 650; color: var(--ink-3);
+                          white-space: nowrap; flex: none; gap: 4px; }
+  /* content-sized, not a fixed third of the bar: the box is as wide as the
+     longest thing it must show */
+  .filters .fld select { width: auto; max-width: 250px; font-size: 12.5px; padding: 3px 6px;
+                         border-radius: 5px; background: rgba(255,255,255,.9);
+                         flex: 0 1 auto; min-width: 96px; text-overflow: ellipsis; }
+  .filters .defaults-note { margin: 0; font-size: 11.5px; color: var(--ink-2);
+                            line-height: 1.4; }
   .filters .defaults-note b { color: var(--head); font-weight: 650; }
 
   /* ---------- map ---------- */
-  .mapwrap { position: absolute; inset: 0; overflow: hidden; background: #eef3f6; }
+  /* CHG-0517: the map occupies the APERTURE -- the stage minus the collapsed
+     left strip and the open right rail -- not the whole window, so no geometry
+     ever sits under a rail. Screen<->user conversion reads the map element's
+     own box, so hover, click, drag and zoom follow the aperture with no
+     arithmetic of their own. The zoom stack and the place card ride inside the
+     aperture with it. */
+  .mapwrap { position: absolute; top: 0; bottom: 0; left: var(--apl); right: var(--apr);
+             overflow: hidden; background: var(--ground); }
   svg.map { display: block; width: 100%; height: 100%; }
+
+  /* ---------- floating furniture: ONE recede rule (CHG-0518) ----------
+     The map is the floor. Everything over it is frosted and quiet when idle,
+     and becomes solid on hover, on keyboard focus, or when it has something new
+     to say (.live). One rule, so five pieces cannot drift into five
+     treatments. */
+  .furn { background: rgba(249,252,255,.58);
+          -webkit-backdrop-filter: blur(7px) saturate(1.06);
+          backdrop-filter: blur(7px) saturate(1.06);
+          border-color: rgba(202,219,235,.55); box-shadow: none;
+          transition: background .14s ease, border-color .14s ease,
+                      box-shadow .14s ease, opacity .14s ease; }
+  .furn:hover, .furn:focus-within, .furn.live {
+          background: rgba(255,255,255,.97); border-color: #cadbeb;
+          box-shadow: 0 2px 12px rgba(16,40,61,.13); }
   svg.map path { vector-effect: non-scaling-stroke; }
   .dist { stroke: var(--fine); stroke-opacity: .45; stroke-width: .45px; cursor: pointer; }
   .dist.out { fill: #e4e9ee !important; stroke-opacity: .25; cursor: default; pointer-events: none; }
@@ -152,9 +229,12 @@
 
   /* The view label and the breadcrumb ride together in the map's top-right
      corner, on the thing they describe. */
-  .map-ctxbar { position: absolute; z-index: 7; background: rgba(255,255,255,.95);
-                border: 1px solid var(--rule); border-radius: 8px; padding: 9px 12px;
-                box-shadow: 0 2px 10px rgba(16,40,61,.12); }
+  .map-ctxbar { position: absolute; z-index: 7; border: 1px solid var(--rule);
+                border-radius: 8px; padding: 6px 12px; }
+  /* Idle: the name of the place you are looking at. Hover brings the scope line
+     and the breadcrumb back. (CHG-0518) */
+  .map-ctxbar:not(:hover):not(:focus-within) .maphead .sub,
+  .map-ctxbar:not(:hover):not(:focus-within) nav.crumbs { display: none; }
   .maphead { display: flex; flex-direction: column; gap: 1px; }
   .maphead h2 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
                 color: var(--head); font-weight: 700; }
@@ -174,8 +254,14 @@
      this is parity, not a departure -- and therefore carries no change marker. */
   /* mid-height on the map's free edge: the filter bar owns the top, the
      geography card owns the bottom, and neither may cover the zoom */
-  .mapnav { position: absolute; right: calc(var(--rightw) + 16px); top: 50%; transform: translateY(-50%); z-index: 7;
-            display: flex; flex-direction: column; gap: 6px; }
+  .mapnav { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); z-index: 7;
+            display: flex; flex-direction: column; gap: 6px;
+            transition: opacity .14s ease; }
+  /* the same recede, expressed as opacity because this piece is a stack of
+     buttons with no panel of its own (CHG-0518) */
+  .mapnav:not(:hover):not(:focus-within) { opacity: .5; }
+  .mapnav:not(:hover):not(:focus-within) button,
+  .mapnav:not(:hover):not(:focus-within) .navzoom { box-shadow: none; }
   .mapnav button { width: 32px; height: 32px; display: flex; align-items: center;
                    justify-content: center; padding: 0; cursor: pointer;
                    background: rgba(255,255,255,.96); border: 1px solid var(--rule);
@@ -196,10 +282,14 @@
 
   /* ---------- legend, floating bottom-left like IRT's ---------- */
   .cbar { position: absolute; left: 16px; bottom: 16px; z-index: 6;
-          background: rgba(255,255,255,.96);
-          border: 1px solid var(--rule); border-radius: 8px; padding: 10px 14px 8px;
-          box-shadow: 0 2px 10px rgba(16,40,61,.12); }
-  .cbar-title { font-size: 12px; font-weight: 650; color: var(--head); margin-bottom: 5px; }
+          border: 1px solid var(--rule); border-radius: 8px; padding: 7px 12px 4px; }
+  /* Idle: the scale and its end values, which is the legend's whole job. Hover,
+     keyboard focus, or local contrast being ON brings the rest back -- a
+     stretched ruler must never explain itself only on hover. (CHG-0518) */
+  .cbar:not(:hover):not(:focus-within):not(.live) .cbar-foot,
+  .cbar:not(:hover):not(:focus-within):not(.live) .ctxl-row,
+  .cbar:not(:hover):not(:focus-within):not(.live) .cbar-warn { display: none; }
+  .cbar-title { font-size: 12px; font-weight: 650; color: var(--head); margin-bottom: 4px; }
   .cbar-strip { position: relative; height: 13px; border-radius: 3px; border: 1px solid #cfd6dd; }
   .cbar-bracket { position: absolute; top: -5px; height: 23px; border-left: 2px solid #16202c;
                   border-right: 2px solid #16202c; pointer-events: none; }
@@ -229,7 +319,7 @@
   .ctx-note { color: var(--warn-ink); }
 
   /* ---------- the ranked table renders as a panel over the map, as IRT's does ---------- */
-  .tableview { position: absolute; z-index: 9; left: calc(var(--leftw) + 16px); right: calc(var(--rightw) + 16px);
+  .tableview { position: absolute; z-index: 9; left: calc(var(--leftw) + 16px); right: calc(var(--apr) + 16px);
                top: 12px; bottom: 16px;
                overflow: auto; margin: 0; box-shadow: 0 4px 22px rgba(16,40,61,.18); }
   .tableview h2 { margin: 0 0 2px; }
@@ -249,7 +339,7 @@
 
   /* ---------- right rail: Resilience Profile | My Portfolio ---------- */
   .tabs { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 0;
-          background: var(--ground); padding: 12px 0 10px; }
+          background: var(--ground); padding: 8px 0; }
   .tab { font: inherit; font-size: 15px; font-weight: 650; padding: 4px 12px; border: 0;
          background: none; color: var(--ink-3); cursor: pointer; }
   .tab + .tab { border-left: 1px solid #b9cbdb; }
@@ -329,7 +419,7 @@
   .btn.wide { flex: 1 1 0; text-align: center; justify-content: center; }
 
   /* ---------- histogram ---------- */
-  .hist { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; height: 118px;
+  .hist { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; height: 78px;
           align-items: end; border-bottom: 1px solid var(--rule); position: relative; }
   .hbin { display: flex; flex-direction: column; justify-content: flex-end; height: 100%;
           cursor: pointer; background: none; border: 0; padding: 0; font: inherit; }
@@ -346,10 +436,10 @@
                letter-spacing: .05em; padding-top: 2px; }
   .bandticks span { grid-column: span 2; text-align: center; border-top: 1px solid var(--rule);
                     padding-top: 3px; }
-  .painted { font-size: 12px; color: var(--ink-2); margin-top: 12px; padding-top: 10px;
+  .painted { font-size: 12px; color: var(--ink-2); margin-top: 8px; padding-top: 8px;
              border-top: 1px dashed var(--rule); }
   .filterbar { display: flex; align-items: center; gap: 10px; font-size: 12px;
-               margin-top: 10px; color: var(--accent); }
+               margin-top: 8px; color: var(--accent); }
   .linkbtn { background: none; border: 0; font: inherit; font-size: 12px; color: var(--accent);
              cursor: pointer; padding: 0; text-decoration: underline; }
 
@@ -375,11 +465,16 @@
 
   /* ---------- ranked 5+5 lists ---------- */
   .rl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
-             margin: 14px 0 6px; font-weight: 650; font-size: 13px; color: var(--ink-2); }
+             margin: 8px 0 3px; font-weight: 650; font-size: 12.5px; color: var(--ink-2); }
   .rl-head .rl-sub { font-weight: 400; font-size: 11.5px; color: var(--ink-3); }
-  .rl-item { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 6px 7px; border-radius: 6px;
-             cursor: default; border: 1px solid transparent; }
-  .rl-item > [data-rank-open] { flex-basis: 100%; text-align: right; }
+  .rl-item { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 3px 7px;
+             border-radius: 6px; cursor: default; border: 1px solid transparent; }
+  /* One line per ranked unit. The action is a compact verb because the unit's
+     name is already on the row; the full label stays in its tooltip. This is
+     what took the rail from half again the screen height down to the screen.
+     (CHG-0518) */
+  .rl-item > [data-rank-open] { flex: none; font-size: 11.5px; white-space: nowrap; }
+  .rl-item .bandcell { flex: none; white-space: nowrap; }
   .rl-item:hover { background: #f2f7fb; border-color: #d9e4ee; }
   .rl-item .rl-rk { flex: none; width: 22px; text-align: right; color: var(--ink-3);
                     font-variant-numeric: tabular-nums; font-size: 12px; }
@@ -513,10 +608,14 @@
   [data-delta] { position: relative; }
   /* ...but a change marker must never re-position what it marks: these two
      float over the map and out-rank the generic rule above. */
+  /* The two bottom cards are sized to stay in the map's own side margins:
+     painted India occupies the middle of the aperture, so the legend and the
+     place card can float beside it instead of on top of Kerala and the
+     Nicobars. (CHG-0518) */
   main.stage > .cbar { position: absolute; left: calc(var(--leftw) + 16px); bottom: 16px; top: auto;
-                       width: min(420px, 55%); }
-  .mapwrap > .map-ctxbar { position: absolute; right: calc(var(--rightw) + 16px); bottom: 16px; top: auto;
-                           width: min(300px, 40%); }
+                       width: min(340px, 45%); }
+  .mapwrap > .map-ctxbar { position: absolute; right: 16px; bottom: 16px; top: auto;
+                           width: min(240px, 30%); }
   body.deltas-on [data-delta] { outline: 1px dashed var(--delta-line); outline-offset: 3px; }
   .dpin { position: absolute; top: -9px; left: -9px; z-index: 12; min-width: 19px; height: 19px;
           padding: 0 5px; border-radius: 999px; background: var(--delta); color: #fff;
@@ -650,12 +749,8 @@
   <!-- ============ CENTRE: one persistent map ============ -->
   <main class="stage">
 
-    <section class="filters">
-      <h3>Select Resilience Filters
-        <div class="modeswitch" role="group" aria-label="Analysis mode">
-          <button type="button" id="mode-overview" aria-pressed="true">Overview</button>
-          <button type="button" id="mode-detailed" aria-pressed="false">Detailed Analysis</button>
-        </div></h3>
+    <section class="filters furn">
+      <div class="f-row">
       <div class="fgrid primary-filters" id="primary-filters">
         <div class="fld">
           <label for="sel-bundle">Risk Domain <i class="info" title="The hazard domain the map, the ranking and every score on screen are computed from.">i</i></label>
@@ -689,7 +784,13 @@
           </select>
         </div>
       </div>
-      <p class="defaults-note" id="defaults-note"></p>
+      <div class="modeswitch" role="group" aria-label="Analysis mode">
+        <button type="button" id="mode-overview" aria-pressed="true">Overview</button>
+        <button type="button" id="mode-detailed" aria-pressed="false">Detailed Analysis</button>
+      </div>
+      </div>
+      <p class="f-awake"><span class="f-title">Select Resilience Filters</span>
+        <span class="defaults-note" id="defaults-note"></span></p>
     </section>
 
     <div class="mapwrap">
@@ -705,7 +806,7 @@
                 aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"
                 stroke-linecap="round"><path d="M1.6 5.2V1.6h3.6M10.8 1.6h3.6v3.6M14.4 10.8v3.6h-3.6M5.2 14.4H1.6v-3.6"/><rect x="5.6" y="5.6" width="4.8" height="4.8" rx="1"/></svg></button>
       </div>
-      <div class="map-ctxbar" data-delta="1">
+      <div class="map-ctxbar furn" data-delta="1">
         <div class="maphead">
           <h2 id="map-title">National view</h2>
           <span class="sub" id="map-sub"></span>
@@ -714,7 +815,7 @@
       </div>
     </div>
 
-    <div class="cbar" data-delta="6">
+    <div class="cbar furn" data-delta="6">
       <div class="cbar-title" id="cbar-title">Heat Risk · hazard score</div>
       <div class="cbar-strip" id="cbar-strip"><div class="cbar-bracket" id="cbar-bracket"></div></div>
       <div class="cbar-ticks" id="cbar-ticks"></div>
@@ -746,10 +847,16 @@
 
   <!-- ============ RIGHT: Resilience Profile | My Portfolio ============ -->
   <aside class="rail right">
+    <div class="rr-strip">
+      <span class="rail-title">Results</span>
+      <span class="rr-dot" title="This panel is holding a selection"></span>
+    </div>
     <div class="tabs" role="tablist">
       <button type="button" class="tab" id="tab-profile" role="tab" aria-selected="true">Resilience Profile</button>
       <button type="button" class="tab" id="tab-analysis" role="tab" aria-selected="false">My Portfolio</button>
       <button type="button" class="dpin inline" data-delta-for="8" title="What changed here">8</button>
+      <button type="button" class="sp-toggle rr-toggle" id="results-toggle" aria-expanded="true"
+              title="Collapse the results panel" aria-label="Collapse the results panel">&#8250;</button>
     </div>
 
     <div id="detailed-analysis" aria-live="polite"></div>
@@ -2016,6 +2123,10 @@
     if (ev.key === "Escape") { closePopup(); svg.focus({ preventScroll: true }); }
   });
   window.addEventListener("resize", positionPopup);
+  /* the capsule re-settles on a window resize: its boxes are sized from the
+     choices they show, and the row must not be left wrapped from a wider
+     layout */
+  window.addEventListener("resize", function () { syncFurniture(); });
   window.addEventListener("scroll", positionPopup, true);
 
   function showTip(html, ev) {
@@ -2855,7 +2966,7 @@
 
     var html =
       "<h2>" + (S.view === "india" ? "State/UTs ranked by area-weighted mean district score" : "Ranked " + rankingUnit(true) + " — " + esc(rankingScopeLabel())) + "</h2>" +
-      "<p class='sub'>Hazard score on the frozen national scale. Use Explore to navigate, or Inspect to open a block card.</p>";
+      "<p class='sub'>Hazard score on the frozen national scale.</p>";
 
     if (!n) {
       html += "<p class='sub'>No " + rankingUnit(true) + " in this filter.</p>";
@@ -2884,9 +2995,15 @@
 
   function rankAction(row) {
     var blocked = S.view === "india" && !isLive(row.key);
+    /* The row already carries the unit's name, so the action is a verb. The
+       full wording stays in the tooltip and the accessible name -- nothing is
+       lost to a screen reader, and the row stays on one line. (CHG-0518) */
+    var full = (S.view === "district" ? "Inspect block " : "Explore ") + row.name;
     return "<button type='button' class='linkbtn' data-rank-open='" + escAttr(row.key) +
-      "'" + (blocked ? " disabled title='Only Telangana navigation is demonstrated in this prototype'" : "") +
-      ">" + (S.view === "district" ? "Inspect block" : "Explore " + esc(row.name)) + "</button>";
+      "' aria-label='" + escAttr(full) + "' title='" +
+      escAttr(blocked ? "Only Telangana navigation is demonstrated in this prototype" : full) + "'" +
+      (blocked ? " disabled" : "") +
+      ">" + (S.view === "district" ? "Inspect" : "Explore") + " \u203a</button>";
   }
 
   function wireRankRows(host) {
@@ -4702,7 +4819,51 @@
     renderGeoPanel();
     syncNavButtons();
     renderPopup();
+    syncFurniture();
   }
+
+  /* ---------- the recede rules, driven by state (CHG-0518) ----------
+     Two things make floating furniture solid without the pointer: a legend
+     whose ruler has been stretched must keep saying so, and a collapsed results
+     strip must show that it is holding something rather than read as empty. */
+  /* A filter box in the capsule is as wide as the choice it is showing, not as
+     wide as its longest option: a fixed third of the bar wastes the map. The
+     measurement is done in the select's own font, so it survives a font
+     change. (CHG-0518) */
+  var CAPSULE_GAUGE = null;
+  function sizeCapsuleBoxes() {
+    var sels = document.querySelectorAll(".filters .primary-filters select");
+    if (!sels.length) return;
+    if (!CAPSULE_GAUGE) CAPSULE_GAUGE = document.createElement("canvas").getContext("2d");
+    Array.prototype.forEach.call(sels, function (sel) {
+      var opt = sel.options[sel.selectedIndex];
+      if (!opt) return;
+      CAPSULE_GAUGE.font = getComputedStyle(sel).font;
+      /* text, plus the padding, the border and the native arrow */
+      var w = Math.ceil(CAPSULE_GAUGE.measureText(opt.text).width) + 44;
+      sel.style.width = Math.max(72, Math.min(250, w)) + "px";
+    });
+  }
+
+  function syncFurniture() {
+    sizeCapsuleBoxes();
+    var cbar = document.querySelector(".cbar");
+    if (cbar) cbar.classList.toggle("live", !!LX.on);
+    document.body.classList.toggle("rail-has-content",
+      !!S.inspection || S.portfolio.length > 0);
+    syncRailCue();
+  }
+
+  /* The scroll cue is shown only when the rail really does continue below.
+     The change-marker script collapses the rail, so it needs this too: one
+     named hook, rather than a second copy that can drift. */
+  function syncRailCue() {
+    var rail = document.querySelector("aside.rail.right");
+    var more = !document.body.classList.contains("results-closed") &&
+      rail.scrollHeight - rail.clientHeight - rail.scrollTop > 8;
+    document.body.classList.toggle("rail-more", more);
+  }
+  window.irtSyncRailCue = syncRailCue;
 
   /* ---------- selectors ---------- */
   function buildSelectors() {
@@ -4965,6 +5126,21 @@
     spt.title = lab; spt.setAttribute("aria-label", lab);
   });
 
+
+  /* ---- the results rail collapses to a strip, exactly as the Spatial Panel
+       does. The map does not move when it happens: the aperture is fixed. ---- */
+  var rrt = document.getElementById("results-toggle");
+  rrt.addEventListener("click", function () {
+    var closed = document.body.classList.toggle("results-closed");
+    rrt.setAttribute("aria-expanded", String(!closed));
+    rrt.innerHTML = closed ? "&#8249;" : "&#8250;";
+    var lab = (closed ? "Expand" : "Collapse") + " the results panel";
+    rrt.title = lab; rrt.setAttribute("aria-label", lab);
+    window.irtSyncRailCue();
+  });
+  document.querySelector("aside.rail.right")
+    .addEventListener("scroll", function () { window.irtSyncRailCue(); });
+  window.addEventListener("resize", function () { window.irtSyncRailCue(); });
 
   /* ---- right-rail tabs ---- */
   var tabP = document.getElementById("tab-profile");
