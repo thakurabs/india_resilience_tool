@@ -111,6 +111,7 @@ from india_resilience_tool.compute.heat_stress_gridfirst import (
     stull_twb_c,
 )
 from india_resilience_tool.compute.drought_risk_gridfirst import (
+    ARIDITY_GRIDFIRST_METHOD_VERSION,
     compute_aridity_rows_for_metric,
     compute_drought_risk_rows_for_metric,
     is_aridity_gridfirst,
@@ -5857,6 +5858,9 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
     if not payload:
         return MarkerValidationStatus(valid=False, reason="missing_compute_marker")
 
+    if is_aridity_gridfirst(task.slug, task.level) and payload.get("aridity_method_version") != ARIDITY_GRIDFIRST_METHOD_VERSION:
+        return MarkerValidationStatus(valid=False, reason="compute_marker_aridity_method_mismatch")
+
     boundary_path, boundary_mtime_ns = _boundary_signature(task.level, task.state_name)
     if int(payload.get("schema_version", -1)) != COMPUTE_MARKER_SCHEMA_VERSION:
         return MarkerValidationStatus(valid=False, reason="compute_marker_schema_mismatch")
@@ -5948,6 +5952,8 @@ def ensemble_completion_marker_status(
     payload = _load_marker_json(marker_path)
     if not payload:
         return MarkerValidationStatus(valid=False, reason="missing_ensemble_marker")
+    if is_aridity_gridfirst(slug, level) and payload.get("aridity_method_version") != ARIDITY_GRIDFIRST_METHOD_VERSION:
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_aridity_method_mismatch")
 
     boundary_path, boundary_mtime_ns = _boundary_signature(level, scope_name)
     if int(payload.get("schema_version", -1)) != ENSEMBLE_MARKER_SCHEMA_VERSION:
@@ -6028,6 +6034,8 @@ def _write_task_completion_marker(task: ProcessingTask, *, output_meta: Optional
         "yearly_cleanup_policy": task.yearly_cleanup_policy,
         "completed_at": time.time(),
     }
+    if is_aridity_gridfirst(task.slug, task.level):
+        payload["aridity_method_version"] = ARIDITY_GRIDFIRST_METHOD_VERSION
     _write_marker_json(
         _task_marker_path(
             slug=task.slug,
@@ -6066,6 +6074,8 @@ def _write_ensemble_completion_marker(
         "yearly_cleanup_policy": yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level),
         "completed_at": time.time(),
     }
+    if is_aridity_gridfirst(slug, level):
+        payload["aridity_method_version"] = ARIDITY_GRIDFIRST_METHOD_VERSION
     _write_marker_json(
         _filter_aware_ensemble_marker_path(
             slug=slug,

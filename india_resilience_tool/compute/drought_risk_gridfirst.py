@@ -35,8 +35,8 @@ from india_resilience_tool.compute.spi_adapter import Distribution, compute_spi_
 
 DROUGHT_GRIDFIRST_METHOD_VERSION = "drought-risk-v2-gridfirst-1"
 DROUGHT_MONTHLY_CUBE_METHOD_VERSION = "drought-monthly-cube-1"
-ARIDITY_GRIDFIRST_METHOD_VERSION = "aridity-index-gridfirst-1"
-ARIDITY_PET_CUBE_METHOD_VERSION = "aridity-monthly-pet-cube-1"
+ARIDITY_GRIDFIRST_METHOD_VERSION = "aridity-index-gridfirst-2"
+ARIDITY_PET_CUBE_METHOD_VERSION = "aridity-monthly-pet-cube-2"
 DROUGHT_GRIDFIRST_SLUGS = frozenset(
     {
         "spi3_count_events_lt_minus1",

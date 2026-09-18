@@ -49,12 +49,19 @@ def test_zero_diurnal_range_gives_zero_demand():
     assert float(hargreaves_pet_mm_per_day(30.0, 30.0, 15.0)) == 0.0
 
 
-def test_negative_diurnal_range_is_floored_rather_than_returning_nan():
-    """Regridding artefacts can put tasmin above tasmax; sqrt of that is NaN, which would
-    silently propagate into an annual total and gate a whole district."""
-    value = float(hargreaves_pet_mm_per_day(20.0, 22.0, 15.0))
-    assert np.isfinite(value)
-    assert value == 0.0
+def test_negative_diurnal_range_is_missing_not_zero_demand():
+    """Invalid temperature ordering must not pass downstream coverage gates."""
+    assert np.isnan(float(hargreaves_pet_mm_per_day(20.0, 22.0, 15.0)))
+
+
+def test_pet_preserves_missing_and_valid_elements_in_mixed_array():
+    tmax = np.array([20.0, 30.0, 35.0, np.nan, -25.0])
+    tmin = np.array([22.0, 30.0, 20.0, 20.0, -35.0])
+    pet = hargreaves_pet_mm_per_day(tmax, tmin, 15.0)
+    assert np.isnan(pet[[0, 3]]).all()
+    assert (pet[[1, 4]] == 0).all()
+    assert pet[2] > 0
+    assert hargreaves_pet_mm_per_day(np.array([]), np.array([]), 15.0).size == 0
 
 
 def test_pet_is_floored_at_zero_in_deep_cold():

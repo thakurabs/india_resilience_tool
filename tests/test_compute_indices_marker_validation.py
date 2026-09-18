@@ -253,3 +253,45 @@ def test_preserve_compute_marker_reports_missing_yearly_files(monkeypatch) -> No
 
     assert status.valid is False
     assert status.reason == "yearly_files_missing_under_preserve_policy"
+
+
+def test_aridity_marker_requires_current_method_version(monkeypatch) -> None:
+    """A successful old run must not skip a PET-validity correction."""
+    from dataclasses import replace
+
+    task = replace(_task(), slug="aridity_index_p_over_pet")
+    monkeypatch.setattr(CMP, "_load_marker_json", lambda _path: {"schema_version": CMP.COMPUTE_MARKER_SCHEMA_VERSION})
+    status = CMP.task_completion_marker_status(task)
+    assert not status.valid
+    assert status.reason == "compute_marker_aridity_method_mismatch"
+
+
+def test_aridity_marker_writer_records_method_version(monkeypatch) -> None:
+    from dataclasses import replace
+
+    task = replace(_task(), slug="aridity_index_p_over_pet")
+    captured = {}
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda *_args: ("boundary", 123))
+    monkeypatch.setattr(CMP, "_write_marker_json", lambda path, payload: captured.update(payload))
+    CMP._write_task_completion_marker(task)
+    assert captured["aridity_method_version"] == CMP.ARIDITY_GRIDFIRST_METHOD_VERSION
+
+
+def test_aridity_ensemble_marker_requires_current_method_version(monkeypatch) -> None:
+    """Old ensembles must be rebuilt after a PET-validity correction."""
+    monkeypatch.setattr(CMP, "_load_marker_json", lambda _path: {"schema_version": CMP.ENSEMBLE_MARKER_SCHEMA_VERSION})
+    status = CMP.ensemble_completion_marker_status(
+        slug="aridity_index_p_over_pet", level="district", scope_name="Lakshadweep",
+    )
+    assert not status.valid
+    assert status.reason == "ensemble_marker_aridity_method_mismatch"
+
+
+def test_aridity_ensemble_marker_writer_records_method_version(monkeypatch) -> None:
+    captured = {}
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda *_args: ("boundary", 123))
+    monkeypatch.setattr(CMP, "_write_marker_json", lambda path, payload: captured.update(payload))
+    CMP._write_ensemble_completion_marker(
+        slug="aridity_index_p_over_pet", level="district", scope_name="Lakshadweep", expected_output_count=3,
+    )
+    assert captured["aridity_method_version"] == CMP.ARIDITY_GRIDFIRST_METHOD_VERSION

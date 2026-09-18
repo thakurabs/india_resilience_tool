@@ -555,3 +555,17 @@ def test_aridity_only_uses_whole_calendar_years():
     pet = _monthly([200.0] * 14, start="1999-12-01")
     years = [int(y) for y in annual_aridity_index_grid(precip, pet)["year"].values]
     assert years == [2000]
+
+
+@pytest.mark.parametrize("invalid_days,accepted", [(0, True), (3, True), (4, False), (31, False)])
+def test_invalid_temperature_pairs_count_as_missing_in_monthly_pet(invalid_days, accepted):
+    """January needs 28 valid days; clipped invalid days must not satisfy this."""
+    tmax = _daily_temperature(31, 308.0)
+    tmin = _daily_temperature(31, 296.0)
+    tmax.values[:invalid_days] = 295.0
+    daily = daily_pet_hargreaves_grid(tmax, tmin)
+    assert int(daily.isnull().sum()) == invalid_days
+    monthly = daily_to_monthly_pet_totals(tmax, tmin)
+    assert bool(np.isfinite(monthly.item())) == accepted
+    if accepted:
+        assert monthly.item() == pytest.approx(float(daily.sum()))

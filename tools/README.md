@@ -126,7 +126,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 
 | Script | Purpose | Run |
 |---|---|---|
-| `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers, source-inventory prewarm, optional `--skip-existing`, targeted `--overwrite` cleanup, and an immediate bootstrap banner before the heavy runtime imports | `python -m tools.pipeline.compute_indices_multiprocess --help` |
+| `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers (P/PET compute and ensemble markers require the current aridity methodology version), source-inventory prewarm, optional `--skip-existing`, targeted `--overwrite` cleanup, and an immediate bootstrap banner before the heavy runtime imports | `python -m tools.pipeline.compute_indices_multiprocess --help` |
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
 | `tools/pipeline/build_spatial_weights.py` | Build private Heat Risk v2 sparse area-overlap caches under `IRT_DATA_DIR/processed/_internal/spatial_weights/` from a boundary layer and climate grid sample; resolves defaults from the effective `--data-dir`, skips valid caches, and requires `--overwrite` to replace stale ones | `python -m tools.pipeline.build_spatial_weights --help` |
 | `tools/pipeline/build_master_metrics.py` | Build admin and hydro master CSVs plus summary sidecars; hydro levels auto-use `processed/{metric}/hydro/` | `python -m tools.pipeline.build_master_metrics --help` |

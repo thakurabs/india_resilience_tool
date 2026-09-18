@@ -104,20 +104,20 @@ def hargreaves_pet_mm_per_day(
     for this equation rather than a convenience substitution for daily mean
     temperature.
 
-    Two physical floors are applied. A negative diurnal range is not physical --
-    it only arises from model or regridding artefacts -- and would make the
-    square root undefined, so the range is floored at zero. PET itself is floored
-    at zero because the equation returns negative values below -17.8 C, which for
-    an aridity ratio would otherwise read as negative atmospheric demand. Both
-    floors bite only in the high Himalaya in winter, where PET is near zero in
-    any case.
+    A negative diurnal range is an invalid temperature pair and returns NaN,
+    rather than a valid zero-demand day. Monthly coverage gates must count it
+    as missing. An exactly zero range remains valid and returns zero PET.
+    PET itself is floored at zero for valid pairs in deep cold.
     """
-    temperature_range = np.maximum(tmax_c - tmin_c, 0.0)
+    # numpy ufuncs preserve xarray coordinates and lazy-array compatibility.
+    # Invalid ranges intentionally produce NaN without a sqrt warning.
+    with np.errstate(invalid="ignore"):
+        sqrt_range = np.sqrt(tmax_c - tmin_c)
     tmean_c = (tmax_c + tmin_c) / 2.0
     pet = (
         HARGREAVES_COEFFICIENT
         * (tmean_c + HARGREAVES_TEMPERATURE_OFFSET_C)
-        * np.sqrt(temperature_range)
+        * sqrt_range
         * ra_mm_per_day
     )
     return np.maximum(pet, 0.0)
