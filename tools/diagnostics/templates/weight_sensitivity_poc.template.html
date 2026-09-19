@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Composite weight sensitivity &mdash; proof of concept</title>
+<style>
+  :root {
+    --ink: #16191d;
+    --ink-soft: #5b636d;
+    --ink-faint: #8d949c;
+    --rule: #dfe3e8;
+    --ground: #f6f7f9;
+    --panel: #ffffff;
+    --accent: #2d5f8a;
+    --warn: #8a5a2d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 16px 48px; }
+
+  header.strip {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px;
+    padding: 12px 16px; margin-bottom: 14px;
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+  }
+  header.strip h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .01em; }
+  header.strip .chip {
+    font-size: 12px; color: var(--ink-soft);
+    background: var(--ground); border: 1px solid var(--rule);
+    border-radius: 3px; padding: 2px 8px; white-space: nowrap;
+  }
+  header.strip .spacer { flex: 1 1 auto; }
+
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 980px) { .panels { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 14px 16px 16px; display: flex; flex-direction: column;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--ink-soft); margin: 0 0 2px; font-weight: 650;
+  }
+  .panel .sub { font-size: 13px; color: var(--ink-faint); margin-bottom: 10px; }
+  .panel .headline { font-size: 18px; font-weight: 640; margin: 0 0 2px; }
+
+  .mapbox { position: relative; }
+  svg.map { width: 100%; height: auto; display: block; }
+  svg.map path { stroke: #ffffff; stroke-width: 0.12; stroke-linejoin: round; }
+  svg.map path:hover { stroke: #16191d; stroke-width: 0.45; }
+
+  .bar { margin-top: 10px; }
+  .bar .ramp { height: 10px; border-radius: 2px; border: 1px solid var(--rule); }
+  .bar .ticks {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--ink-faint); margin-top: 3px;
+  }
+  .bar .cap { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+
+  .ctl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  select, button {
+    font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--rule); border-radius: 4px; padding: 5px 8px;
+  }
+  select { max-width: 100%; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .weightbox {
+    margin-top: 10px; padding: 12px 14px;
+    background: var(--ground); border: 1px solid var(--rule); border-radius: 5px;
+  }
+  .weightbox .row { display: flex; align-items: baseline; gap: 10px; }
+  .weightbox .wval { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .weightbox .wlab { font-size: 12px; color: var(--ink-soft); }
+  input[type=range] { width: 100%; margin: 8px 0 2px; accent-color: var(--accent); }
+  .weightbox .note { font-size: 12px; color: var(--ink-soft); }
+  .weightbox .note.drift { color: var(--warn); }
+
+  .evidence {
+    margin-top: 14px; background: var(--panel);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px;
+  }
+  .evidence h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--ink-soft); margin: 0 0 10px; font-weight: 650;
+  }
+  .stats { display: flex; flex-wrap: wrap; gap: 10px; }
+  .stat {
+    flex: 1 1 150px; background: var(--ground);
+    border: 1px solid var(--rule); border-radius: 5px; padding: 9px 11px;
+  }
+  .stat .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 11px; color: var(--ink-soft); line-height: 1.35; }
+
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .heldout { margin-top: 12px; font-size: 12px; color: var(--ink-soft); }
+  .heldout ul { margin: 5px 0 0; padding-left: 18px; }
+  .heldout code { background: var(--ground); padding: 0 3px; border-radius: 2px; }
+
+  .tip {
+    position: fixed; pointer-events: none; z-index: 40; display: none;
+    background: #16191d; color: #fff; font-size: 12px; line-height: 1.45;
+    padding: 7px 9px; border-radius: 4px; max-width: 260px;
+  }
+  .tip b { font-weight: 640; }
+  footer.meta { margin-top: 16px; font-size: 11px; color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="strip">
+    <h1 id="ttl">Composite weight sensitivity</h1>
+    <span class="chip" id="chipScenario"></span>
+    <span class="chip" id="chipLevel"></span>
+    <span class="chip" id="chipRuler"></span>
+    <span class="spacer"></span>
+    <span class="chip" id="chipParity"></span>
+  </header>
+
+  <div class="panels">
+
+    <section class="panel">
+      <h2>Left &mdash; composite</h2>
+      <p class="headline" id="leftTitle"></p>
+      <p class="sub" id="leftSub"></p>
+      <div class="mapbox"><svg class="map" id="mapL"></svg></div>
+      <div class="bar">
+        <div class="ramp" id="rampL"></div>
+        <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+        <div class="cap">Published frozen ruler, domain 0&ndash;100. Grey = below the coverage gate.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Right &mdash; one component metric</h2>
+      <div class="ctl">
+        <select id="metricPick"></select>
+        <button id="modeScore" class="active">Ruler score</button>
+        <button id="modePhys">Physical units</button>
+      </div>
+      <div class="mapbox"><svg class="map" id="mapR"></svg></div>
+      <div class="bar">
+        <div class="ramp" id="rampR"></div>
+        <div class="ticks" id="ticksR"></div>
+        <div class="cap" id="capR"></div>
+      </div>
+
+      <div class="weightbox">
+        <div class="row">
+          <span class="wval" id="wVal"></span>
+          <span class="wlab" id="wLab"></span>
+        </div>
+        <input type="range" id="wSlide" min="0" max="0.4" step="0.001">
+        <div class="ctl" style="margin:6px 0 0">
+          <button id="pApproved">Approved</button>
+          <button id="pSolo">Solo</button>
+          <button id="pZero">Drop it</button>
+          <button id="pReset">Reset all</button>
+        </div>
+        <div class="note" id="wNote"></div>
+        <div class="note drift" id="wDrift"></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="evidence">
+    <h2>What this metric does to the composite</h2>
+    <div class="stats" id="stats"></div>
+    <table id="moversTbl">
+      <thead><tr>
+        <th>Moved most vs approved weights</th><th>State</th>
+        <th class="num">Approved</th><th class="num">Now</th>
+        <th class="num">&Delta; score</th><th class="num">&Delta; rank</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="heldout" id="heldout"></div>
+  </section>
+
+  <footer class="meta" id="meta"></footer>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script id="payload" type="application/json">__PAYLOAD__</script>
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("payload").textContent);
+  var SLUGS = D.slugs;
+  var N = D.units.length;
+
+  // ---- weights -----------------------------------------------------------
+  var approved = {}, live = {};
+  D.metrics.forEach(function (m) { approved[m.slug] = m.weight; live[m.slug] = m.weight; });
+  var selected = SLUGS[0];
+  var mode = "score";
+
+  function liveSum() {
+    var t = 0;
+    SLUGS.forEach(function (s) { t += live[s]; });
+    return t;
+  }
+
+  // Weighted mean of ruler scores. A unit missing a metric drops that metric's
+  // weight from BOTH numerator and denominator, matching weighted_row_score.
+  function composite(weights) {
+    var out = new Float64Array(N), cov = new Float64Array(N);
+    for (var i = 0; i < N; i++) {
+      var r = D.units[i].r, num = 0, den = 0;
+      for (var j = 0; j < SLUGS.length; j++) {
+        var v = r[j];
+        if (v === null) continue;
+        var w = weights[SLUGS[j]];
+        num += w * v; den += w;
+      }
+      out[i] = den > 0 ? num / den : NaN;
+      cov[i] = den;
+    }
+    return { score: out, weight: cov };
+  }
+
+  // ---- geometry ----------------------------------------------------------
+  var BOX = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
+  var LAT0 = 22, KX = Math.cos(LAT0 * Math.PI / 180);
+  function px(lon, lat) { return [lon * KX, -lat]; }
+
+  var paths = [];
+  D.units.forEach(function (u) {
+    var g = D.geometry[u.k];
+    if (!g) { paths.push(""); return; }
+    var polys = g.t === "Polygon" ? [g.c] : g.c, d = "";
+    for (var p = 0; p < polys.length; p++) {
+      var rings = polys[p];
+      for (var r = 0; r < rings.length; r++) {
+        var ring = rings[r];
+        for (var c = 0; c < ring.length; c++) {
+          var q = px(ring[c][0], ring[c][1]);
+          if (q[0] < BOX.x0) BOX.x0 = q[0];
+          if (q[1] < BOX.y0) BOX.y0 = q[1];
+          if (q[0] > BOX.x1) BOX.x1 = q[0];
+          if (q[1] > BOX.y1) BOX.y1 = q[1];
+          d += (c === 0 ? "M" : "L") + q[0].toFixed(4) + " " + q[1].toFixed(4);
+        }
+        d += "Z";
+      }
+    }
+    paths.push(d);
+  });
+
+  var PAD = 0.15;
+  var VB = [BOX.x0 - PAD, BOX.y0 - PAD,
+            (BOX.x1 - BOX.x0) + 2 * PAD, (BOX.y1 - BOX.y0) + 2 * PAD];
+
+  function buildMap(svgId) {
+    var svg = document.getElementById(svgId);
+    svg.setAttribute("viewBox", VB.join(" "));
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    var frag = "";
+    for (var i = 0; i < N; i++) {
+      if (!paths[i]) continue;
+      frag += '<path data-i="' + i + '" d="' + paths[i] + '"></path>';
+    }
+    svg.innerHTML = frag;
+    return svg;
+  }
+  var svgL = buildMap("mapL"), svgR = buildMap("mapR");
+
+  // ---- colour ------------------------------------------------------------
+  function rulerColour(v) {
+    if (v === null || !isFinite(v)) return D.missing_colour;
+    var i = Math.round(Math.max(0, Math.min(100, v)));
+    return D.colour_stops[i];
+  }
+  function physColour(v, lo, hi) {
+    if (v === null || !isFinite(v) || hi <= lo) return D.missing_colour;
+    var t = (v - lo) / (hi - lo);
+    var i = Math.round(Math.max(0, Math.min(1, t)) * (D.physical_ramp.length - 1));
+    return D.physical_ramp[i];
+  }
+  function rampCss(stops) {
+    return "linear-gradient(to right," + stops.join(",") + ")";
+  }
+  document.getElementById("rampL").style.background = rampCss(D.colour_stops);
+
+  function paint(svg, colours) {
+    var nodes = svg.childNodes;
+    for (var k = 0; k < nodes.length; k++) {
+      nodes[k].setAttribute("fill", colours[+nodes[k].getAttribute("data-i")]);
+    }
+  }
+
+  // ---- stats -------------------------------------------------------------
+  function ranks(arr) {
+    var idx = [];
+    for (var i = 0; i < arr.length; i++) if (isFinite(arr[i])) idx.push(i);
+    idx.sort(function (a, b) { return arr[b] - arr[a]; });
+    var out = new Float64Array(arr.length); out.fill(NaN);
+    var i2 = 0;
+    while (i2 < idx.length) {
+      var j = i2;
+      while (j + 1 < idx.length && arr[idx[j + 1]] === arr[idx[i2]]) j++;
+      var mid = (i2 + j) / 2 + 1;
+      for (var k = i2; k <= j; k++) out[idx[k]] = mid;
+      i2 = j + 1;
+    }
+    return out;
+  }
+  function spearman(a, b) {
+    var ra = ranks(a), rb = ranks(b), xs = [], ys = [];
+    for (var i = 0; i < ra.length; i++) {
+      if (isFinite(ra[i]) && isFinite(rb[i])) { xs.push(ra[i]); ys.push(rb[i]); }
+    }
+    var n = xs.length; if (n < 3) return NaN;
+    var mx = 0, my = 0, i2;
+    for (i2 = 0; i2 < n; i2++) { mx += xs[i2]; my += ys[i2]; }
+    mx /= n; my /= n;
+    var sxy = 0, sxx = 0, syy = 0;
+    for (i2 = 0; i2 < n; i2++) {
+      var dx = xs[i2] - mx, dy = ys[i2] - my;
+      sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
+    }
+    return (sxx > 0 && syy > 0) ? sxy / Math.sqrt(sxx * syy) : NaN;
+  }
+  function topOverlap(a, b, k) {
+    function top(arr) {
+      var idx = [];
+      for (var i = 0; i < arr.length; i++) if (isFinite(arr[i])) idx.push(i);
+      idx.sort(function (x, y) { return arr[y] - arr[x]; });
+      return idx.slice(0, k);
+    }
+    var A = top(a), B = {}, hit = 0;
+    top(b).forEach(function (i) { B[i] = 1; });
+    A.forEach(function (i) { if (B[i]) hit++; });
+    return hit;
+  }
+
+  // ---- render ------------------------------------------------------------
+  var base = composite(approved), baseRank = ranks(base.score), cur = base;
+
+  function fmt(v, dp) { return (v === null || !isFinite(v)) ? "—" : v.toFixed(dp); }
+
+  function metricOf(slug) {
+    for (var i = 0; i < D.metrics.length; i++) if (D.metrics[i].slug === slug) return D.metrics[i];
+    return null;
+  }
+
+  function render() {
+    cur = composite(live);
+    var gateW = D.configured_weight * D.coverage_gate;
+    var colsL = [], i;
+    for (i = 0; i < N; i++) {
+      colsL.push(cur.weight[i] >= gateW ? rulerColour(cur.score[i]) : D.missing_colour);
+    }
+    paint(svgL, colsL);
+
+    var j = SLUGS.indexOf(selected), m = metricOf(selected);
+    var vals = [], colsR = [], lo = Infinity, hi = -Infinity;
+    for (i = 0; i < N; i++) {
+      var v = mode === "score" ? D.units[i].r[j] : D.units[i].v[j];
+      vals.push(v);
+      if (v !== null && isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    }
+    for (i = 0; i < N; i++) {
+      colsR.push(mode === "score" ? rulerColour(vals[i]) : physColour(vals[i], lo, hi));
+    }
+    paint(svgR, colsR);
+
+    var rampR = document.getElementById("rampR");
+    var ticksR = document.getElementById("ticksR");
+    if (mode === "score") {
+      rampR.style.background = rampCss(D.colour_stops);
+      ticksR.innerHTML = "<span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>";
+      document.getElementById("capR").textContent =
+        "Frozen national CDF ruler for this metric, 0–100. This is the number the weight multiplies.";
+    } else {
+      rampR.style.background = rampCss(D.physical_ramp);
+      var mid = (lo + hi) / 2;
+      ticksR.innerHTML = "<span>" + fmt(lo, 1) + "</span><span>" + fmt(mid, 1) +
+        "</span><span>" + fmt(hi, 1) + "</span>";
+      document.getElementById("capR").textContent =
+        "Physical values" + (m.units ? " (" + m.units + ")" : "") +
+        ", linear over the national range. Its own ramp — the published colourbar forbids rescaling.";
+    }
+
+    // weight readout
+    var sum = liveSum(), drift = sum - D.configured_weight;
+    document.getElementById("wVal").textContent = live[selected].toFixed(3);
+    document.getElementById("wLab").textContent =
+      "weight on " + m.label + "  (approved " + approved[selected].toFixed(3) + ")";
+    document.getElementById("wSlide").value = live[selected];
+    document.getElementById("wNote").textContent =
+      "Share of the live composite: " + (100 * live[selected] / (sum || 1)).toFixed(1) +
+      "%. Other eight weights are untouched; the denominator is the live sum.";
+    document.getElementById("wDrift").textContent = Math.abs(drift) < 1e-9 ? "" :
+      "Headline weight " + D.configured_weight.toFixed(3) + " → " + sum.toFixed(3) +
+      ". The " + D.coverage_gate.toFixed(2) + " coverage gate is defined against the configured total, " +
+      "so districts near the gate can change state.";
+
+    // stats
+    var mScores = [];
+    for (i = 0; i < N; i++) mScores.push(D.units[i].r[j]);
+    var rhoMetric = spearman(mScores, Array.prototype.slice.call(cur.score));
+    var rhoChurn = spearman(Array.prototype.slice.call(base.score),
+                            Array.prototype.slice.call(cur.score));
+    var ovl = topOverlap(Array.prototype.slice.call(base.score),
+                         Array.prototype.slice.call(cur.score), 50);
+    var curRank = ranks(cur.score), maxShift = 0, maxDelta = 0;
+    for (i = 0; i < N; i++) {
+      if (isFinite(curRank[i]) && isFinite(baseRank[i])) {
+        maxShift = Math.max(maxShift, Math.abs(curRank[i] - baseRank[i]));
+      }
+      if (isFinite(cur.score[i]) && isFinite(base.score[i])) {
+        maxDelta = Math.max(maxDelta, Math.abs(cur.score[i] - base.score[i]));
+      }
+    }
+    var gated = 0;
+    for (i = 0; i < N; i++) if (cur.weight[i] < gateW) gated++;
+
+    document.getElementById("stats").innerHTML = [
+      stat(fmt(rhoMetric, 3), "Spearman &rho; of this metric alone against the live composite &mdash; how much of the ranking it already explains"),
+      stat(fmt(rhoChurn, 4), "Spearman &rho; of the live composite against the approved-weight composite"),
+      stat(ovl + " / 50", "Top-50 districts still in the top 50 after the reweighting"),
+      stat(Math.round(maxShift), "Largest rank shift, of " + N + " districts"),
+      stat(fmt(maxDelta, 2), "Largest score change, on the 0&ndash;100 ruler"),
+      stat(gated, "Districts below the coverage gate")
+    ].join("");
+
+    // movers
+    var rows = [];
+    for (i = 0; i < N; i++) {
+      if (!isFinite(cur.score[i]) || !isFinite(base.score[i])) continue;
+      rows.push({ i: i, d: cur.score[i] - base.score[i] });
+    }
+    rows.sort(function (a, b) { return Math.abs(b.d) - Math.abs(a.d); });
+    var body = "";
+    rows.slice(0, 12).forEach(function (r) {
+      var u = D.units[r.i];
+      body += "<tr><td>" + u.n + "</td><td>" + u.s + "</td>" +
+        '<td class="num">' + fmt(base.score[r.i], 1) + "</td>" +
+        '<td class="num">' + fmt(cur.score[r.i], 1) + "</td>" +
+        '<td class="num">' + (r.d >= 0 ? "+" : "") + r.d.toFixed(2) + "</td>" +
+        '<td class="num">' + (isFinite(curRank[r.i]) && isFinite(baseRank[r.i])
+          ? (baseRank[r.i] - curRank[r.i] >= 0 ? "+" : "") +
+            (baseRank[r.i] - curRank[r.i]).toFixed(0) : "—") + "</td></tr>";
+    });
+    document.querySelector("#moversTbl tbody").innerHTML =
+      body || '<tr><td colspan="6">Weights are at their approved values &mdash; nothing has moved.</td></tr>';
+  }
+
+  function stat(v, l) {
+    return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + "</div></div>";
+  }
+
+  // ---- chrome ------------------------------------------------------------
+  document.getElementById("ttl").textContent =
+    D.composite_label + " — what each metric contributes";
+  document.getElementById("chipScenario").textContent = D.scenario + " · " + D.period;
+  document.getElementById("chipLevel").textContent = N + " " + D.level + "s";
+  document.getElementById("chipRuler").textContent = D.ruler_id;
+  document.getElementById("chipParity").textContent = D.parity.checked
+    ? "matches published composite to " + D.parity.max_abs_diff.toFixed(4) + " pts (n=" + D.parity.n + ")"
+    : "published composite not available for parity check";
+  document.getElementById("leftTitle").textContent = D.composite_label;
+  document.getElementById("leftSub").textContent =
+    "Recomputed live as Σwᵢ·sᵢ / Σwᵢ over " +
+    SLUGS.length + " headline metrics, each scored through its frozen national ruler.";
+
+  var pick = document.getElementById("metricPick");
+  pick.innerHTML = D.metrics.map(function (m) {
+    return '<option value="' + m.slug + '">' + m.label + "  — " + m.group + "</option>";
+  }).join("") + D.held_out.map(function (m) {
+    return '<option disabled>' + m.label + "  — held out of the headline</option>";
+  }).join("");
+
+  document.getElementById("heldout").innerHTML =
+    "<b>Held out of the headline by design (CHG-0367b).</b> " + D.held_out.length +
+    " baseline-referenced metrics carry weight in the bundle but not in the published score, " +
+    "because the frozen national ruler publishes the absolute half only. The headline denominator is " +
+    D.configured_weight.toFixed(4) + ", not 1.0." +
+    "<ul>" + D.held_out.map(function (m) {
+      return "<li><code>" + m.slug + "</code> &mdash; " + m.label +
+        " (configured weight " + m.weight.toFixed(4) + ")</li>";
+    }).join("") + "</ul>";
+
+  document.getElementById("meta").textContent =
+    "Bundle " + D.bundle + " · composite " + D.composite_slug +
+    " · ruler " + D.ruler_id + " (" + D.ruler_version + ")" +
+    " · coverage gate " + D.coverage_gate +
+    " · diagnostic artifact, not a published map.";
+
+  // ---- interaction -------------------------------------------------------
+  pick.addEventListener("change", function () { selected = pick.value; render(); });
+
+  var slide = document.getElementById("wSlide");
+  slide.addEventListener("input", function () {
+    live[selected] = parseFloat(slide.value);
+    render();
+  });
+
+  document.getElementById("pApproved").addEventListener("click", function () {
+    live[selected] = approved[selected]; render();
+  });
+  document.getElementById("pSolo").addEventListener("click", function () {
+    SLUGS.forEach(function (s) { live[s] = (s === selected) ? approved[s] : 0; });
+    render();
+  });
+  document.getElementById("pZero").addEventListener("click", function () {
+    live[selected] = 0; render();
+  });
+  document.getElementById("pReset").addEventListener("click", function () {
+    SLUGS.forEach(function (s) { live[s] = approved[s]; });
+    render();
+  });
+
+  function setMode(m) {
+    mode = m;
+    document.getElementById("modeScore").classList.toggle("active", m === "score");
+    document.getElementById("modePhys").classList.toggle("active", m === "phys");
+    render();
+  }
+  document.getElementById("modeScore").addEventListener("click", function () { setMode("score"); });
+  document.getElementById("modePhys").addEventListener("click", function () { setMode("phys"); });
+
+  // ---- tooltip -----------------------------------------------------------
+  var tip = document.getElementById("tip");
+  function hookTip(svg, kind) {
+    svg.addEventListener("mousemove", function (ev) {
+      var t = ev.target;
+      if (t.tagName !== "path") { tip.style.display = "none"; return; }
+      var i = +t.getAttribute("data-i"), u = D.units[i], j = SLUGS.indexOf(selected);
+      var m = metricOf(selected);
+      var html = "<b>" + u.n + "</b><br>" + u.s + "<br>" +
+        D.composite_label + ": " + fmt(cur.score[i], 1) + "<br>" +
+        m.label + ": " + fmt(u.r[j], 1) + " (score)";
+      if (u.v[j] !== null) html += "<br>" + fmt(u.v[j], 2) + (m.units ? " " + m.units : "");
+      tip.innerHTML = html;
+      tip.style.display = "block";
+      tip.style.left = Math.min(ev.clientX + 14, window.innerWidth - 280) + "px";
+      tip.style.top = (ev.clientY + 14) + "px";
+    });
+    svg.addEventListener("mouseleave", function () { tip.style.display = "none"; });
+  }
+  hookTip(svgL, "L"); hookTip(svgR, "R");
+
+  // slider ceiling: a little headroom above the largest approved weight
+  var maxApproved = 0;
+  SLUGS.forEach(function (s) { maxApproved = Math.max(maxApproved, approved[s]); });
+  slide.max = Math.max(0.4, Math.ceil(maxApproved * 40) / 10);
+
+  pick.value = selected;
+  render();
+})();
+</script>
+</body>
+</html>
