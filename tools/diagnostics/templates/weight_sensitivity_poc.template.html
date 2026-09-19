@@ -5,118 +5,181 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Composite weight sensitivity &mdash; proof of concept</title>
 <style>
+  /* ============================================================
+     The map layer is the IRT target prototype's, ported verbatim in
+     look: palette, non-scaling district strokes, floating frosted
+     furniture, the .cbar with its range-in-view bracket, and the
+     +/-/fit navigation stack. The page around it stays a two-panel
+     comparison rather than the three-zone IRT shell -- a left rail
+     would cost map width and this page has no geography selector to
+     put in one. (CHG-0529)
+     ============================================================ */
   :root {
-    --ink: #16191d;
-    --ink-soft: #5b636d;
-    --ink-faint: #8d949c;
-    --rule: #dfe3e8;
-    --ground: #f6f7f9;
-    --panel: #ffffff;
-    --accent: #2d5f8a;
-    --warn: #8a5a2d;
+    --ink: #12283d; --ink-2: #3a5570; --ink-3: #7d93a8;
+    --rule: #d7e4ef; --panel: #ffffff; --ground: #e9f1f8;
+    --head: #123b60;
+    --accent: #1560a8; --accent-soft: #e3eefa;
+    --warn-bg: #fff6e6; --warn-line: #e8c98a; --warn-ink: #6b4c12;
+    --fine: #7a8794;
+    --font: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--ground);
-    color: var(--ink);
-    font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
-  }
-  .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 16px 48px; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+         font-family: var(--font); font-size: 14px; line-height: 1.5; }
+  .wrap { max-width: 1560px; margin: 0 auto; padding: 16px 16px 40px; }
 
-  header.strip {
-    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px;
-    padding: 12px 16px; margin-bottom: 14px;
-    background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
-  }
-  header.strip h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .01em; }
-  header.strip .chip {
-    font-size: 12px; color: var(--ink-soft);
-    background: var(--ground); border: 1px solid var(--rule);
-    border-radius: 3px; padding: 2px 8px; white-space: nowrap;
-  }
+  /* ---------- header strip ---------- */
+  header.strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+                 padding: 10px 16px; margin-bottom: 12px; background: #fff;
+                 border: 1px solid var(--rule); border-radius: 8px; }
+  header.strip h1 { font-size: 17px; margin: 0; font-weight: 700; color: var(--head);
+                    letter-spacing: -0.01em; }
+  header.strip .chip { font-size: 11.5px; color: var(--ink-2); background: var(--ground);
+                       border: 1px solid var(--rule); border-radius: 999px;
+                       padding: 3px 11px; white-space: nowrap; }
+  header.strip .chip.parity { color: var(--head); font-weight: 650;
+                              background: var(--accent-soft); border-color: #bcd6ef; }
   header.strip .spacer { flex: 1 1 auto; }
 
-  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  @media (max-width: 980px) { .panels { grid-template-columns: 1fr; } }
+  /* ---------- two panels ---------- */
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+  @media (max-width: 1080px) { .panels { grid-template-columns: 1fr; } }
 
-  .panel {
-    background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
-    padding: 14px 16px 16px; display: flex; flex-direction: column;
-  }
-  .panel h2 {
-    font-size: 13px; text-transform: uppercase; letter-spacing: .07em;
-    color: var(--ink-soft); margin: 0 0 2px; font-weight: 650;
-  }
-  .panel .sub { font-size: 13px; color: var(--ink-faint); margin-bottom: 10px; }
-  .panel .headline { font-size: 18px; font-weight: 640; margin: 0 0 2px; }
+  .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px;
+           padding: 12px 14px 14px; }
+  .panel > h2 { margin: 0 0 2px; font-size: 11.5px; text-transform: uppercase;
+                letter-spacing: .05em; color: var(--ink-3); font-weight: 650; }
+  .panel .headline { font-size: 17px; font-weight: 650; color: var(--head);
+                     letter-spacing: -0.01em; margin: 0 0 2px; }
+  .panel .sub { font-size: 12.5px; color: var(--ink-3); margin: 0 0 10px; line-height: 1.4; }
 
-  .mapbox { position: relative; }
-  svg.map { width: 100%; height: auto; display: block; }
-  svg.map path { stroke: #ffffff; stroke-width: 0.12; stroke-linejoin: round; }
-  svg.map path:hover { stroke: #16191d; stroke-width: 0.45; }
+  /* ---------- map ----------
+     The wrap is the map's aperture: the furniture floats inside it and
+     nothing ever sits outside the thing it describes. */
+  .mapwrap { position: relative; overflow: hidden; background: var(--ground);
+             border: 1px solid var(--rule); border-radius: 8px; max-height: 68vh; }
+  svg.map { display: block; width: 100%; height: 100%; cursor: grab; }
+  svg.map:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+  .mapwrap.panning svg.map, .mapwrap.panning svg.map path { cursor: grabbing; }
+  svg.map path { vector-effect: non-scaling-stroke; }
+  .dist { stroke: var(--fine); stroke-opacity: .45; stroke-width: .45px; cursor: pointer; }
+  .dist.hl { stroke: #2b3947; stroke-opacity: .9; stroke-width: 1.1px; }
 
-  .bar { margin-top: 10px; }
-  .bar .ramp { height: 10px; border-radius: 2px; border: 1px solid var(--rule); }
-  .bar .ticks {
-    display: flex; justify-content: space-between;
-    font-size: 11px; color: var(--ink-faint); margin-top: 3px;
-  }
-  .bar .cap { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+  /* ---------- floating furniture: ONE recede rule ----------
+     The map is the floor. Everything over it is frosted and quiet when
+     idle, and becomes solid on hover or keyboard focus. */
+  .furn { background: rgba(249,252,255,.58);
+          -webkit-backdrop-filter: blur(7px) saturate(1.06);
+          backdrop-filter: blur(7px) saturate(1.06);
+          border: 1px solid rgba(202,219,235,.55); box-shadow: none;
+          transition: background .14s ease, border-color .14s ease, box-shadow .14s ease; }
+  .furn:hover, .furn:focus-within {
+          background: rgba(255,255,255,.97); border-color: #cadbeb;
+          box-shadow: 0 2px 12px rgba(16,40,61,.13); }
 
-  .ctl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
-  select, button {
-    font: inherit; color: var(--ink); background: var(--panel);
-    border: 1px solid var(--rule); border-radius: 4px; padding: 5px 8px;
-  }
-  select { max-width: 100%; }
-  button { cursor: pointer; }
-  button:hover { border-color: var(--accent); color: var(--accent); }
-  button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* ---------- map navigation ---------- */
+  .mapnav { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 7;
+            display: flex; flex-direction: column; gap: 6px; transition: opacity .14s ease; }
+  .mapnav:not(:hover):not(:focus-within) { opacity: .5; }
+  .mapnav:not(:hover):not(:focus-within) button,
+  .mapnav:not(:hover):not(:focus-within) .navzoom { box-shadow: none; }
+  .mapnav button { width: 30px; height: 30px; display: flex; align-items: center;
+                   justify-content: center; padding: 0; cursor: pointer;
+                   background: rgba(255,255,255,.96); border: 1px solid var(--rule);
+                   border-radius: 7px; color: var(--head); font: inherit; font-size: 16px;
+                   line-height: 1; box-shadow: 0 2px 10px rgba(16,40,61,.12); }
+  .mapnav button:hover:not(:disabled) { background: #fff; border-color: var(--accent);
+                                        color: var(--accent); }
+  .mapnav button:disabled { color: var(--ink-3); opacity: .55; cursor: default; }
+  .mapnav .navfit { font-size: 13px; margin-top: 2px; }
+  .mapnav .navzoom { font-size: 10.5px; color: var(--ink-3); text-align: center;
+                     background: rgba(255,255,255,.96); border: 1px solid var(--rule);
+                     border-radius: 7px; padding: 3px 0;
+                     box-shadow: 0 2px 10px rgba(16,40,61,.12); }
 
-  .weightbox {
-    margin-top: 10px; padding: 12px 14px;
-    background: var(--ground); border: 1px solid var(--rule); border-radius: 5px;
-  }
-  .weightbox .row { display: flex; align-items: baseline; gap: 10px; }
-  .weightbox .wval { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
-  .weightbox .wlab { font-size: 12px; color: var(--ink-soft); }
-  input[type=range] { width: 100%; margin: 8px 0 2px; accent-color: var(--accent); }
-  .weightbox .note { font-size: 12px; color: var(--ink-soft); }
-  .weightbox .note.drift { color: var(--warn); }
+  /* ---------- legend, floating bottom-left like IRT's ---------- */
+  .cbar { position: absolute; left: 12px; bottom: 12px; z-index: 6;
+          border-radius: 8px; padding: 7px 12px 5px; width: 268px; max-width: calc(100% - 60px); }
+  /* Idle: the scale and its end values, which is the legend's whole job.
+     Hover or keyboard focus brings the rest back. */
+  .cbar:not(:hover):not(:focus-within) .cbar-foot { display: none; }
+  .cbar-title { font-size: 12px; font-weight: 650; color: var(--head); margin-bottom: 4px; }
+  .cbar-strip { position: relative; height: 13px; border-radius: 3px; border: 1px solid #cfd6dd; }
+  .cbar-bracket { position: absolute; top: -5px; height: 23px; border-left: 2px solid #16202c;
+                  border-right: 2px solid #16202c; pointer-events: none; }
+  .cbar-ticks { position: relative; height: 16px; font-size: 11px; color: var(--ink-3); }
+  .cbar-ticks span { position: absolute; transform: translateX(-50%); top: 2px; white-space: nowrap; }
+  .cbar-foot { font-size: 11.5px; color: var(--ink-3); margin-top: 5px; line-height: 1.5; }
+  .cbar-foot > span { display: block; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border: 1px solid #c3c9cf;
+            border-radius: 2px; vertical-align: -2px; margin-right: 5px; }
 
-  .evidence {
-    margin-top: 14px; background: var(--panel);
-    border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px;
-  }
-  .evidence h2 {
-    font-size: 13px; text-transform: uppercase; letter-spacing: .07em;
-    color: var(--ink-soft); margin: 0 0 10px; font-weight: 650;
-  }
-  .stats { display: flex; flex-wrap: wrap; gap: 10px; }
-  .stat {
-    flex: 1 1 150px; background: var(--ground);
-    border: 1px solid var(--rule); border-radius: 5px; padding: 9px 11px;
-  }
-  .stat .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
-  .stat .l { font-size: 11px; color: var(--ink-soft); line-height: 1.35; }
+  /* ---------- controls ---------- */
+  .ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  select { font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid #c9d8e6;
+           border-radius: 6px; background: #fff; color: var(--ink); max-width: 100%;
+           flex: 1 1 200px; }
+  select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 11px;
+           border-radius: 6px; border: 1px solid #c9d8e6; background: #fff;
+           color: var(--accent); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent);
+                                color: #fff; cursor: default; }
+  .modeswitch { display: inline-flex; border: 1px solid #c9d8e6; border-radius: 6px;
+                overflow: hidden; flex: none; }
+  .modeswitch button { border: 0; border-radius: 0; }
 
-  table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 13px; }
+  /* ---------- weight box ---------- */
+  .weightbox { margin-top: 10px; padding: 11px 13px; background: var(--ground);
+               border: 1px solid var(--rule); border-radius: 8px; }
+  .weightbox .row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .weightbox .wval { font-size: 26px; font-weight: 680; letter-spacing: -0.02em;
+                     line-height: 1; color: var(--head); font-variant-numeric: tabular-nums; }
+  .weightbox .wlab { font-size: 12.5px; color: var(--ink-2); }
+  input[type=range] { width: 100%; margin: 9px 0 2px; accent-color: var(--accent); cursor: pointer; }
+  .weightbox .note { font-size: 11.5px; color: var(--ink-2); line-height: 1.45; }
+  .weightbox .note.drift:not(:empty) { margin-top: 7px; padding: 7px 10px; border-radius: 6px;
+                                       background: var(--warn-bg); border: 1px solid var(--warn-line);
+                                       color: var(--warn-ink); }
+
+  /* ---------- evidence ---------- */
+  .evidence { margin-top: 12px; background: var(--panel); border: 1px solid var(--rule);
+              border-radius: 8px; padding: 12px 16px 16px; }
+  .evidence > h2 { margin: 0 0 10px; font-size: 11.5px; text-transform: uppercase;
+                   letter-spacing: .05em; color: var(--ink-3); font-weight: 650; }
+  .stats { display: flex; flex-wrap: wrap; gap: 9px; }
+  .stat { flex: 1 1 165px; background: var(--ground); border: 1px solid var(--rule);
+          border-radius: 7px; padding: 9px 11px; }
+  .stat .v { font-size: 21px; font-weight: 680; letter-spacing: -0.02em; color: var(--head);
+             font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .stat .l { font-size: 11px; color: var(--ink-2); line-height: 1.4; margin-top: 3px; }
+
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 12.5px; }
   th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
-  th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); font-weight: 600; }
+  th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+       color: var(--ink-3); font-weight: 650; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
-  .heldout { margin-top: 12px; font-size: 12px; color: var(--ink-soft); }
-  .heldout ul { margin: 5px 0 0; padding-left: 18px; }
-  .heldout code { background: var(--ground); padding: 0 3px; border-radius: 2px; }
+  .heldout { margin-top: 12px; font-size: 11.5px; color: var(--ink-2); background: var(--ground);
+             border-radius: 7px; padding: 10px 13px; }
+  .heldout b { color: var(--head); font-weight: 650; }
+  .heldout ul { margin: 6px 0 0; padding-left: 18px; }
+  .heldout code { background: #fff; border: 1px solid var(--rule); padding: 0 4px;
+                  border-radius: 3px; }
 
-  .tip {
-    position: fixed; pointer-events: none; z-index: 40; display: none;
-    background: #16191d; color: #fff; font-size: 12px; line-height: 1.45;
-    padding: 7px 9px; border-radius: 4px; max-width: 260px;
-  }
-  .tip b { font-weight: 640; }
-  footer.meta { margin-top: 16px; font-size: 11px; color: var(--ink-faint); }
+  /* ---------- tooltip ---------- */
+  #tip { position: fixed; pointer-events: none; z-index: 60; background: #16202c; color: #fff;
+         font-size: 12px; line-height: 1.5; padding: 8px 10px; border-radius: 6px;
+         max-width: 280px; opacity: 0; transition: opacity .1s ease;
+         box-shadow: 0 4px 18px rgba(16,40,61,.3); }
+  #tip b { display: block; font-size: 13px; margin-bottom: 3px; }
+  #tip .t-row { color: #c3ced9; }
+  #tip .t-row em { color: #fff; font-style: normal; font-weight: 600; }
+  #tip .t-go { color: #8fc4ff; margin-top: 4px; }
+
+  footer.meta { margin-top: 14px; font-size: 11px; color: var(--ink-3); }
 </style>
 </head>
 <body>
@@ -128,7 +191,7 @@
     <span class="chip" id="chipLevel"></span>
     <span class="chip" id="chipRuler"></span>
     <span class="spacer"></span>
-    <span class="chip" id="chipParity"></span>
+    <span class="chip parity" id="chipParity"></span>
   </header>
 
   <div class="panels">
@@ -137,26 +200,64 @@
       <h2>Left &mdash; composite</h2>
       <p class="headline" id="leftTitle"></p>
       <p class="sub" id="leftSub"></p>
-      <div class="mapbox"><svg class="map" id="mapL"></svg></div>
-      <div class="bar">
-        <div class="ramp" id="rampL"></div>
-        <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
-        <div class="cap">Published frozen ruler, domain 0&ndash;100. Grey = below the coverage gate.</div>
+      <div class="mapwrap" id="wrapL">
+        <svg class="map" id="mapL" preserveAspectRatio="xMidYMid meet" role="img"
+             tabindex="0" aria-label="Choropleth of the composite score by district"></svg>
+        <div class="mapnav" role="group" aria-label="Map navigation">
+          <button type="button" class="nav-in" title="Zoom in (+)" aria-label="Zoom in">&#43;</button>
+          <button type="button" class="nav-out" title="Zoom out (&minus;)" aria-label="Zoom out">&#8722;</button>
+          <div class="navzoom">1.0&#215;</div>
+          <button type="button" class="navfit" title="Fit India back into view (0)"
+                  aria-label="Fit to view"><svg width="14" height="14" viewBox="0 0 16 16"
+                  aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"
+                  stroke-linecap="round"><path d="M1.6 5.2V1.6h3.6M10.8 1.6h3.6v3.6M14.4 10.8v3.6h-3.6M5.2 14.4H1.6v-3.6"/><rect x="5.6" y="5.6" width="4.8" height="4.8" rx="1"/></svg></button>
+        </div>
+        <div class="cbar furn" tabindex="0">
+          <div class="cbar-title" id="cbarTitleL"></div>
+          <div class="cbar-strip" id="stripL"><div class="cbar-bracket" id="brL"></div></div>
+          <div class="cbar-ticks" id="ticksL"></div>
+          <div class="cbar-foot">
+            <span><span class="swatch" id="swL"></span>Below the coverage gate</span>
+            <span id="rangeL"></span>
+            <span>Domain fixed 0&ndash;100 &middot; never rescaled by selection</span>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="panel">
       <h2>Right &mdash; one component metric</h2>
+      <p class="headline" id="rightTitle"></p>
+      <p class="sub" id="rightSub"></p>
       <div class="ctl">
-        <select id="metricPick"></select>
-        <button id="modeScore" class="active">Ruler score</button>
-        <button id="modePhys">Physical units</button>
+        <select id="metricPick" aria-label="Component metric"></select>
+        <span class="modeswitch">
+          <button type="button" id="modeScore" aria-pressed="true">Ruler score</button>
+          <button type="button" id="modePhys" aria-pressed="false">Physical units</button>
+        </span>
       </div>
-      <div class="mapbox"><svg class="map" id="mapR"></svg></div>
-      <div class="bar">
-        <div class="ramp" id="rampR"></div>
-        <div class="ticks" id="ticksR"></div>
-        <div class="cap" id="capR"></div>
+      <div class="mapwrap" id="wrapR">
+        <svg class="map" id="mapR" preserveAspectRatio="xMidYMid meet" role="img"
+             tabindex="0" aria-label="Choropleth of the selected component metric by district"></svg>
+        <div class="mapnav" role="group" aria-label="Map navigation">
+          <button type="button" class="nav-in" title="Zoom in (+)" aria-label="Zoom in">&#43;</button>
+          <button type="button" class="nav-out" title="Zoom out (&minus;)" aria-label="Zoom out">&#8722;</button>
+          <div class="navzoom">1.0&#215;</div>
+          <button type="button" class="navfit" title="Fit India back into view (0)"
+                  aria-label="Fit to view"><svg width="14" height="14" viewBox="0 0 16 16"
+                  aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"
+                  stroke-linecap="round"><path d="M1.6 5.2V1.6h3.6M10.8 1.6h3.6v3.6M14.4 10.8v3.6h-3.6M5.2 14.4H1.6v-3.6"/><rect x="5.6" y="5.6" width="4.8" height="4.8" rx="1"/></svg></button>
+        </div>
+        <div class="cbar furn" tabindex="0">
+          <div class="cbar-title" id="cbarTitleR"></div>
+          <div class="cbar-strip" id="stripR"><div class="cbar-bracket" id="brR"></div></div>
+          <div class="cbar-ticks" id="ticksR"></div>
+          <div class="cbar-foot">
+            <span><span class="swatch" id="swR"></span>No data</span>
+            <span id="rangeR"></span>
+            <span id="domR"></span>
+          </div>
+        </div>
       </div>
 
       <div class="weightbox">
@@ -164,12 +265,12 @@
           <span class="wval" id="wVal"></span>
           <span class="wlab" id="wLab"></span>
         </div>
-        <input type="range" id="wSlide" min="0" max="0.4" step="0.001">
+        <input type="range" id="wSlide" min="0" max="0.4" step="0.001" aria-label="Weight on the selected metric">
         <div class="ctl" style="margin:6px 0 0">
-          <button id="pApproved">Approved</button>
-          <button id="pSolo">Solo</button>
-          <button id="pZero">Drop it</button>
-          <button id="pReset">Reset all</button>
+          <button type="button" id="pApproved">Approved</button>
+          <button type="button" id="pSolo">Solo</button>
+          <button type="button" id="pZero">Drop it</button>
+          <button type="button" id="pReset">Reset all</button>
         </div>
         <div class="note" id="wNote"></div>
         <div class="note drift" id="wDrift"></div>
@@ -194,7 +295,7 @@
   <footer class="meta" id="meta"></footer>
 </div>
 
-<div class="tip" id="tip"></div>
+<div id="tip" aria-hidden="true"></div>
 
 <script id="payload" type="application/json">__PAYLOAD__</script>
 <script>
@@ -215,6 +316,15 @@
     SLUGS.forEach(function (s) { t += live[s]; });
     return t;
   }
+
+  /* The coverage gate asks "was enough of the bundle actually OBSERVED here?",
+     so it is measured against the weight in play, not against the configured
+     headline total. At the approved weights the two are the same number
+     (0.6333 x 0.70) and the published contract is reproduced exactly; they part
+     company only under a hypothetical reweighting, where gating on the fixed
+     0.4433 would fail every district the moment the live sum drops below it --
+     Solo could never paint at all. (CHG-0531) */
+  function gateWeight() { return liveSum() * D.coverage_gate; }
 
   // Weighted mean of ruler scores. A unit missing a metric drops that metric's
   // weight from BOTH numerator and denominator, matching weighted_row_score.
@@ -263,22 +373,147 @@
   });
 
   var PAD = 0.15;
-  var VB = [BOX.x0 - PAD, BOX.y0 - PAD,
-            (BOX.x1 - BOX.x0) + 2 * PAD, (BOX.y1 - BOX.y0) + 2 * PAD];
+  var BASE = [BOX.x0 - PAD, BOX.y0 - PAD,
+              (BOX.x1 - BOX.x0) + 2 * PAD, (BOX.y1 - BOX.y0) + 2 * PAD];
 
-  function buildMap(svgId) {
+  function buildMap(svgId, wrapId) {
     var svg = document.getElementById(svgId);
-    svg.setAttribute("viewBox", VB.join(" "));
-    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    document.getElementById(wrapId).style.aspectRatio = (BASE[2] / BASE[3]).toFixed(4);
+    svg.setAttribute("viewBox", BASE.join(" "));
     var frag = "";
     for (var i = 0; i < N; i++) {
       if (!paths[i]) continue;
-      frag += '<path data-i="' + i + '" d="' + paths[i] + '"></path>';
+      frag += '<path class="dist" data-i="' + i + '" d="' + paths[i] + '"></path>';
     }
     svg.innerHTML = frag;
     return svg;
   }
-  var svgL = buildMap("mapL"), svgR = buildMap("mapR");
+  var svgL = buildMap("mapL", "wrapL"), svgR = buildMap("mapR", "wrapR");
+  var MAPS = [svgL, svgR];
+
+  /* ---------- pan / zoom ----------
+     ONE NAV state drives BOTH maps. Two independent zoom stacks would let the
+     panels desync, and a composite next to a component painted at different
+     extents is not a comparison. The base extent is national and fixed, so NAV
+     is a transform laid over it and "fit" is always the whole country. */
+  var NAV = { z: 1, ox: 0, oy: 0, drag: null, moved: false };
+  var NAV_MIN = 1, NAV_MAX = 16;
+
+  function viewBox() {
+    var w = BASE[2] / NAV.z, h = BASE[3] / NAV.z;
+    var mx = BASE[2] / 2, my = BASE[3] / 2;
+    // pan is bounded by the base extent's own half-width: you can look past the
+    // edge of the country, never lose it off-screen entirely
+    if (NAV.ox > mx) NAV.ox = mx;
+    if (NAV.ox < -mx) NAV.ox = -mx;
+    if (NAV.oy > my) NAV.oy = my;
+    if (NAV.oy < -my) NAV.oy = -my;
+    return [BASE[0] + mx + NAV.ox - w / 2, BASE[1] + my + NAV.oy - h / 2, w, h];
+  }
+
+  /* preserveAspectRatio="xMidYMid meet" letterboxes the viewBox inside the
+     element, so screen<->user conversion must use the FITTED scale, not the
+     element width, or a drag runs away from the pointer. */
+  function mapScale(vb, rect) {
+    return Math.min(rect.width / vb[2], rect.height / vb[3]);
+  }
+  function clientToUser(svg, cx, cy) {
+    var rect = svg.getBoundingClientRect(), vb = viewBox(), s = mapScale(vb, rect);
+    if (!(s > 0)) return null;
+    return { x: vb[0] + (cx - rect.left - (rect.width - vb[2] * s) / 2) / s,
+             y: vb[1] + (cy - rect.top - (rect.height - vb[3] * s) / 2) / s };
+  }
+
+  function applyNav() {
+    var vb = viewBox().join(" ");
+    MAPS.forEach(function (s) { s.setAttribute("viewBox", vb); });
+    var z = (Math.round(NAV.z * 10) / 10).toFixed(1) + "×";
+    Array.prototype.forEach.call(document.querySelectorAll(".navzoom"), function (el) {
+      el.textContent = z;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".nav-in"), function (el) {
+      el.disabled = NAV.z >= NAV_MAX - 1e-9;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".nav-out"), function (el) {
+      el.disabled = NAV.z <= NAV_MIN + 1e-9;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".navfit"), function (el) {
+      el.disabled = NAV.z === 1 && !NAV.ox && !NAV.oy;
+    });
+  }
+
+  function navZoom(factor, pt) {
+    var vb = viewBox(), z = NAV.z * factor;
+    if (z > NAV_MAX) z = NAV_MAX;
+    if (z < NAV_MIN) z = NAV_MIN;
+    if (Math.abs(z - NAV.z) < 1e-9) return;
+    var cx = vb[0] + vb[2] / 2, cy = vb[1] + vb[3] / 2, k = NAV.z / z;
+    if (pt) { cx = pt.x + (cx - pt.x) * k; cy = pt.y + (cy - pt.y) * k; }  // hold the
+    NAV.z = z;                                                             // pointed-at
+    NAV.ox = cx - (BASE[0] + BASE[2] / 2);                                 // place still
+    NAV.oy = cy - (BASE[1] + BASE[3] / 2);
+    applyNav();
+  }
+  function navFit() { NAV.z = 1; NAV.ox = 0; NAV.oy = 0; applyNav(); }
+
+  function wireNav(svg, wrapId) {
+    var wrap = document.getElementById(wrapId);
+    wrap.querySelector(".nav-in").addEventListener("click", function () { navZoom(1.5, null); });
+    wrap.querySelector(".nav-out").addEventListener("click", function () { navZoom(1 / 1.5, null); });
+    wrap.querySelector(".navfit").addEventListener("click", navFit);
+
+    svg.addEventListener("wheel", function (ev) {
+      ev.preventDefault();
+      navZoom(ev.deltaY < 0 ? 1.18 : 1 / 1.18, clientToUser(svg, ev.clientX, ev.clientY));
+    }, { passive: false });
+
+    svg.addEventListener("pointerdown", function (ev) {
+      if (ev.button !== 0) return;
+      NAV.drag = { x: ev.clientX, y: ev.clientY, ox: NAV.ox, oy: NAV.oy, id: ev.pointerId };
+      NAV.moved = false;
+    });
+    svg.addEventListener("pointermove", function (ev) {
+      if (!NAV.drag) return;
+      var dx = ev.clientX - NAV.drag.x, dy = ev.clientY - NAV.drag.y;
+      if (!NAV.moved && Math.abs(dx) + Math.abs(dy) <= 3) return;
+      if (!NAV.moved) {
+        NAV.moved = true;
+        if (svg.setPointerCapture) svg.setPointerCapture(NAV.drag.id);
+        wrap.classList.add("panning");
+      }
+      var s = mapScale(viewBox(), svg.getBoundingClientRect());
+      if (!(s > 0)) return;
+      NAV.ox = NAV.drag.ox - dx / s;
+      NAV.oy = NAV.drag.oy - dy / s;
+      hideTip();
+      applyNav();
+    });
+    function endDrag() {
+      if (!NAV.drag) return;
+      var id = NAV.drag.id;
+      NAV.drag = null;
+      wrap.classList.remove("panning");
+      if (svg.hasPointerCapture && svg.hasPointerCapture(id)) svg.releasePointerCapture(id);
+      if (NAV.moved) setTimeout(function () { NAV.moved = false; }, 0);
+    }
+    svg.addEventListener("pointerup", endDrag);
+    svg.addEventListener("pointercancel", endDrag);
+
+    svg.addEventListener("keydown", function (ev) {
+      var step = viewBox()[2] * 0.15, k = ev.key;
+      if (k === "+" || k === "=") { navZoom(1.5, null); ev.preventDefault(); return; }
+      if (k === "-" || k === "_") { navZoom(1 / 1.5, null); ev.preventDefault(); return; }
+      if (k === "0") { navFit(); ev.preventDefault(); return; }
+      if (k === "ArrowLeft") NAV.ox -= step;
+      else if (k === "ArrowRight") NAV.ox += step;
+      else if (k === "ArrowUp") NAV.oy -= step;
+      else if (k === "ArrowDown") NAV.oy += step;
+      else return;
+      ev.preventDefault();
+      applyNav();
+    });
+  }
+  wireNav(svgL, "wrapL"); wireNav(svgR, "wrapR");
 
   // ---- colour ------------------------------------------------------------
   function rulerColour(v) {
@@ -292,16 +527,40 @@
     var i = Math.round(Math.max(0, Math.min(1, t)) * (D.physical_ramp.length - 1));
     return D.physical_ramp[i];
   }
-  function rampCss(stops) {
-    return "linear-gradient(to right," + stops.join(",") + ")";
-  }
-  document.getElementById("rampL").style.background = rampCss(D.colour_stops);
+  function rampCss(stops) { return "linear-gradient(to right," + stops.join(",") + ")"; }
+
+  document.getElementById("stripL").style.background = rampCss(D.colour_stops);
+  document.getElementById("swL").style.background = D.missing_colour;
+  document.getElementById("swR").style.background = D.missing_colour;
 
   function paint(svg, colours) {
     var nodes = svg.childNodes;
     for (var k = 0; k < nodes.length; k++) {
       nodes[k].setAttribute("fill", colours[+nodes[k].getAttribute("data-i")]);
     }
+  }
+
+  /* The bracket exists to say "this view is narrow, not broken": it marks where
+     the painted values actually sit on a ruler whose domain never moves. On the
+     physical ramp the domain IS the data range, so the bracket would be the
+     whole bar and is dropped. */
+  function setBracket(id, lo, hi, domLo, domHi) {
+    var br = document.getElementById(id);
+    if (!isFinite(lo) || !isFinite(hi) || domHi <= domLo) { br.style.display = "none"; return; }
+    var a = 100 * (lo - domLo) / (domHi - domLo), b = 100 * (hi - domLo) / (domHi - domLo);
+    br.style.display = "";
+    br.style.left = a + "%";
+    br.style.width = Math.max(0.6, b - a) + "%";
+  }
+  function setTicks(id, values, labels) {
+    var host = document.getElementById(id);
+    host.innerHTML = "";
+    values.forEach(function (t, k) {
+      var s = document.createElement("span");
+      s.textContent = labels[k];
+      s.style.left = t + "%";
+      host.appendChild(s);
+    });
   }
 
   // ---- stats -------------------------------------------------------------
@@ -353,49 +612,85 @@
   var base = composite(approved), baseRank = ranks(base.score), cur = base;
 
   function fmt(v, dp) { return (v === null || !isFinite(v)) ? "—" : v.toFixed(dp); }
-
+  function esc(s) {
+    return String(s).replace(/[&<>]/g, function (c) {
+      return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
+    });
+  }
   function metricOf(slug) {
     for (var i = 0; i < D.metrics.length; i++) if (D.metrics[i].slug === slug) return D.metrics[i];
     return null;
   }
 
+  var TICK_AT = [0, 20, 40, 60, 80, 100];
+  var rightVals = [], rightLo = NaN, rightHi = NaN;
+
   function render() {
     cur = composite(live);
-    var gateW = D.configured_weight * D.coverage_gate;
-    var colsL = [], i;
+    var gateW = gateWeight();
+    var colsL = [], i, lo = Infinity, hi = -Infinity, painted = 0;
     for (i = 0; i < N; i++) {
-      colsL.push(cur.weight[i] >= gateW ? rulerColour(cur.score[i]) : D.missing_colour);
+      var ok = cur.weight[i] >= gateW && isFinite(cur.score[i]);
+      colsL.push(ok ? rulerColour(cur.score[i]) : D.missing_colour);
+      if (ok) {
+        painted++;
+        if (cur.score[i] < lo) lo = cur.score[i];
+        if (cur.score[i] > hi) hi = cur.score[i];
+      }
     }
     paint(svgL, colsL);
 
+    document.getElementById("cbarTitleL").textContent = D.composite_label + " · hazard score";
+    setTicks("ticksL", TICK_AT, TICK_AT.map(String));
+    setBracket("brL", lo, hi, 0, 100);
+    document.getElementById("rangeL").textContent = painted
+      ? "Range in view " + fmt(lo, 1) + "–" + fmt(hi, 1) +
+        " · " + fmt(hi - lo, 1) + " wide"
+      : "";
+
     var j = SLUGS.indexOf(selected), m = metricOf(selected);
-    var vals = [], colsR = [], lo = Infinity, hi = -Infinity;
+    var colsR = [], rlo = Infinity, rhi = -Infinity;
+    rightVals = [];
     for (i = 0; i < N; i++) {
       var v = mode === "score" ? D.units[i].r[j] : D.units[i].v[j];
-      vals.push(v);
-      if (v !== null && isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+      rightVals.push(v);
+      if (v !== null && isFinite(v)) { if (v < rlo) rlo = v; if (v > rhi) rhi = v; }
     }
+    rightLo = rlo; rightHi = rhi;
     for (i = 0; i < N; i++) {
-      colsR.push(mode === "score" ? rulerColour(vals[i]) : physColour(vals[i], lo, hi));
+      colsR.push(mode === "score" ? rulerColour(rightVals[i]) : physColour(rightVals[i], rlo, rhi));
     }
     paint(svgR, colsR);
 
-    var rampR = document.getElementById("rampR");
-    var ticksR = document.getElementById("ticksR");
+    var stripR = document.getElementById("stripR");
     if (mode === "score") {
-      rampR.style.background = rampCss(D.colour_stops);
-      ticksR.innerHTML = "<span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>";
-      document.getElementById("capR").textContent =
-        "Frozen national CDF ruler for this metric, 0–100. This is the number the weight multiplies.";
+      stripR.style.background = rampCss(D.colour_stops);
+      document.getElementById("cbarTitleR").textContent = m.label + " · ruler score";
+      setTicks("ticksR", TICK_AT, TICK_AT.map(String));
+      setBracket("brR", rlo, rhi, 0, 100);
+      document.getElementById("rangeR").textContent = isFinite(rlo)
+        ? "Range in view " + fmt(rlo, 1) + "–" + fmt(rhi, 1) +
+          " · " + fmt(rhi - rlo, 1) + " wide"
+        : "";
+      document.getElementById("domR").textContent =
+        "Domain fixed 0–100 · the number the weight multiplies";
     } else {
-      rampR.style.background = rampCss(D.physical_ramp);
-      var mid = (lo + hi) / 2;
-      ticksR.innerHTML = "<span>" + fmt(lo, 1) + "</span><span>" + fmt(mid, 1) +
-        "</span><span>" + fmt(hi, 1) + "</span>";
-      document.getElementById("capR").textContent =
-        "Physical values" + (m.units ? " (" + m.units + ")" : "") +
-        ", linear over the national range. Its own ramp — the published colourbar forbids rescaling.";
+      stripR.style.background = rampCss(D.physical_ramp);
+      document.getElementById("cbarTitleR").textContent =
+        m.label + (m.units ? " · " + m.units : "");
+      setTicks("ticksR", [0, 50, 100],
+        [fmt(rlo, 1), fmt((rlo + rhi) / 2, 1), fmt(rhi, 1)]);
+      setBracket("brR", NaN, NaN, 0, 100);
+      document.getElementById("rangeR").textContent =
+        isFinite(rlo) ? "Linear over the national range" : "";
+      document.getElementById("domR").textContent =
+        "Its own ramp — the published colourbar forbids rescaling";
     }
+
+    document.getElementById("rightTitle").textContent = m.label;
+    document.getElementById("rightSub").textContent =
+      m.group + " · configured weight " + approved[selected].toFixed(4) +
+      " of " + D.configured_weight.toFixed(4);
 
     // weight readout
     var sum = liveSum(), drift = sum - D.configured_weight;
@@ -403,13 +698,22 @@
     document.getElementById("wLab").textContent =
       "weight on " + m.label + "  (approved " + approved[selected].toFixed(3) + ")";
     document.getElementById("wSlide").value = live[selected];
+    var nonZero = 0;
+    SLUGS.forEach(function (s) { if (live[s] > 0) nonZero++; });
     document.getElementById("wNote").textContent =
       "Share of the live composite: " + (100 * live[selected] / (sum || 1)).toFixed(1) +
-      "%. Other eight weights are untouched; the denominator is the live sum.";
+      "%. The other " + (SLUGS.length - 1) +
+      " weights are untouched; the denominator is the live sum." +
+      (nonZero === 1 && live[selected] > 0
+        ? "  Only this metric carries weight, so the composite reduces to w·s / w = s"
+          + " — the two maps are now the same map."
+        : "");
     document.getElementById("wDrift").textContent = Math.abs(drift) < 1e-9 ? "" :
       "Headline weight " + D.configured_weight.toFixed(3) + " → " + sum.toFixed(3) +
-      ". The " + D.coverage_gate.toFixed(2) + " coverage gate is defined against the configured total, " +
-      "so districts near the gate can change state.";
+      ". This is a hypothetical bundle, not the published one. The " +
+      D.coverage_gate.toFixed(2) + " coverage gate follows the live sum (a district must have " +
+      "observed " + (100 * D.coverage_gate).toFixed(0) + "% of the weight in play), so districts " +
+      "near the gate can change state.";
 
     // stats
     var mScores = [];
@@ -450,7 +754,7 @@
     var body = "";
     rows.slice(0, 12).forEach(function (r) {
       var u = D.units[r.i];
-      body += "<tr><td>" + u.n + "</td><td>" + u.s + "</td>" +
+      body += "<tr><td>" + esc(u.n) + "</td><td>" + esc(u.s) + "</td>" +
         '<td class="num">' + fmt(base.score[r.i], 1) + "</td>" +
         '<td class="num">' + fmt(cur.score[r.i], 1) + "</td>" +
         '<td class="num">' + (r.d >= 0 ? "+" : "") + r.d.toFixed(2) + "</td>" +
@@ -482,9 +786,9 @@
 
   var pick = document.getElementById("metricPick");
   pick.innerHTML = D.metrics.map(function (m) {
-    return '<option value="' + m.slug + '">' + m.label + "  — " + m.group + "</option>";
+    return '<option value="' + m.slug + '">' + esc(m.label) + "  — " + esc(m.group) + "</option>";
   }).join("") + D.held_out.map(function (m) {
-    return '<option disabled>' + m.label + "  — held out of the headline</option>";
+    return "<option disabled>" + esc(m.label) + "  — held out of the headline</option>";
   }).join("");
 
   document.getElementById("heldout").innerHTML =
@@ -493,7 +797,7 @@
     "because the frozen national ruler publishes the absolute half only. The headline denominator is " +
     D.configured_weight.toFixed(4) + ", not 1.0." +
     "<ul>" + D.held_out.map(function (m) {
-      return "<li><code>" + m.slug + "</code> &mdash; " + m.label +
+      return "<li><code>" + esc(m.slug) + "</code> &mdash; " + esc(m.label) +
         " (configured weight " + m.weight.toFixed(4) + ")</li>";
     }).join("") + "</ul>";
 
@@ -501,7 +805,7 @@
     "Bundle " + D.bundle + " · composite " + D.composite_slug +
     " · ruler " + D.ruler_id + " (" + D.ruler_version + ")" +
     " · coverage gate " + D.coverage_gate +
-    " · diagnostic artifact, not a published map.";
+    " · geometry simplified for display · diagnostic artifact, not a published map.";
 
   // ---- interaction -------------------------------------------------------
   pick.addEventListener("change", function () { selected = pick.value; render(); });
@@ -529,33 +833,73 @@
 
   function setMode(m) {
     mode = m;
-    document.getElementById("modeScore").classList.toggle("active", m === "score");
-    document.getElementById("modePhys").classList.toggle("active", m === "phys");
+    document.getElementById("modeScore").setAttribute("aria-pressed", String(m === "score"));
+    document.getElementById("modePhys").setAttribute("aria-pressed", String(m === "phys"));
     render();
   }
   document.getElementById("modeScore").addEventListener("click", function () { setMode("score"); });
   document.getElementById("modePhys").addEventListener("click", function () { setMode("phys"); });
 
   // ---- tooltip -----------------------------------------------------------
+  /* Hover highlights the SAME district in both panels: the page exists to say
+     that this unit's colour on the left is made of its colour on the right. */
   var tip = document.getElementById("tip");
-  function hookTip(svg, kind) {
+  var hot = -1;
+
+  function highlight(i) {
+    if (hot === i) return;
+    if (hot >= 0) MAPS.forEach(function (s) {
+      var n = s.querySelector('[data-i="' + hot + '"]');
+      if (n) n.classList.remove("hl");
+    });
+    hot = i;
+    if (hot >= 0) MAPS.forEach(function (s) {
+      var n = s.querySelector('[data-i="' + hot + '"]');
+      if (n) n.classList.add("hl");
+    });
+  }
+  function hideTip() {
+    tip.style.opacity = "0";
+    tip.setAttribute("aria-hidden", "true");
+    highlight(-1);
+  }
+  function showTip(html, ev) {
+    tip.innerHTML = html;
+    tip.style.opacity = "1";
+    tip.setAttribute("aria-hidden", "false");
+    var x = ev.clientX + 16, y = ev.clientY + 16;
+    var r = tip.getBoundingClientRect();
+    if (x + r.width > window.innerWidth - 10) x = ev.clientX - r.width - 16;
+    if (y + r.height > window.innerHeight - 10) y = ev.clientY - r.height - 16;
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+  }
+
+  function hookTip(svg) {
     svg.addEventListener("mousemove", function (ev) {
+      if (NAV.drag && NAV.moved) { hideTip(); return; }
       var t = ev.target;
-      if (t.tagName !== "path") { tip.style.display = "none"; return; }
+      if (t.tagName !== "path") { hideTip(); return; }
       var i = +t.getAttribute("data-i"), u = D.units[i], j = SLUGS.indexOf(selected);
       var m = metricOf(selected);
-      var html = "<b>" + u.n + "</b><br>" + u.s + "<br>" +
-        D.composite_label + ": " + fmt(cur.score[i], 1) + "<br>" +
-        m.label + ": " + fmt(u.r[j], 1) + " (score)";
-      if (u.v[j] !== null) html += "<br>" + fmt(u.v[j], 2) + (m.units ? " " + m.units : "");
-      tip.innerHTML = html;
-      tip.style.display = "block";
-      tip.style.left = Math.min(ev.clientX + 14, window.innerWidth - 280) + "px";
-      tip.style.top = (ev.clientY + 14) + "px";
+      highlight(i);
+      var gated = cur.weight[i] < gateWeight();
+      var html = "<b>" + esc(u.n) + "</b>" +
+        "<div class='t-row'>" + esc(u.s) + "</div>" +
+        "<div class='t-row'>" + esc(D.composite_label) + " <em>" +
+          (gated ? "—" : fmt(cur.score[i], 1)) + "</em>" +
+          (gated ? " · below the coverage gate" : "") + "</div>" +
+        "<div class='t-row'>" + esc(m.label) + " <em>" + fmt(u.r[j], 1) + "</em> on the ruler";
+      if (u.v[j] !== null) {
+        html += " · <em>" + fmt(u.v[j], 2) + "</em>" + (m.units ? " " + esc(m.units) : "");
+      }
+      html += "</div><div class='t-row t-go'>Weight " + live[selected].toFixed(3) +
+        " of " + liveSum().toFixed(3) + " live</div>";
+      showTip(html, ev);
     });
-    svg.addEventListener("mouseleave", function () { tip.style.display = "none"; });
+    svg.addEventListener("mouseleave", hideTip);
   }
-  hookTip(svgL, "L"); hookTip(svgR, "R");
+  hookTip(svgL); hookTip(svgR);
 
   // slider ceiling: a little headroom above the largest approved weight
   var maxApproved = 0;
@@ -563,6 +907,7 @@
   slide.max = Math.max(0.4, Math.ceil(maxApproved * 40) / 10);
 
   pick.value = selected;
+  applyNav();
   render();
 })();
 </script>
