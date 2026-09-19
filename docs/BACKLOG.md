@@ -113,6 +113,120 @@ Entry fields:
   - **DEM-derived** classification (elevation cutoff for hilly) + standard **coastal-district list** (Census / MoES-NCCR) + plains residual.
 - `Done when`: each district/block carries a defensible physiographic-zone label, the impact-band scorer looks up per-zone bands, and the per-metric dossiers record zone-specific bands (external where published, self-derived via the protocol otherwise) with the plains default retained as fallback.
 
+### BL-0030 — Migrate the eight sector bundles to frozen national CDF scoring under a physical-hazard definition
+- `Area`: proposal bundles, methodology, composite scoring, data-contract
+- `Why deferred`: the governing scientific definition was settled on 2026-09-19 and its consequences were computed, but two consequential decisions remain open (the change lens, and three bundles becoming near-duplicates). Freezing rulers before those are settled would bake the unresolved choices into committed artifacts. Paused deliberately at the decision point, not blocked.
+- `Dependency / trigger`: resume when sector work is the active priority. Depends on `BL-0016` (baseline semantics) **only if** the change lens is retained; if the change lens is dropped from the headline, `BL-0016` ceases to block this item. Coordinate with the Drought thematic work: `pr_consecutive_dry_days_lt1mm` is scored by `composite_drought_risk/cdf_v1`, and a `cdf_v2` refit there changes five sector bundles.
+
+#### Decision taken (2026-09-19) — do not re-open without new reasons
+
+**A sector bundle score states physical hazard conditions relevant to that sector**, not exceedance of what that sector is locally built for. The alternative framing (locally-referenced exceedance) was considered and rejected; it remains defensible for a separate supporting presentation but not for the published headline number.
+
+This mirrors the thematic precedent: `is_baseline_referenced` in `config/bundle_weights.py` (CHG-0367b, 18 entries) already excludes locally-referenced metrics from thematic headlines — Heat Risk went from 14 metrics to 9 for exactly this reason. The sector engine had never made the equivalent call.
+
+#### The defect being corrected
+
+Sector bundles run on a different engine from thematic bundles: rule specs in `config/proposal_bundles.py` scored by `compute/proposal_bundles.py`, with **no entries in `LANDING_BUNDLE_WEIGHTS`**. The absolute and change lenses normalize between the p10 and p90 of a cohort rebuilt per `state x level x scenario x period` (`_score_by_reference_distribution`, `compute/proposal_bundles.py:324`). The builder loads masters one state at a time, so the cohort is the state. Consequence: published sector scores are comparable neither across states nor across periods; only the fixed-band impact lens carries absolute meaning. All eight sector composites are already published in `processed_optimised/metrics/`, so this is live vendor-facing data, not a greenfield build.
+
+Blocks are additionally scored against a state-wide *block* cohort today, rather than against their own district's ruler. The thematic precedent (decisions doc A5) scores blocks against the district-fitted ruler and never refits; adopting it also removes this level inconsistency.
+
+#### Metric classification (the basis for everything below)
+
+The 15 sector metrics split into two physical kinds.
+
+**Kind A — absolute physical quantities.** Units-bearing; the same value means the same thing anywhere. All carry fixed, cited impact bands.
+
+| metric | quantity |
+|---|---|
+| `txx_annual_max`, `tnx_annual_max` | hottest day / hottest night, deg C |
+| `txge35_extreme_heat_days` | days at or above 35 deg C |
+| `tnle10_cold_nights` | nights at or below 10 deg C |
+| `pr_max_1day_precip`, `pr_max_5day_precip` | heaviest 1-day / 5-day rainfall, mm |
+| `pr_consecutive_dry_days_lt1mm` | longest run of days under 1 mm |
+| `cwd_consecutive_wet_days` | longest run of wet days |
+
+**Kind B — locally-referenced quantities.** The threshold is the location's own historical distribution, so the same value denotes different physical conditions in different places. These leave the headline under the decision above.
+
+| metric | reference |
+|---|---|
+| `wsdi_warm_spell_days` | days in a spell above that location's own 90th-percentile Tmax |
+| `hwfi_tmean_90p` | same, on daily mean temperature |
+| `spi3_count_events_lt_minus1`, `spi3_max_spell_lt_minus1`, `spi3_count_months_lt_minus1` | 3-month rainfall more than 1 SD below that location's own history |
+| `r99p_extreme_wet_precip` | rain above that location's own 99th percentile |
+| `r95p_interannual_variability` | year-to-year spread of above-95th-percentile rain |
+
+Kind B carried a material share of the pre-cut rule weight: Agricultural 40%, Investment/Financial 35%, Asset Thermal 30%, Life & Livelihood 25%, Asset Hydropower 20%, Health 12%, Industrial 0%, Infrastructure 0%.
+
+Note: the seven Kind-B metrics are exactly the seven with no committed national level ruler. Not a coincidence — the thematic fitter deliberately fits headline components only.
+
+#### Roster after the cut: 34 rules -> 25, 15 distinct metrics -> 8
+
+| bundle | rules | headline weight retained | kept metrics (renormalized rule weights) |
+|---|---|---|---|
+| Industrial Risk | 4 -> 4 | 100% | Rx1day .250, Rx5day .150, CDD .200, TXx .400 |
+| Infrastructure Risk | 3 -> 3 | 100% | Rx1day .450, Rx5day .300, TXx .250 |
+| Health Risk | 5 -> 4 | 88% | TXx .341, TNx .205, Rx1day .284, CWD .170 |
+| Life & Livelihood Loss | 4 -> 3 | 75% | Rx1day .400, Rx5day .333, CDD .267 |
+| Asset Risk (Hydropower) | 3 -> 2 | 80% | Rx5day .562, CDD .437 |
+| Asset Risk (Thermal Power) | 3 -> 2 | 70% | CDD .500, TXx .500 |
+| Investment / Financial | 5 -> 3 | 65% | Rx1day .385, Rx5day .231, CDD .385 |
+| Agricultural Risk | 7 -> 4 | 60% | TXx .250, TX>=35 .167, Rx5day .333, TN<=10 .250 |
+
+Dropping `wsdi_warm_spell_days` moots the previously flagged `change_mode` divergence (`auto` in Health Risk vs `relative_pct` in Agricultural and Life & Livelihood).
+
+#### Key finding: zero new level rulers are required
+
+Every one of the eight surviving metrics already has a committed frozen national CDF under `config/frozen_rulers/`. Verified on disk 2026-09-19 — all at `pooled_n` 5488 (784 districts x 7 slices), all `higher_is_worse=True`, matching the sector config's uniform `higher_worse` direction.
+
+| metric | committed ruler artifact |
+|---|---|
+| `txx_annual_max`, `tnx_annual_max`, `txge35_extreme_heat_days` | `composite_heat_risk/cdf_v1` |
+| `pr_max_1day_precip`, `pr_max_5day_precip`, `cwd_consecutive_wet_days` | `composite_flood_extreme_rainfall_risk/cdf_v1` |
+| `tnle10_cold_nights` | `composite_cold_risk/cdf_v1` |
+| `pr_consecutive_dry_days_lt1mm` | `composite_drought_risk/cdf_v1` |
+
+This is structural rather than lucky: the thematic headlines are themselves the absolute-physical half, so a physically-defined sector headline draws from the same metric pool. The absolute-lens migration becomes an artifact-referencing and publication job, not a fitting job. Earlier ruler-count estimates (68, then ~31, then 30) are superseded — **the correct count under this definition is 0 new level rulers**, plus 8 change rulers only if the change lens is retained.
+
+#### Open decision 1 — does the change lens belong in the headline? (blocking)
+
+All 25 surviving rules still carry a change lens. A change lens measures **trajectory**, not **conditions**: a district at 47 deg C warming slowly scores below one at 38 deg C warming fast. Under the decision above that is the wrong quantity for a headline, and the thematic engine has no change lens at all.
+
+**Recommendation (not yet approved): drop the change lens from the sector headline**, renormalize each rule across absolute + impact, and retain `__chg_score` as a published decomposition column so trajectory stays visible without entering the ranked number. Per-lens persistence (`__abs_score`, `__chg_score`, `__imp_score` alongside the blended `__score`) is already implemented and tested, so this costs nothing to keep.
+
+Consequences of each branch:
+- **Drop**: zero new ruler fits of any kind; `BL-0016` stops blocking; migration reduces to reference-renormalize-republish.
+- **Retain**: 8 national delta rulers must be fitted, and `BL-0016` becomes a hard blocker — `BASELINE_TOKENS` (`compute/proposal_bundles.py:65`) still accepts `1995-2014` / `1985-2014` fallbacks against the required `1990-2010`, and a frozen delta ruler bakes the resolved baseline in permanently. A mixed-baseline national pool cannot be unwound after publication.
+
+#### Open decision 2 — three bundles become near-duplicates (blocking)
+
+Kind-B metrics were carrying most of what distinguished the sectors from one another: SPI-3 months distinguished thermal power, rainfall interannual variability distinguished hydropower, R99p and the heatwave-frequency index distinguished the financial view. After the cut:
+
+- **Investment / Financial Risk and Life & Livelihood Loss Risk use the identical three metrics** — Rx1day, Rx5day, CDD — differing only in weights (.385/.231/.385 vs .400/.333/.267) and in one impact band.
+- **Asset Risk (Hydropower)** is a two-metric subset of both.
+
+Three published layers over one physical signal produce near-identical maps, which is misleading regardless of labelling. Two honest responses:
+
+1. **Consolidate** — merge or retire the redundant layers. Cheap, honest, available immediately.
+2. **Re-specify with discriminating absolute metrics** — a thermal plant's exposure is cooling-water availability and intake temperature; hydropower's is seasonal inflow volume and sediment-bearing extreme rain. Physically better, but these are new metrics requiring a compute wave, not a reweighting.
+
+Do not resolve this by renormalizing and shipping.
+
+#### Secondary items to settle in the same pass
+
+- **Coverage gate is tight at the new roster sizes.** With 2-4 rules per bundle, a single missing metric drops available rule weight below the 0.70 gate and NaNs the bundle for that unit. Pre-existing for Industrial and Infrastructure (rosters unchanged), worsened for the two-rule bundles. Measure against real coverage before publishing rather than assuming it is benign. Overlaps `BL-0018`.
+- **Cross-bundle inconsistencies that survive the cut**, both cases of the same physical value scoring differently by sector with no stated reason: `pr_consecutive_dry_days_lt1mm` impact band is 30-90 days in four bundles but 60-120 in Life & Livelihood; `pr_max_5day_precip` lens weights are .45/.40/.15 in five bundles but .40/.30/.30 in Life & Livelihood. Declare deliberate or reconcile. (`txx_annual_max` at 35-45 in Agricultural vs 40-45 elsewhere looks deliberate — crops fail below human-health thresholds — and is the model for how the others should read.)
+- **Hazard-pressure, not risk.** Sector scores model the hazard determinant only: no exposure, no vulnerability, no adaptive capacity. Labels such as "Health Risk" must be read as climate hazard pressure relevant to that sector. Unchanged by this work, but the renaming question rides along with it.
+- **Ensemble central estimate stays out of scope.** The builder reads the mean (`SUPPORTED_STAT = "mean"`); the methodology doc recommends the median. That is a tool-wide change that would move thematic scores too, and bundling it here would make moved scores un-attributable. Separate wave.
+- **Expect test-fixture breakage.** Migrating Drought broke 12 tests, only 2 of which were about Drought; fixtures borrow whichever bundle was convenient.
+
+#### Reference material
+
+`docs/lens_scoring_methodology.md` (3,055 lines) is the governing document: section 2 the three lenses, 2.5 baseline reconciliation, 4 impact-band provenance policy, 5.1 the decomposition schema, 6-13 per-bundle dossiers (section 6 Health Risk is the worked template), 14 the deferred reverse extension of lenses to thematic bundles, 15 the 34 cited sources.
+
+Related: `BL-0013` (threshold-heavy saturation), `BL-0016` (baseline semantics), `BL-0018` (partial coverage), `BL-0020` (zone-specific impact bands), `BL-0025` (absolute comparable composite score).
+
+- `Done when`: the change-lens and redundancy decisions are recorded; `config/proposal_bundles.py` declares the Kind-A/Kind-B split explicitly rather than implying it; sector scoring reads the committed frozen rulers instead of `_score_by_reference_distribution`; blocks score against the district-fitted ruler without refit; per-lens decomposition columns are published; the Jensen gap (`|district_direct - area_weighted_block_rollup|`, threshold < 10) is reported before and after per bundle; one bundle is piloted end to end and physically read before the other seven are touched; masters and `state_values` are republished with `ruler_id` stamped in `bundle_manifest.json`; and `docs/lens_scoring_methodology.md`, the vendor data contract, `README.md` and `MANIFEST.md` record the changed meaning of the sector score columns.
+
 ## Later
 
 ### BL-0007 — Migrate processed-data storage to build/published/archive Parquet serving
