@@ -558,14 +558,15 @@ class TestTierGHIJPrecipitation:
         """
         Make percentile unambiguous:
         95 wet days at 1mm, 5 wet days at 100mm (all wet).
-        95th percentile of wet days ~ 1mm. Strict '>' selects only 100mm days.
-        Expected R95p = 5 * 100 = 500mm.
+        With the default inclusive threshold (`exceed_ge=True`), the 95th
+        percentile resolves to 1mm and both 1mm and 100mm days are counted.
+        Expected R95p = 95 * 1 + 5 * 100 = 595mm.
         """
         low = self._pr_kgm2s(1.0)
         high = self._pr_kgm2s(100.0)
         data, mask = make_step_series(values=[low, high], days_per_value=[95, 5], units="kg m-2 s-1")
         r95p = CMP.percentile_precipitation_total(data, mask, percentile=95)
-        assert abs(r95p - 500.0) < TOL_PRECIP
+        assert abs(r95p - 595.0) < TOL_PRECIP
 
     def test_sdii_exact(self) -> None:
         """
@@ -754,15 +755,25 @@ def _call_compute_for_metric(metric: dict[str, Any]) -> None:
         # Some metrics might not declare var; treat as a failure so it doesn't hide.
         raise AssertionError(f"Metric {metric.get('slug')} declares no var/vars")
 
-    if len(req_vars) == 1:
-        da, mask = _make_data_for_var(_var_spec(req_vars[0]))
-        _ = fn(da, mask, **params)
-    else:
-        da1, mask1 = _make_data_for_var(_var_spec(req_vars[0]))
-        da2, mask2 = _make_data_for_var(_var_spec(req_vars[1]))
-        # Ensure same mask (they should be identical shapes)
-        mask = mask1
-        _ = fn(da1, da2, mask, **params)
+    # Variables are passed positionally in the registry's declared order, then
+    # the mask -- the same contract the pipeline's default dispatch uses. Do not
+    # reintroduce a two-variable assumption here: the aridity index takes three.
+    arrays = [_make_data_for_var(_var_spec(name))[0] for name in req_vars]
+    mask = _make_data_for_var(_var_spec(req_vars[0]))[1]
+    try:
+        _ = fn(*arrays, mask, **params)
+    except NotImplementedError:
+        # A metric may deliberately refuse a per-unit-mask implementation because
+        # it is computed grid-first and a second implementation would answer the
+        # same question differently. The equivalent guarantee for those is that
+        # the grid-first dispatcher actually claims the slug, so the metric
+        # cannot simply be unreachable.
+        from india_resilience_tool.compute.drought_risk_gridfirst import is_drought_gridfirst
+
+        slug = str(metric.get("slug") or "")
+        assert is_drought_gridfirst(slug, "district"), (
+            f"{slug} refuses the per-mask compute but no grid-first dispatcher claims it"
+        )
 
 
 class TestBundleMetricSmokeCoverage:

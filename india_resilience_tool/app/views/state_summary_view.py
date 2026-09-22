@@ -7,8 +7,13 @@ from typing import Any, Mapping, Optional
 
 import pandas as pd
 
+from india_resilience_tool.analysis.area_weighting import (
+    weighted_state_mean as _weighted_state_mean,
+    with_area_weights as _with_area_weights,
+)
 from india_resilience_tool.data.optimized_bundle import (
     is_optimized_metric_root,
+    optimized_state_values_path_from_metric_root,
     optimized_yearly_models_path_from_metric_root,
 )
 from india_resilience_tool.utils.processed_io import read_table
@@ -41,47 +46,89 @@ def _find_baseline_column(df_cols: list[str], base_metric: str) -> Optional[str]
     return candidates[0][0]
 
 
-def _with_area_weights(gdf: Any) -> pd.DataFrame:
-    """Return a copy of gdf with geodesic area weights in __area_m2."""
-    if gdf is None:
-        return pd.DataFrame()
-
-    out = gdf.copy()
-    if "__area_m2" in out.columns:
-        out["__area_m2"] = pd.to_numeric(out["__area_m2"], errors="coerce").fillna(0.0)
-        return out
-    if "area_m2" in out.columns:
-        out["__area_m2"] = pd.to_numeric(out["area_m2"], errors="coerce").fillna(0.0)
-        return out
-
-    from pyproj import Geod
-
-    geod = Geod(ellps="WGS84")
-    areas: list[float] = []
-    for geom in out.geometry:
-        if geom is None or geom.is_empty:
-            areas.append(0.0)
-            continue
-        try:
-            a, _ = geod.geometry_area_perimeter(geom)
-            areas.append(abs(float(a)))
-        except Exception:
-            areas.append(0.0)
-    out["__area_m2"] = areas
-    return out
-
-
 def _weighted_mean(df: pd.DataFrame, value_col: Optional[str]) -> Optional[float]:
-    if df is None or df.empty or not value_col or value_col not in df.columns:
+    """Thin alias preserving the legacy value-only return for the live view.
+
+    The canonical implementation lives in
+    :mod:`india_resilience_tool.analysis.area_weighting`; here we keep the
+    value-only signature the view already depends on.
+    """
+    value, _n_units = _weighted_state_mean(df, value_col)
+    return value
+
+
+def _norm_period_token(value: str) -> str:
+    """Normalize cosmetic period separators for tolerant matching."""
+    return str(value or "").strip().replace("_", "-").replace("–", "-").replace(" ", "").lower()
+
+
+def _load_precomputed_state_values(processed_root: Path, level_norm: str) -> Optional[pd.DataFrame]:
+    """Read the precomputed area-weighted state-values table when present.
+
+    Returns ``None`` when the optimized bundle/file is absent or unreadable, so
+    the caller falls back to the live area-weighted computation.
+    """
+    if not is_optimized_metric_root(processed_root):
         return None
-    t = df[[value_col, "__area_m2"]].copy()
-    t[value_col] = pd.to_numeric(t[value_col], errors="coerce")
-    t["__area_m2"] = pd.to_numeric(t["__area_m2"], errors="coerce")
-    t = t.dropna(subset=[value_col, "__area_m2"])
-    t = t[t["__area_m2"] > 0]
-    if t.empty:
+    try:
+        path = optimized_state_values_path_from_metric_root(processed_root, level=level_norm)
+    except ValueError:
         return None
-    return float((t[value_col] * t["__area_m2"]).sum() / t["__area_m2"].sum())
+    if not path.exists():
+        return None
+    try:
+        df = read_table(path)
+    except Exception:
+        return None
+    if df is None or df.empty:
+        return None
+    return df
+
+
+def _precomputed_state_value_map(
+    values_df: Optional[pd.DataFrame],
+    *,
+    base_metric: str,
+    scenario: str,
+    period: str,
+    stat: str,
+) -> tuple[dict[str, float], set[str]]:
+    """Resolve ``{normalized_state: value}`` for one (metric, scenario, period, stat).
+
+    Returns ``(state_value_map, matched_states)`` where ``matched_states`` holds
+    every state that has a row for the key (even when its value is null), and the
+    map contains only the non-null values (mirroring the live
+    ``state_value_map`` semantics). The matched-states set lets the caller
+    distinguish a legitimate present-but-null value (render N/A) from a state
+    that is simply absent from the file (fall back to the live value).
+    """
+    if values_df is None or values_df.empty:
+        return {}, set()
+    required = {"state", "metric", "scenario", "period", "stat", "value"}
+    if not required.issubset(set(values_df.columns)):
+        return {}, set()
+    if not str(base_metric or "").strip():
+        return {}, set()
+
+    mask = (
+        (values_df["metric"].astype(str) == str(base_metric).strip())
+        & (values_df["scenario"].astype(str).str.strip().str.lower() == str(scenario).strip().lower())
+        & (values_df["stat"].astype(str).str.strip().str.lower() == str(stat).strip().lower())
+        & (values_df["period"].map(_norm_period_token) == _norm_period_token(period))
+    )
+    sub = values_df[mask]
+    if sub.empty:
+        return {}, set()
+
+    matched_states: set[str] = set()
+    out: dict[str, float] = {}
+    for state_name, raw_value in zip(sub["state"], sub["value"]):
+        key = _normalize_name(state_name)
+        matched_states.add(key)
+        value = pd.to_numeric(pd.Series([raw_value]), errors="coerce").iloc[0]
+        if pd.notna(value):
+            out[key] = float(value)
+    return out, matched_states
 
 
 def _coerce_trend_central_tendency(df: pd.DataFrame, sel_stat: str) -> pd.DataFrame:
@@ -356,6 +403,43 @@ def render_state_summary_view(
         higher_is_worse=rank_higher_is_worse,
     )
 
+    # Prefer precomputed area-weighted state values when the optimized bundle
+    # carries them. current/baseline are parity (identical to the live
+    # area-weighted mean by construction); the all-states map additionally
+    # enables a real Position-in-India rank where the single-state live path
+    # renders N/A. Any miss (no file / state absent) falls back to the live
+    # values computed above. A present-but-null value renders N/A by design.
+    values_df = _load_precomputed_state_values(processed_root, level_norm)
+    if values_df is not None:
+        sel_key = _normalize_name(selected_state)
+        _bm, cur_scn, cur_per, cur_stat = _parse_metric_parts(metric_col)
+        cur_map, cur_states = _precomputed_state_value_map(
+            values_df,
+            base_metric=base_metric,
+            scenario=cur_scn,
+            period=cur_per,
+            stat=cur_stat,
+        )
+        if sel_key in cur_states:
+            current_val = cur_map.get(sel_key)
+            state_value_map = cur_map
+            rank_india, n_india = _compute_position_in_india(
+                state_value_map,
+                selected_state,
+                higher_is_worse=rank_higher_is_worse,
+            )
+        if baseline_col:
+            _bbm, base_scn, base_per, base_stat = _parse_metric_parts(baseline_col)
+            base_map, base_states = _precomputed_state_value_map(
+                values_df,
+                base_metric=_bbm,
+                scenario=base_scn,
+                period=base_per,
+                stat=base_stat,
+            )
+            if sel_key in base_states:
+                baseline_val = base_map.get(sel_key)
+
     with st.expander(summary_title, expanded=True):
         if supports_baseline_comparison:
             c1, c2, c3 = st.columns(3)
@@ -378,7 +462,12 @@ def render_state_summary_view(
                     f"{delta:+.2f}" if delta is not None else None,
                 )
             with c3:
-                st.markdown("**Position in India**")
+                from india_resilience_tool.app._ui_text import rank_phrasing as _phrase
+                _phr_state = _phrase(rank_higher_is_worse)
+                st.markdown(
+                    "**Position in India**",
+                    help=f"Rank 1 = {_phr_state.rank_1_meaning} value across states. {_phr_state.direction_summary}",
+                )
                 if rank_india is not None and n_india >= 2:
                     st.metric("", f"#{rank_india} / {n_india}")
                 else:
@@ -395,7 +484,12 @@ def render_state_summary_view(
                     else "N/A",
                 )
             with c2:
-                st.markdown("**Position in India**")
+                from india_resilience_tool.app._ui_text import rank_phrasing as _phrase
+                _phr_state = _phrase(rank_higher_is_worse)
+                st.markdown(
+                    "**Position in India**",
+                    help=f"Rank 1 = {_phr_state.rank_1_meaning} value across states. {_phr_state.direction_summary}",
+                )
                 if rank_india is not None and n_india >= 2:
                     st.metric("", f"#{rank_india} / {n_india}")
                 else:
