@@ -206,6 +206,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/data_acquisition/prepare_jrc_rp100_source.py` | Prepare and finalize a JRC v2.1.2 RP-100 source inventory/manifest from a local `tile_extents.geojson` or explicit tile filename list; default mode selects India-intersecting tiles with the one-native-pixel buffer, while `--finalize` validates downloaded `RP100/*.tif` files, writes aligned depth and tile-coverage VRTs, and replaces the planned manifest with a validated strict source manifest | `python -m tools.data_acquisition.prepare_jrc_rp100_source --help` |
 | `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | Download NEX India subset from S3 (serial; retained as a fallback) | `python -m tools.data_acquisition.nex_india_subset_download_s3_v1 --help` |
 | `tools/data_acquisition/nex_india_subset_download_s3_v2.py` | Parallel pan-India NEX-GDDP-CMIP6 downloader: scope-cached S3 listing, ThreadPoolExecutor, atomic writes, classified retries, `--verify` quarantine, year × experiment intersection. Outputs to `${out_dir}/${member_dir}/${exp}/${var}/${model}/${year}.nc` (default `member_dir=r1i1p1f1_panIndia`). | `python -m tools.data_acquisition.nex_india_subset_download_s3_v2 --help` |
+| `tools/data_acquisition/nex_wbgt_ncss.py` | Acquire NASA NEX-GDDP-CMIP6 **v2.0** `rsds` and `sfcWind` India subsets for the outdoor WBGT, via NASA's THREDDS NetcdfSubset service. `plan` / `download` / `verify` subcommands over a durable plan + manifest; catalog-discovered grid labels (`gn`/`gr`/`gr1`); explicit v2.0 selection; per-response validation (Content-Length, NetCDF magic, full variable read, member/version identity, timestamp coverage against the local `tasmax` contract, grid trim to 128x120); atomic publication with a recorded SHA-256. Writes to `${out_root}/${member}/${experiment}/${variable}/${model}/${year}.nc`. | `python -m tools.data_acquisition.nex_wbgt_ncss --help` |
 | `tools/data_prep/prepare_reanalysis_for_pipeline.py` | Prepare ERA5/IMD inputs for pipeline | `python -m tools.data_prep.prepare_reanalysis_for_pipeline --help` |
 | `tools/data_prep/organize_era5_legacy_nc_files.py` | Reorganize legacy ERA5 NetCDF layout | `python -m tools.data_prep.organize_era5_legacy_nc_files --help` |
 | `tools/data_prep/derive_hurs_from_era5_tas_tdps.py` | Derive humidity inputs from ERA5 fields | `python -m tools.data_prep.derive_hurs_from_era5_tas_tdps --help` |
@@ -241,6 +242,128 @@ python -m tools.data_acquisition.nex_india_subset_download_s3_v2 \
 Windows tip: if HDF5 writes get flaky under parallelism, fall back to `--workers 2`.
 
 **Important — output is not yet consumed by the compute pipeline.** Outputs land under `${out_dir}/r1i1p1f1_panIndia/`. The compute pipeline (`tools/pipeline/compute_indices_multiprocess.py` etc., resolved via `india_resilience_tool/config/paths.py`) currently reads `${out_dir}/r1i1p1f1/`. Until a separate staging or pipeline-config change lands, `_v2` downloads do not feed the compute pipeline. `_v1.py` and `download_pan_india_raw.sh` are unchanged and remain in service for the existing serial workflow.
+
+`tools/data_acquisition/nex_wbgt_ncss.py` notes:
+
+Acquires the two daily weather variables the outdoor WBGT still lacks. It does **not** change the
+WBGT calculation, publish a metric, touch the existing `irt_data/r1i1p1f1` archive, or re-download
+temperature or humidity.
+
+- **Source:** NASA THREDDS NCSS, `https://ds.nccs.nasa.gov/thredds/ncss/grid/AMES/NEX/GDDP-CMIP6/`.
+  Dataset paths are discovered from the sibling `/thredds/catalog/.../catalog.xml`, never
+  hardcoded: THREDDS filenames carry a `_v2.0` suffix the S3 keys lack, and the grid label varies
+  by model (`gn`, `gr`, `gr1`).
+- **Coverage:** 21 models x 143 years x 2 variables = **6,006 files** (historical 1990-2010,
+  ssp245 and ssp585 2020-2080). The roster is the intersection of the locally held `tas`, `tasmax`
+  and `hurs`; `plan` re-verifies it against the archive and reports any discrepancy rather than
+  silently expanding or shrinking it.
+- **Spatial request:** `south=6 north=38 west=68 east=98`, `horizStride=1`. NCSS answers with
+  129 x 121 cells; the extra northern row and eastern column are **trimmed by coordinate match**,
+  never regridded or interpolated, down to the existing 128 x 120 IRT grid.
+- **Time request:** `time=all`, which is calendar-agnostic. The roster spans four CMIP6 calendars
+  (`365_day` 11 models, `proleptic_gregorian` 7, `standard` 2, `360_day` 1 = KACE-1-0-G), so a
+  Gregorian 31 December would be an invented date for some sources. `--time-selector explicit`
+  falls back to the source-derived first/last dates.
+- **Expected timestamps** come from the local `tasmax` file for the same model-year, because the
+  acquired data has to line up with the temperature it will be combined with. A response that
+  disagrees is a **flagged source/data exception**, never something to interpolate over.
+- **Validation before publication** (every file): HTTP status, rejection of HTML/XML error bodies
+  that arrive with HTTP 200, received-vs-`Content-Length` comparison, NetCDF magic sniff, full
+  variable read (a readable header is not enough), `version`/`variant_label` identity, complete and
+  strictly ascending unique timestamps, grid trim and coordinate equality, recognised units,
+  infinity rejection, all-missing rejection, then a compressed rewrite, a reopen with decoded
+  value-and-mask equality against the response, a SHA-256, and only then an atomic rename.
+  **Downloaded is not verified**, and ocean/masked cells alone are never a failure.
+- **Output encoding:** NetCDF4/HDF5, zlib level 5 + shuffle, chunks `(1, 128, 120)`, source dtype,
+  fill value and calendar preserved. Acquisition provenance is added under `irt_acquisition_*`
+  attributes without overwriting any source attribute.
+- **Concurrency:** default 16 workers, **capped at 16** — this is a public NASA service. NCSS
+  is server-CPU-bound and its response time is bimodal, so `--read-timeout` defaults to 900 s; a
+  naive short timeout fails requests that would otherwise succeed. HDF5 work is serialised under a
+  lock while transfers stay concurrent.
+- **Adaptive reduction:** a governor watches a 20-task sliding window and **halves** the in-flight
+  target (floor 2) once a quarter of that window fails, stepping back up one worker per 40
+  consecutive successes. It can only ever go *below* `--workers`, never above. Reductions are
+  logged as warnings and reported in `summary.json` as `concurrency_reductions` and
+  `final_in_flight_target`. This matters in practice: a sustained 16-way run has been observed
+  degrading roughly sevenfold (445 → 76 → 15 files/hour, mean latency 103 → 328 s, 60 dropped
+  transfers) while a plain catalog fetch stayed fast at 1.7–2.8 s — that is NCSS subsetting
+  pressure, and continuing to push 16 requests into it makes the run slower, not faster.
+- **`--allow-workers-above-ceiling`** raises the cap from 16 to an absolute 32. It exists for
+  deliberate concurrency measurement against a healthy service, not for routine bulk acquisition;
+  the ceiling is never raised automatically.
+- **`--overall-deadline`** (default 3,600 s) is enforced *during* streaming, so a slow drip that
+  keeps delivering bytes inside every `--read-timeout` window is abandoned and retried rather than
+  holding a worker open indefinitely.
+- **Resume** is checksum-based: an output is skipped only when the manifest says `verified` *and*
+  the recorded SHA-256 still matches, so a same-size but altered file is re-acquired.
+- **Scope is never silently empty:** a `--models`/`--experiments`/`--variables`/`--years` filter
+  that selects 0 planned tasks is a scope error (exit 2), not a vacuous success, and `verify`
+  raises it *before* touching `verification.csv`.
+- **`verify` re-checks identity, not just bytes:** dataset version, ensemble member, units, time
+  coverage, grid and payload are all re-asserted, so an output with no manifest checksum cannot
+  pass on size alone.
+- **Exit codes:** `0` complete, `2` scope/plan error, `3` incomplete (any expected task not
+  verified, including unresolved remote gaps), `4` interrupted.
+
+Commands (WSL; on Windows use `python` after `conda activate irt`). `ROOT` is outside the repo:
+
+```bash
+PY_EXE="/mnt/c/Users/22015611/AppData/Local/miniconda3/envs/irt/python.exe"
+ROOT="D:/projects/irt_data/nex_gddp_cmip6_v2_wbgt"
+```
+
+Readiness check (reads only):
+```bash
+"$PY_EXE" -c "import xarray, h5netcdf, requests, numpy, cftime; print('acquisition deps ok')"
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" plan --help
+```
+
+Focused tests (synthetic fixtures, no network):
+```bash
+"$PY_EXE" -m pytest tests/test_nex_wbgt_ncss.py -q
+```
+
+Plan, no-write rehearsal (reads remote catalogs and local headers, writes nothing):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" --dry-run \
+    plan --data-root D:/projects/irt_data
+```
+
+Plan (writes `acquisition/plan.json` and `acquisition/manifest.csv`; no climate payload):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" \
+    plan --data-root D:/projects/irt_data
+```
+
+Pilot download (writes data; covers both variables, all three experiments and all four calendars):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" download \
+    --workers 2 --models GFDL-ESM4,EC-Earth3,MIROC6,KACE-1-0-G --years 2000,2040,2080
+```
+
+Pilot verification (reads published outputs only):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" verify \
+    --models GFDL-ESM4,EC-Earth3,MIROC6,KACE-1-0-G --years 2000,2040,2080
+```
+
+Bulk download (writes data; resumable — re-run the same command after any interruption):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" download --workers 16
+```
+
+Final verification (reads published outputs only; writes `verification.csv` and `summary.json`):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" verify
+```
+
+**Known downstream WBGT blockers, recorded separately from acquisition failures.** A clean
+acquisition does not certify that every model-year is ready for a WBGT computation:
+- the existing `tas`/`tasmax`/`hurs` are NASA dataset version **1.0**, while the `rsds`/`sfcWind`
+  acquired here are **v2.0**;
+- `r1i1p1f1/ssp245/hurs/KIOST-ESM/2058.nc` is absent locally;
+- IITM-ESM is excluded from the roster because the archive has no `tasmax` for it.
 
 `tools/subbasin_shp_explore.py` notes:
 - source: `waterbasin_goi.shp`
