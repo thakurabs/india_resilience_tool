@@ -24,6 +24,22 @@ the two error sources, every one of them against the same reference
                     ``tier2_outdoor_wbgt_c`` was actually written to do.
 ``true_rsds``       ``stage_a_spec`` but fed the TRUE hourly rsds maximum, which
                     removes the solar-disaggregation error.
+``rh_at_tasmax``    ``stage_a_spec`` but with humidity evaluated AT tasmax --
+                    CarbonPlan's treatment, reached here through ``hurs``
+                    instead of their ``huss`` + synthesised ``ps``. Daily-mean
+                    ``hurs`` is the humidity of a cooler hour, so holding vapour
+                    pressure fixed and re-expressing it at ``tasmax`` is the
+                    physically consistent pairing.
+``cp_three_term``   ``rh_at_tasmax`` with CarbonPlan's FULL three-term ISO form
+                    via thermofeel, in place of IRT's two-term approximation.
+                    Carried as an identity check, not a rival: with ``tmrt = tas``
+                    thermofeel returns ``BGT = Ta`` exactly, so their form
+                    collapses to IRT's. The row exists to prove that by
+                    measurement rather than by argument.
+``wind_frozen``     ``rh_at_tasmax`` with wind held at CarbonPlan's fixed
+                    0.5 m/s instead of the observed daily mean. This prices the
+                    ``sfcWind`` download: if the two rows agree, the variable
+                    need never be acquired.
 ``ceiling``         hourly shade WBGT then daily max, plus the adjustment on true
                     rsds_max. The best the Tier-2 idea can possibly do, since
                     every input error other than the adjustment itself is gone.
@@ -78,11 +94,83 @@ DEFAULT_CACHE_DIR = Path("scratch/wbgt_deployed_vs_reference_cache")
 
 REFERENCE = "liljegren_daily_max"
 
+#: Magnus coefficients of the shipped ``swbgt_empirical_cell_c``, reused here so
+#: the humidity conversion is consistent with the code it would be ported into.
+MAGNUS_A_HPA = 6.112
+MAGNUS_B = 17.62
+MAGNUS_C = 243.12
+
+#: Stull's regression is fitted for 5-99% RH; re-expressing humidity at a hotter
+#: temperature can drive it below that, so it is clamped at the stated floor and
+#: the number of clamped days is reported rather than hidden.
+STULL_RH_FLOOR_PCT = 5.0
+
+#: CarbonPlan hold wind at 0.5 m/s, "approximating shaded/indoor" conditions.
+FROZEN_WIND_MS = 0.5
+
+
+def saturation_vapour_pressure_hpa(t_c: np.ndarray) -> np.ndarray:
+    """Saturation vapour pressure (hPa), Magnus form, shipped coefficients."""
+
+    t_c = np.asarray(t_c, dtype=float)
+    return MAGNUS_A_HPA * np.exp((MAGNUS_B * t_c) / (MAGNUS_C + t_c))
+
+
+def relative_humidity_at_tasmax_pct(
+    tas_c: np.ndarray, hurs_pct: np.ndarray, tasmax_c: np.ndarray
+) -> tuple[np.ndarray, int]:
+    """Re-express daily-mean RH at the daily maximum temperature.
+
+    Vapour pressure is the conserved quantity across the day; relative humidity
+    is not. CarbonPlan reach the same place from ``huss`` and an
+    elevation-synthesised ``ps``. IRT holds ``hurs`` directly, so pressure drops
+    out of the algebra entirely and no DEM is needed -- which matters, because
+    NEX-GDDP-CMIP6 publishes no ``ps``.
+
+    Returns the clamped RH in percent and the count of days that hit the Stull
+    validity floor.
+    """
+
+    hurs = np.clip(np.asarray(hurs_pct, dtype=float), 0.0, 100.0)
+    e_hpa = (hurs / 100.0) * saturation_vapour_pressure_hpa(tas_c)
+    rh = 100.0 * e_hpa / saturation_vapour_pressure_hpa(tasmax_c)
+    clamped = int(np.sum(rh < STULL_RH_FLOOR_PCT))
+    return np.clip(rh, STULL_RH_FLOOR_PCT, 100.0), clamped
+
+
+def carbonplan_shade_wbgt_c(
+    t_c: np.ndarray, rh_pct: np.ndarray, wind_ms: float = FROZEN_WIND_MS
+) -> np.ndarray:
+    """CarbonPlan's three-term ISO shade WBGT (degC), via thermofeel.
+
+    ``WBGT = 0.7*WBT + 0.2*BGT + 0.1*Ta`` with ``tmrt = tas``, exactly as
+    ``notebooks/02_generate.ipynb`` computes it. thermofeel takes and returns
+    kelvin throughout.
+    """
+
+    from thermofeel import calculate_bgt, calculate_wbt
+
+    t_c = np.asarray(t_c, dtype=float)
+    t_k = t_c + 273.15
+    rh = np.clip(np.asarray(rh_pct, dtype=float), STULL_RH_FLOOR_PCT, 100.0)
+    wbt_c = calculate_wbt(t_k, rh) - 273.15
+    bgt_c = calculate_bgt(t_k, t_k, np.full_like(t_c, float(wind_ms))) - 273.15
+    return 0.7 * wbt_c + 0.2 * bgt_c + 0.1 * t_c
+
 #: candidate column -> label used in the report, in reading order.
 CANDIDATES: tuple[tuple[str, str], ...] = (
     ("irt_swbgt_daily_mean_in", "INCUMBENT swbgt_empirical, AS DEPLOYED"),
     ("tier2_as_shipped_agg", "Tier 2 on daily-mean inputs (today's aggregation)"),
     ("tier2_stage_a_spec", "Tier 2 as specified (tasmax-driven shade)"),
+    ("tier2_rh_at_tasmax", "Tier 2 + RH at tasmax (CarbonPlan humidity)"),
+    (
+        "tier2_cp_three_term",
+        "Tier 2 + RH at tasmax, CarbonPlan three-term ISO form",
+    ),
+    (
+        "tier2_rh_at_tasmax_wind05",
+        "Tier 2 + RH at tasmax, wind frozen at 0.5 m/s (no sfcWind)",
+    ),
     ("tier2_true_rsds", "Tier 2, true hourly rsds_max (no disaggregation error)"),
     ("tier2_ceiling", "Tier 2 CEILING (hourly shade max + true rsds_max)"),
 )
@@ -112,6 +200,9 @@ def build_tier2_frame(daily: pd.DataFrame, *, lat: float, lon: float) -> pd.Data
 
     frame["adjustment_disagg_c"] = sun_adjustment_c(rsds_disagg, wind)
     frame["adjustment_true_c"] = sun_adjustment_c(rsds_true, wind)
+    frame["adjustment_wind05_c"] = sun_adjustment_c(
+        rsds_disagg, np.full(len(frame), FROZEN_WIND_MS)
+    )
 
     hurs_mean = frame["hurs_daily_mean_pct"].to_numpy(dtype=float)
     shade_tasmax = irt_wbgt_shade_stull_c(
@@ -119,10 +210,28 @@ def build_tier2_frame(daily: pd.DataFrame, *, lat: float, lon: float) -> pd.Data
     )
     frame["shade_tasmax_c"] = shade_tasmax
 
+    tasmax = frame["tasmax_c"].to_numpy(dtype=float)
+    rh_at_tasmax, clamped = relative_humidity_at_tasmax_pct(
+        frame["tas_daily_mean_c"].to_numpy(dtype=float), hurs_mean, tasmax
+    )
+    frame["hurs_at_tasmax_pct"] = rh_at_tasmax
+    frame.attrs["rh_floor_clamped_days"] = clamped
+    frame["shade_rh_at_tasmax_c"] = irt_wbgt_shade_stull_c(tasmax, rh_at_tasmax)
+    frame["shade_cp_three_term_c"] = carbonplan_shade_wbgt_c(tasmax, rh_at_tasmax)
+
     frame["tier2_as_shipped_agg"] = (
         frame["irt_shade_daily_mean_in"] - frame["adjustment_disagg_c"]
     )
     frame["tier2_stage_a_spec"] = shade_tasmax - frame["adjustment_disagg_c"]
+    frame["tier2_rh_at_tasmax"] = (
+        frame["shade_rh_at_tasmax_c"] - frame["adjustment_disagg_c"]
+    )
+    frame["tier2_cp_three_term"] = (
+        frame["shade_cp_three_term_c"] - frame["adjustment_disagg_c"]
+    )
+    frame["tier2_rh_at_tasmax_wind05"] = (
+        frame["shade_rh_at_tasmax_c"] - frame["adjustment_wind05_c"]
+    )
     frame["tier2_true_rsds"] = shade_tasmax - frame["adjustment_true_c"]
     frame["tier2_ceiling"] = (
         frame["irt_shade_hourly_max"] - frame["adjustment_true_c"]
@@ -161,11 +270,12 @@ def score_site(site_name: str, frame: pd.DataFrame) -> list[dict[str, object]]:
         row = comparison.to_row()
         # Uplift is the negated adjustment: what the chain adds to shade WBGT.
         if column.startswith("tier2_"):
-            term = (
-                "adjustment_true_c"
-                if column in {"tier2_true_rsds", "tier2_ceiling"}
-                else "adjustment_disagg_c"
-            )
+            if column in {"tier2_true_rsds", "tier2_ceiling"}:
+                term = "adjustment_true_c"
+            elif column == "tier2_rh_at_tasmax_wind05":
+                term = "adjustment_wind05_c"
+            else:
+                term = "adjustment_disagg_c"
             row["mean_uplift_c"] = float(-frame[term].mean())
         else:
             row["mean_uplift_c"] = np.nan
@@ -180,7 +290,36 @@ def acceptance_flag(median_abs: float, rmse: float) -> str:
     return "PASS" if passed else "FAIL"
 
 
-def render_markdown(rows: pd.DataFrame, *, years: Sequence[int]) -> str:
+def site_diagnostics(site_name: str, frame: pd.DataFrame) -> dict[str, object]:
+    """Per-site numbers that decide what still has to be downloaded.
+
+    The wind columns answer whether ``sfcWind`` is worth acquiring at all: the
+    adjustment's only wind term is ``+1.0424 * sfcWind`` clipped to 0.5-3.0 m/s,
+    so freezing wind at CarbonPlan's 0.5 m/s can move the result by at most
+    2.6 C, and usually far less.
+    """
+
+    delta = (frame["adjustment_wind05_c"] - frame["adjustment_disagg_c"]).abs()
+    return {
+        "site": site_name,
+        "wind_mean_ms": float(frame["wind_daily_mean_ms"].mean()),
+        "wind_p95_ms": float(frame["wind_daily_mean_ms"].quantile(0.95)),
+        "wind_freeze_mean_abs_c": float(delta.mean()),
+        "wind_freeze_max_abs_c": float(delta.max()),
+        "hurs_daily_mean_pct": float(frame["hurs_daily_mean_pct"].mean()),
+        "hurs_at_tasmax_pct": float(frame["hurs_at_tasmax_pct"].mean()),
+        "rh_floor_clamped_days": int(frame.attrs.get("rh_floor_clamped_days", 0)),
+        "cp_form_max_abs_diff_c": float(
+            (frame["shade_cp_three_term_c"] - frame["shade_rh_at_tasmax_c"])
+            .abs()
+            .max()
+        ),
+    }
+
+
+def render_markdown(
+    rows: pd.DataFrame, *, years: Sequence[int], diagnostics: pd.DataFrame
+) -> str:
     """Render the findings document."""
 
     lines = [
@@ -235,6 +374,41 @@ def render_markdown(rows: pd.DataFrame, *, years: Sequence[int]) -> str:
 
     lines += [
         "",
+        "## Does `sfcWind` have to be downloaded at all?",
+        "",
+        "The adjustment's only wind term is `+1.0424 * sfcWind`, clipped to "
+        f"{ADJ_WIND_CLIP[0]:g}-{ADJ_WIND_CLIP[1]:g} m/s, so freezing wind at "
+        f"CarbonPlan's {FROZEN_WIND_MS:g} m/s is bounded above by "
+        f"{1.0424 * (ADJ_WIND_CLIP[1] - ADJ_WIND_CLIP[0]):.2f} C by construction. "
+        "What matters is the size it actually reaches here.",
+        "",
+        "## Humidity, and the form of the equation",
+        "",
+        "`hurs at tasmax` is mean daily RH re-expressed at the daily maximum "
+        "temperature at fixed vapour pressure. `clamped days` counts days pushed "
+        f"below Stull's {STULL_RH_FLOOR_PCT:g}% validity floor by that conversion. "
+        "`CP form max diff` is the largest absolute gap between CarbonPlan's "
+        "three-term ISO WBGT and IRT's two-term form on identical inputs -- with "
+        "`tmrt = tas`, thermofeel returns `BGT = Ta`, so the two are the same "
+        "equation and this column should be numerically zero.",
+        "",
+        "| site | wind mean m/s | wind p95 m/s | freeze mean abs C "
+        "| freeze max abs C | hurs mean % | hurs at tasmax % | clamped days "
+        "| CP form max diff C |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for _, d in diagnostics.iterrows():
+        lines.append(
+            f"| {d['site']} | {d['wind_mean_ms']:.2f} | {d['wind_p95_ms']:.2f} "
+            f"| {d['wind_freeze_mean_abs_c']:.2f} "
+            f"| {d['wind_freeze_max_abs_c']:.2f} "
+            f"| {d['hurs_daily_mean_pct']:.1f} | {d['hurs_at_tasmax_pct']:.1f} "
+            f"| {int(d['rh_floor_clamped_days'])} "
+            f"| {d['cp_form_max_abs_diff_c']:.2e} |"
+        )
+
+    lines += [
+        "",
         "## Reading this table",
         "",
         "- The four Tier-2 rows differ only in how much input error is removed.",
@@ -270,20 +444,24 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"would read  {args.cache_dir} ({len(sites)} sites x {len(years)} years)")
         print(f"would write {args.out_dir / 'README.md'}")
         print(f"would write {args.out_dir / 'per_site.csv'}")
+        print(f"would write {args.out_dir / 'per_site_diagnostics.csv'}")
         for _, label in CANDIDATES:
             print(f"  candidate: {label}")
         return 0
 
     rows: list[dict[str, object]] = []
+    diagnostic_rows: list[dict[str, object]] = []
     for site in sites:
         raw = load_site_hourly(site, years, cache_dir=args.cache_dir)
         hourly = build_hourly_frame(site, raw)
         daily = extend_daily(hourly, build_daily_frame(hourly))
         frame = build_tier2_frame(daily, lat=site.lat, lon=site.lon)
         rows.extend(score_site(site.name, frame))
+        diagnostic_rows.append(site_diagnostics(site.name, frame))
         print(f"  {site.name}: {len(frame)} days scored")
 
     table = pd.DataFrame(rows)
+    diagnostics = pd.DataFrame(diagnostic_rows)
     table["verdict"] = [
         acceptance_flag(m, r)
         for m, r in zip(table["median_abs_bias_c"], table["rmse_c"])
@@ -291,10 +469,13 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     table.to_csv(args.out_dir / "per_site.csv", index=False)
+    diagnostics.to_csv(args.out_dir / "per_site_diagnostics.csv", index=False)
     (args.out_dir / "README.md").write_text(
-        render_markdown(table, years=years), encoding="utf-8"
+        render_markdown(table, years=years, diagnostics=diagnostics),
+        encoding="utf-8",
     )
     print(f"wrote {args.out_dir / 'per_site.csv'}")
+    print(f"wrote {args.out_dir / 'per_site_diagnostics.csv'}")
     print(f"wrote {args.out_dir / 'README.md'}")
     return 0
 
