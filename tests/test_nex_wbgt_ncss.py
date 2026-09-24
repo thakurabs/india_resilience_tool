@@ -1150,3 +1150,162 @@ def test_the_ceiling_opt_in_is_explicit_and_still_bounded():
     assert acq.MAX_WORKERS_CEILING == 16
     assert acq.MAX_WORKERS_HARD_LIMIT == 32
     assert acq.MAX_WORKERS_HARD_LIMIT >= acq.MAX_WORKERS_CEILING
+
+
+# ---------------------------------------------------------------------------
+# verify is strict about the time contract and dataset identity (CHG-0563)
+# ---------------------------------------------------------------------------
+
+
+def test_an_unreachable_time_reference_fails_instead_of_skipping_the_check(tmp_path):
+    """The reference used to vanish silently and take the date check with it.
+
+    A plan recording Windows paths, verified from WSL, hit exactly this: every
+    reference resolved to nothing, every date comparison was skipped, and the
+    pass still reported a fully verified archive.
+    """
+    task = _published(tmp_path)
+    Path(task.expected_time_reference).unlink()
+    row = acq.verify_output(task)
+    assert row["verified"] is False
+    assert "unreachable" in row["reason"]
+
+
+def test_a_missing_time_reference_is_a_planning_failure(tmp_path):
+    task = _published(tmp_path)
+    task.expected_time_reference = ""
+    row = acq.verify_output(task)
+    assert row["verified"] is False
+    assert "no local time reference" in row["reason"]
+
+
+def test_verify_checks_the_calendar_against_the_plan(tmp_path):
+    task = _published(tmp_path)
+    task.output_sha256 = None  # the weak path: no bytes to compare against
+    task.source_calendar = "360_day"
+    row = acq.verify_output(task)
+    assert row["verified"] is False
+    assert "calendar" in row["reason"] and row["calendar"] == "365_day"
+
+
+def test_verify_checks_the_planned_day_count(tmp_path):
+    task = _published(tmp_path)
+    task.output_sha256 = None
+    task.expected_time_count = 366
+    row = acq.verify_output(task)
+    assert row["verified"] is False
+    assert "time count 365 != planned 366" in row["reason"]
+
+
+def test_verify_catches_plan_and_reference_drift(tmp_path):
+    """Verification inherits the download-time guard on the time contract.
+
+    The output's own date hash cannot disagree with its dates, so the reachable
+    failure is drift between the plan and the local reference it was built
+    from - which must be reconciled, not verified around.
+    """
+    task = _published(tmp_path)
+    task.output_sha256 = None
+    task.expected_time_sha256 = "0" * 64
+    row = acq.verify_output(task)
+    assert row["verified"] is False
+    assert "local time reference changed since planning" in row["reason"]
+
+
+def test_verify_records_the_observed_calendar_and_date_hash(tmp_path):
+    task = _published(tmp_path)
+    row = acq.verify_output(task)
+    assert row["verified"] is True
+    assert row["calendar"] == "365_day"
+    assert row["time_sha256"] == task.expected_time_sha256
+
+
+def test_verify_requires_a_source_version_attribute(tmp_path):
+    import h5py
+
+    task = _published(tmp_path)
+    task.output_sha256 = None
+    with h5py.File(task.output_path, "r+") as handle:
+        del handle.attrs["version"]
+    row = acq.verify_output(task)
+    assert row["verified"] is False
+    assert "no source 'version' attribute" in row["reason"]
+
+
+def test_verify_requires_a_variant_label_attribute(tmp_path):
+    import h5py
+
+    task = _published(tmp_path)
+    task.output_sha256 = None
+    with h5py.File(task.output_path, "r+") as handle:
+        del handle.attrs["variant_label"]
+    row = acq.verify_output(task)
+    assert row["verified"] is False
+    assert "no 'variant_label' attribute" in row["reason"]
+
+
+def test_verify_catches_provenance_that_disagrees_with_the_source(tmp_path):
+    """The identity check used to read this tool's own echo of the request."""
+    import h5py
+
+    task = _published(tmp_path)
+    task.output_sha256 = None
+    task.source_version = None  # isolate the provenance cross-check
+    with h5py.File(task.output_path, "r+") as handle:
+        handle.attrs["version"] = np.bytes_(b"1.0")
+    row = acq.verify_output(task)
+    assert row["verified"] is False
+    assert "provenance version" in row["reason"]
+
+
+# ---------------------------------------------------------------------------
+# A scoped pass cannot pose as the archive-wide record (CHG-0564 / CHG-0565)
+# ---------------------------------------------------------------------------
+
+
+def _two_model_plan(tmp_path, monkeypatch) -> Path:
+    first = make_task(tmp_path, model="GFDL-ESM4")
+    second = make_task(tmp_path, model="KIOST-ESM")
+    out_root = _write_plan(tmp_path, [first, second])
+    source = write_nc(tmp_path / "response.nc")
+    monkeypatch.setattr(acq, "HttpClient",
+                        lambda **kwargs: FakeClient(payload=nc_response(source)))
+    assert acq.main(["--out-root", str(out_root), "download", "--workers", "1"]) == 0
+    return out_root
+
+
+def test_a_scoped_verify_writes_its_own_report(tmp_path, monkeypatch):
+    out_root = _two_model_plan(tmp_path, monkeypatch)
+    assert acq.main(["--out-root", str(out_root), "verify"]) == 0
+    full = acq.verification_path(out_root).read_bytes()
+
+    assert acq.main(["--out-root", str(out_root), "verify",
+                     "--models", "KIOST-ESM"]) == 0
+    assert acq.verification_path(out_root).read_bytes() == full
+    scoped = sorted(acq.acquisition_dir(out_root).glob("verification.scoped-*.csv"))
+    assert len(scoped) == 1
+    assert scoped[0].read_text(encoding="utf-8").count("\n") == 2  # header + 1 row
+
+
+def test_a_scoped_verify_does_not_displace_the_full_record_in_the_summary(
+        tmp_path, monkeypatch):
+    out_root = _two_model_plan(tmp_path, monkeypatch)
+    assert acq.main(["--out-root", str(out_root), "verify"]) == 0
+    full = json.loads(acq.summary_path(out_root).read_text(encoding="utf-8"))
+    assert full["verification"] == {**full["verification"], "scope": "full",
+                                    "checked": 2, "verified": 2, "not_verified": 0}
+    assert full["verification"]["report"] == "verification.csv"
+
+    assert acq.main(["--out-root", str(out_root), "verify",
+                     "--models", "KIOST-ESM"]) == 0
+    after = json.loads(acq.summary_path(out_root).read_text(encoding="utf-8"))
+    assert after["verification"] == full["verification"]
+    assert after["verification_scoped"]["scope"] == "scoped"
+    assert after["verification_scoped"]["checked"] == 1
+
+
+def test_the_summary_says_where_its_status_counts_come_from(tmp_path, monkeypatch):
+    out_root = _two_model_plan(tmp_path, monkeypatch)
+    summary = json.loads(acq.summary_path(out_root).read_text(encoding="utf-8"))
+    assert "acquisition manifest" in summary["status_counts_source"]
+    assert "verification" not in summary  # a download never claims to have verified

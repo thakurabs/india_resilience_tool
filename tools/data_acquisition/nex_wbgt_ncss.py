@@ -501,6 +501,18 @@ def verification_path(out_root: Path) -> Path:
     return acquisition_dir(out_root) / "verification.csv"
 
 
+def scoped_verification_path(out_root: Path, task_ids: Sequence[str]) -> Path:
+    """Where a partial verification pass writes, so it cannot pose as the whole.
+
+    `verification.csv` is the archive-wide record. A one-model spot check that
+    overwrote it would leave the archive looking verified on the strength of a
+    handful of files - which is how the record came to hold a bare header.
+    """
+    blob = "\n".join(sorted(task_ids)).encode("ascii")
+    digest = hashlib.sha256(blob).hexdigest()[:12]
+    return acquisition_dir(out_root) / f"verification.scoped-{digest}.csv"
+
+
 def summary_path(out_root: Path) -> Path:
     return acquisition_dir(out_root) / "summary.json"
 
@@ -1165,12 +1177,25 @@ def compare_published(destination: Path, variable: str,
 
 
 def _reconstruct_expected_dates(task: PlanTask) -> list[str]:
-    """Rebuild the expected timestamps from the recorded local reference."""
+    """Rebuild the expected timestamps from the recorded local reference.
+
+    An unreadable reference is a hard failure, never an empty list. Returning
+    ``[]`` silently disabled every downstream time comparison: a verification
+    pass run where the local archive is not reachable - from WSL against a
+    plan that records Windows paths, say - would then report a fully verified
+    archive without having compared a single date.
+    """
     if not task.expected_time_reference:
-        return []
+        raise PermanentTaskError(
+            f"{task.task_id} records no local time reference; re-plan rather "
+            "than accepting an unchecked time axis"
+        )
     reference = Path(task.expected_time_reference)
     if not reference.exists():
-        return []
+        raise PermanentTaskError(
+            f"local time reference is unreachable ({reference}); run where the "
+            "local archive is mounted - an unreadable reference is not a pass"
+        )
     contract = read_time_contract(reference)
     if task.expected_time_sha256 and contract["sha256"] != task.expected_time_sha256:
         raise PermanentTaskError(
@@ -1725,6 +1750,8 @@ def verify_output(task: PlanTask) -> dict[str, Any]:
         "output_bytes": "",
         "output_sha256": "",
         "time_count": "",
+        "calendar": "",
+        "time_sha256": "",
         "valid_count": "",
         "missing_count": "",
         "minimum": "",
@@ -1754,27 +1781,81 @@ def verify_output(task: PlanTask) -> dict[str, Any]:
                 # Mirror the download-time identity checks: without them an
                 # output carrying no manifest checksum could pass verification
                 # while holding the wrong dataset version or ensemble member.
-                published_version = ds.attrs.get("irt_acquisition_source_version",
-                                                 ds.attrs.get("version"))
-                if (published_version is not None and task.source_version
-                        and str(published_version).strip() != str(task.source_version)):
+                # NASA's own attributes are the authority here. This used to
+                # prefer `irt_acquisition_source_version`, which this tool
+                # writes from the *requested* version - so the check compared
+                # the request against its own echo and could never disagree.
+                source_version = ds.attrs.get("version")
+                if source_version is None:
+                    row["reason"] = "no source 'version' attribute to verify against"
+                    return row
+                if (task.source_version
+                        and str(source_version).strip() != str(task.source_version)):
                     row["reason"] = (
-                        f"source version {published_version!r} != "
+                        f"source version {source_version!r} != "
                         f"requested {task.source_version!r}"
                     )
                     return row
+                recorded_version = ds.attrs.get("irt_acquisition_source_version")
+                if (recorded_version is not None
+                        and str(recorded_version).strip() != str(source_version).strip()):
+                    row["reason"] = (
+                        f"acquisition provenance version {recorded_version!r} "
+                        f"disagrees with source version {source_version!r}"
+                    )
+                    return row
                 member = ds.attrs.get("variant_label")
-                if member is not None and str(member).strip() != task.member:
+                if member is None:
+                    row["reason"] = "no 'variant_label' attribute to verify against"
+                    return row
+                if str(member).strip() != task.member:
                     row["reason"] = (
                         f"ensemble member {member!r} != requested {task.member!r}"
+                    )
+                    return row
+                recorded_member = ds.attrs.get("irt_acquisition_member")
+                if (recorded_member is not None
+                        and str(recorded_member).strip() != str(member).strip()):
+                    row["reason"] = (
+                        f"acquisition provenance member {recorded_member!r} "
+                        f"disagrees with source member {member!r}"
+                    )
+                    return row
+                calendar = _calendar_of(ds)
+                row["calendar"] = "" if calendar is None else str(calendar)
+                if task.source_calendar and row["calendar"] != str(task.source_calendar):
+                    row["reason"] = (
+                        f"calendar {row['calendar']!r} != planned "
+                        f"{task.source_calendar!r}"
                     )
                     return row
                 array = ds[task.variable].transpose("time", "lat", "lon")
                 values = np.asarray(array.values)
                 dates = date_strings(ds)
-                if expected_dates and dates != list(expected_dates):
+                row["time_sha256"] = time_contract_sha256(dates)
+                if (task.expected_time_count
+                        and len(dates) != int(task.expected_time_count)):
+                    # A short but complete annual response stays a flagged
+                    # source/data issue; it is never coverage to interpolate.
                     row["reason"] = (
-                        f"time coverage {len(dates)} != expected {len(expected_dates)}"
+                        f"time count {len(dates)} != planned "
+                        f"{int(task.expected_time_count)}"
+                    )
+                    return row
+                if dates != list(expected_dates):
+                    first = next((i for i, (a, b) in enumerate(zip(dates, expected_dates))
+                                  if a != b), None)
+                    row["reason"] = (
+                        "timestamps differ from the local reference"
+                        + (f" (first at index {first}: {dates[first]!r} != "
+                           f"{expected_dates[first]!r})" if first is not None else "")
+                    )
+                    return row
+                if (task.expected_time_sha256
+                        and row["time_sha256"] != task.expected_time_sha256):
+                    row["reason"] = (
+                        f"date hash {row['time_sha256'][:12]} != planned "
+                        f"{task.expected_time_sha256[:12]}"
                     )
                     return row
                 if values.shape != (len(dates), TARGET_LAT.size, TARGET_LON.size):
@@ -1829,6 +1910,14 @@ def command_verify(args: argparse.Namespace) -> int:
             f"the requested scope selected 0 of {len(tasks)} planned tasks; "
             "check the --models/--experiments/--variables/--years spellings"
         )
+    full_scope = len(selected) == len(tasks)
+    report = (verification_path(out_root) if full_scope
+              else scoped_verification_path(out_root, [t.task_id for t in selected]))
+    if not full_scope:
+        logger.warning(
+            "scoped pass: %d of %d planned tasks — writing %s, leaving %s alone",
+            len(selected), len(tasks), report.name, verification_path(out_root).name,
+        )
     rows = [verify_output(task) for task in selected]
     verified = sum(1 for row in rows if row["verified"])
     logger.info("verified %d of %d expected outputs", verified, len(rows))
@@ -1836,19 +1925,27 @@ def command_verify(args: argparse.Namespace) -> int:
         if not row["verified"]:
             logger.warning("not verified: %s — %s", row["task_id"], row["reason"])
     if args.dry_run:
-        logger.info("[dry-run] would write %s and %s",
-                    verification_path(out_root), summary_path(out_root))
+        logger.info("[dry-run] would write %s and %s", report, summary_path(out_root))
         return 0 if verified == len(rows) else 3
     acquisition_dir(out_root).mkdir(parents=True, exist_ok=True)
-    tmp = verification_path(out_root).with_suffix(f".csv.tmp.{os.getpid()}")
+    tmp = report.with_suffix(f".csv.tmp.{os.getpid()}")
     with tmp.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
-    os.replace(tmp, verification_path(out_root))
+    os.replace(tmp, report)
+    record = {
+        "scope": "full" if full_scope else "scoped",
+        "report": report.name,
+        "checked": len(rows),
+        "verified": verified,
+        "not_verified": len(rows) - verified,
+        "written_at": _now_iso(),
+    }
     _write_summary(out_root, payload, tasks, mode="verify",
-                   extra={"verified_now": verified, "checked": len(rows)})
-    logger.info("wrote %s", verification_path(out_root))
+                   extra={"verified_now": verified, "checked": len(rows)},
+                   verification=record)
+    logger.info("wrote %s", report)
     return 0 if verified == len(rows) else 3
 
 
@@ -1857,9 +1954,18 @@ def command_verify(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _read_summary(out_root: Path) -> dict[str, Any]:
+    try:
+        loaded = json.loads(summary_path(out_root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def _write_summary(out_root: Path, payload: Mapping[str, Any],
                    tasks: Sequence[PlanTask], *, mode: str,
-                   extra: Mapping[str, Any] | None = None) -> None:
+                   extra: Mapping[str, Any] | None = None,
+                   verification: Mapping[str, Any] | None = None) -> None:
     by_variable: dict[str, dict[str, int]] = {}
     by_experiment: dict[str, dict[str, int]] = {}
     by_model: dict[str, dict[str, int]] = {}
@@ -1880,7 +1986,11 @@ def _write_summary(out_root: Path, payload: Mapping[str, Any],
         "source_version": payload.get("source_version"),
         "member": payload.get("member"),
         "expected_tasks": len(tasks),
+        # Acquisition state as the manifest records it. This is what the
+        # downloader concluded at publication time; it is NOT the outcome of an
+        # independent re-read, which lives under "verification" alone.
         "status_counts": _status_counts(tasks),
+        "status_counts_source": "acquisition manifest (not independent verification)",
         "by_variable": by_variable,
         "by_experiment": by_experiment,
         "by_model": by_model,
@@ -1889,6 +1999,20 @@ def _write_summary(out_root: Path, payload: Mapping[str, Any],
         "known_downstream_issues": KNOWN_DOWNSTREAM_ISSUES,
         **dict(extra or {}),
     }
+    # A scoped pass never displaces the archive-wide verification record, and a
+    # download never erases one: whatever the last full pass concluded survives
+    # until another full pass replaces it.
+    previous = _read_summary(out_root)
+    carried = previous.get("verification")
+    if verification is None:
+        if isinstance(carried, dict):
+            summary["verification"] = carried
+    elif verification.get("scope") == "full":
+        summary["verification"] = dict(verification)
+    else:
+        if isinstance(carried, dict):
+            summary["verification"] = carried
+        summary["verification_scoped"] = dict(verification)
     write_json_atomic(summary_path(out_root), summary)
 
 

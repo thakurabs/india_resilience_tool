@@ -300,9 +300,23 @@ temperature or humidity.
 - **Scope is never silently empty:** a `--models`/`--experiments`/`--variables`/`--years` filter
   that selects 0 planned tasks is a scope error (exit 2), not a vacuous success, and `verify`
   raises it *before* touching `verification.csv`.
-- **`verify` re-checks identity, not just bytes:** dataset version, ensemble member, units, time
-  coverage, grid and payload are all re-asserted, so an output with no manifest checksum cannot
-  pass on size alone.
+- **`verify` re-checks identity, not just bytes:** dataset version, ensemble member, calendar,
+  planned day count, timestamps, units, grid and payload are all re-asserted, so an output with no
+  manifest checksum cannot pass on size alone. Identity is read from NASA's own `version` and
+  `variant_label` attributes, and the tool's `irt_acquisition_*` provenance is cross-checked
+  against them rather than trusted in their place: the provenance records what was *requested*, so
+  reading it first compared the request against its own echo. Both attributes must be present.
+- **An unreadable time reference fails the row.** The expected timestamps come from the local
+  `tasmax` file recorded in the plan, and a reference that cannot be opened is an error, never an
+  empty expectation that silently skips the date comparison. This matters across the WSL/Windows
+  split: the plan records `D:\...` paths, so **run `verify` from the Windows env**. From WSL every
+  reference resolves to nothing, and each row now says so instead of passing.
+- **A scoped `verify` writes its own report.** Only a pass covering every planned task writes
+  `acquisition/verification.csv`; a filtered pass writes
+  `acquisition/verification.scoped-<hash>.csv`, logs that it did, and leaves the archive-wide
+  record untouched. In `summary.json`, `verification` holds the last **full** pass and
+  `verification_scoped` the last partial one. `status_counts` there is acquisition state from the
+  manifest, not verification — `status_counts_source` says so in the file.
 - **Exit codes:** `0` complete, `2` scope/plan error, `3` incomplete (any expected task not
   verified, including unresolved remote gaps), `4` interrupted.
 
@@ -353,10 +367,16 @@ Bulk download (writes data; resumable — re-run the same command after any inte
 "$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" download --workers 16
 ```
 
-Final verification (reads published outputs only; writes `verification.csv` and `summary.json`):
+Final verification (reads published outputs only; writes `verification.csv` and `summary.json`).
+Run it from the Windows env: the plan's time references are `D:\...` paths, and an unreachable
+reference is now a failed row rather than a skipped date check. Reads the full ~67 GB:
 ```bash
 "$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" verify
 ```
+
+A filtered `verify` is a spot check, not the record: it writes
+`acquisition/verification.scoped-<hash>.csv` and leaves `verification.csv` as the last full pass
+left it.
 
 **Known downstream WBGT blockers, recorded separately from acquisition failures.** A clean
 acquisition does not certify that every model-year is ready for a WBGT computation:
