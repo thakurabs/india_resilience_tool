@@ -523,6 +523,25 @@
                     text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); }
   .cmp-mode select { font: inherit; font-size: 12px; padding: 5px 7px; border: 1px solid var(--rule);
                      border-radius: 6px; background: #fff; color: var(--ink); }
+  /* One control, and it names the question rather than a mode the user is in:
+     what is allowed to differ from one column to the next. */
+  .cmp-vary { display: inline-flex; align-items: stretch; border: 1px solid var(--rule);
+              border-radius: 6px; overflow: hidden; background: #fff; }
+  .cmp-vary-lab { display: flex; align-items: center; padding: 0 8px; font-size: 10px;
+                  font-weight: 650; letter-spacing: .06em; text-transform: uppercase;
+                  color: var(--ink-3); background: #f8f5fa; border-right: 1px solid var(--rule); }
+  .cmp-vary-btn { font: inherit; font-size: 12px; padding: 5px 12px; border: 0;
+                  background: #fff; color: var(--ink-2); cursor: pointer; }
+  .cmp-vary-btn + .cmp-vary-btn { border-left: 1px solid var(--rule); }
+  .cmp-vary-btn[aria-pressed="true"] { background: #7b3fa0; color: #fff; font-weight: 650; }
+  .cmp-vary-btn:disabled { background: #f4f6f8; color: var(--ink-3); cursor: not-allowed; }
+  /* The pair that Add this future would add, named beside the button rather than
+     inside its label, so the button stays a button and not a sentence. */
+  .cmp-bar-reads { display: flex; flex-direction: column; gap: 1px; max-width: 220px;
+                   font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
+                   color: var(--ink-3); }
+  .cmp-bar-reads b { font-size: 11.5px; letter-spacing: 0; text-transform: none;
+                     font-weight: 600; color: var(--ink-2); line-height: 1.3; }
   .cmp-scroll { overflow-x: auto; padding-bottom: 3px; }
   .cmp-table { width: 100%; min-width: 520px; }
   .cmp-row { display: grid; grid-template-columns: repeat(var(--cmp-cols), minmax(0, 1fr)); }
@@ -736,7 +755,7 @@
         inside does on the way back are all real and all demonstrated. One metric in every
         list is marked as a demonstration of a signal with no destination. Saved Analysis is real:
         three seeded definitions demonstrate a legacy analysis opened against this release, an
-        advanced six-place configuration returning to a four-column Overview intact, and a
+        six-place multi-axis configuration returning to a four-column Overview intact, and a
         pre-2016 analysis whose places have since been renamed, split, retired and rendered
         ambiguous.</p>
       <p>Context and Evidence carries no basin or river map overlay and no basin context at
@@ -2715,7 +2734,7 @@
       notes.push("the futures subject was removed from the portfolio, so futures comparison closed and the remaining previous place columns were restored");
     }
     notes.push("your previous Overview context is restored; refinements were not applied to it");
-    if (da.intent === "comparison") notes.push("the edited advanced comparison is retained; reopen it to continue, including every selected place, metric and future");
+    if (da.intent === "comparison") notes.push("the multi-axis comparison is retained; reopen it to continue, including every selected place, metric and future");
     S.pinned = null;
     hideTip();
     [["sel-bundle", S.bundle], ["sel-scenario", S.scenario], ["sel-period", S.period]].forEach(function (pair) {
@@ -2736,7 +2755,14 @@
         release: daCopy(RELEASE)
       };
     }
-    S.da = { intent: "comparison", name: "Advanced comparison", level: "Portfolio", from: from };
+    /* CHG-0524: every Detailed Analysis state carries a refine object, because the
+       filter bar reads it unconditionally to show what the mode is set to. The
+       comparison had none, so crossing this doorway threw before anything
+       rendered. Its axes are chosen in the configuration below; the bar simply
+       reports the Overview values they started from. */
+    S.da = { intent: "comparison", name: "Comparison \u00b7 more than one axis", level: "Portfolio",
+             from: from,
+             refine: { scenario: S.scenario, period: S.period, metric: "", stat: "mean", geo: "" } };
     S.report = null; S.daNote = null;
   }
 
@@ -2756,8 +2782,10 @@
     Object.keys(D.scenario_labels).forEach(function (sc) {
       Object.keys(D.period_labels).forEach(function (pe) { futures.push([sc + "|" + pe, D.scenario_labels[sc] + " · " + D.period_labels[pe]]); });
     });
-    var h = "<div class='card'><h2>Detailed Analysis · Advanced comparison</h2>" +
-      "<p>Edit places, metrics and futures together. This demonstrates the configuration of IRT’s existing matrix; its analytical charts and report generation remain vendor work.</p>" +
+    var h = "<div class='card'><h2>Detailed Analysis · Compare Portfolio, more than one axis</h2>" +
+      "<p>The same comparison over the same portfolio. The one thing this side removes is the " +
+      "rule that only one axis may vary: here place, metric and future all may. Analytical " +
+      "charts and report generation remain vendor work.</p>" +
       "<p><b>" + esc(a.bundle) + "</b> · Mean · " + esc(a.release.ruler) + " · " + esc(a.release.build) + "</p>" +
       "<p>Unchecking a place changes this matrix only. Remove from portfolio also affects the restored Overview. Adding a place does not create an Overview column. Named analyses are unchanged.</p>" +
       "<div class='da-refine'><fieldset><legend>Matrix places</legend>" + daCheckList("places", places, a.places) +
@@ -2770,11 +2798,92 @@
     S.portfolio.forEach(function (m) {
       h += "<button class='btn ghost' data-da-remove='" + escAttr(cmpIdentity(m)) + "'>Remove " + esc(m.name) + " from portfolio</button> ";
     });
-    h += "<h3>Matrix configuration · " + a.places.length + " places × " + a.metrics.length + " metrics × " + a.slices.length + " futures</h3>";
+    h += "<h3>Configuration · " + a.places.length + " places × " + a.metrics.length + " metrics × " + a.slices.length + " futures</h3>";
     if (!a.places.length || !a.metrics.length || !a.slices.length) h += "<p class='cmp-alert'>Select at least one place, metric and future. The incomplete configuration is retained; no results are implied.</p>";
-    else h += "<p>All selected combinations are retained, including more than four places. Missing published values must show No data, never a substituted slice.</p>";
-    return h + "<p>Back restores the previous Overview mode, columns, subject, futures and map. Reopening advanced comparison restores these edits.</p>" +
+    else h += "<p>All selected combinations are retained, including more than four places. Missing published values must show No data, never a substituted slice.</p>" + daMatrixHtml(a);
+    return h + "<p>Back restores the previous Overview axis, columns, subject, futures and map. Reopening the multi-axis comparison restores these edits.</p>" +
       "<div class='btn-row'><button class='btn' id='back-ov'>Back to Overview</button></div></div>";
+  }
+
+  /* CHG-0522: one comparison, two orientations. A row here says exactly what a
+     column says in the Overview -- the score with its band, the difference in
+     scale points, the scoped rank with the denominator it was counted against,
+     and the same warnings about what may not be ordered. Nothing is relearned at
+     the doorway; the only difference is how many axes are free to vary, which is
+     why the rows carry Place and Future as explicit columns. */
+  function daMatrixHtml(a) {
+    var members = [];
+    a.places.forEach(function (id) {
+      S.portfolio.forEach(function (m) { if (cmpIdentity(m) === id) members.push(m); });
+    });
+    var rows = [];
+    members.forEach(function (m) {
+      a.slices.forEach(function (sid) {
+        rows.push({ member: m, sid: sid, facts: cmpFacts(m, sid) });
+      });
+    });
+    if (!rows.length) return "";
+    var base = rows[0].facts;
+
+    var h = "";
+    /* The same two refusals the Overview columns carry, in the same words. */
+    var scopes = {};
+    rows.forEach(function (r) {
+      if (r.member.level !== "Block") return;
+      var sb = blockByKey[r.member.key];
+      if (sb) scopes[sb.dk] = 1;
+    });
+    if (Object.keys(scopes).length > 1) {
+      h += "<p class='cmp-alert'><b>Block ranks are not comparable in this table.</b> " +
+        "Each block is ranked only inside its own district, and these blocks come from " +
+        "different districts, which were subdivided by different administrations. Compare " +
+        "their scores, which share one frozen ruler; do not order their ranks.</p>";
+    }
+    var kinds = {};
+    rows.forEach(function (r) {
+      if (r.facts.nvalid !== null && r.facts.nvalid !== undefined) kinds[r.facts.nvalid] = 1;
+    });
+    if (members.length === 1 && Object.keys(kinds).length > 1) {
+      h += "<p class='cmp-alert'><b>Coverage warning:</b> the number of units with data " +
+        "differs across futures (" + Object.keys(kinds).join(", ") + "). Rank movement is " +
+        "shown with this denominator difference exposed; do not read it as clean movement.</p>";
+    }
+    var picked = a.metrics.filter(function (x) { return x; });
+    if (picked.length) {
+      h += "<p class='sub'>The table below is the composite hazard score. Values for " +
+        picked.map(function (x) { return metricLabel(x); }).join(", ") +
+        " are not rendered in this demonstration; their rows must read in exactly these " +
+        "columns when they are.</p>";
+    }
+
+    h += "<div class='tv-scroll'><table class='rank'><thead><tr>" +
+      "<th>Place</th><th>Future</th><th class='num'>Score</th><th>Band</th>" +
+      "<th class='num'>\u0394 vs row 1</th><th>Rank \u00b7 comparison set</th><th>With data</th>" +
+      "</tr></thead><tbody>";
+    rows.forEach(function (r, i) {
+      var f = r.facts, lab = cmpSliceLabel(r.sid);
+      var delta = (i === 0 || base.score === null || f.score === null) ? null : f.score - base.score;
+      var deltaText = i === 0 ? "Baseline" : delta === null ? "\u2014"
+        : (Math.abs(delta) < 0.0000001 ? "0.0" : (delta > 0 ? "+" : "") + delta.toFixed(1));
+      var coverage = f.nvalid === null || f.nvalid === undefined ? "\u2014"
+        : r.member.level === "State/UT" ? f.nvalid + " districts in the mean"
+        : r.member.level === "Block" ? f.nvalid + " blocks in its own district"
+        : f.nvalid + " in the comparison set";
+      h += "<tr><td>" + esc(r.member.name) + "<br><span class='pf-sub'>" +
+          esc(siteBasis(r.member)) + "</span></td>" +
+        "<td>" + esc(lab.scenario) + "<br><span class='pf-sub'>" + esc(lab.period) + "</span></td>" +
+        "<td class='num sc'>" + fmt(f.score) + "</td>" +
+        "<td class='bandcell'>" + (f.score === null ? "\u2014" : bandPill(f.score)) + "</td>" +
+        "<td class='num'>" + deltaText + "</td>" +
+        "<td>" + esc(cmpRankText(r.member, f, base, false)) + "</td>" +
+        "<td>" + esc(coverage) + "</td></tr>";
+    });
+    h += "</tbody></table></div>" +
+      "<p class='cmp-note'>\u0394 is a difference in position among India\u2019s districts, never a " +
+      "physical difference, percentage, or multiple \u2014 the same reading as the Overview\u2019s " +
+      "\u0394 vs column 1. Rows may differ from row 1 in more than one way here, which is what " +
+      "the Overview\u2019s one-axis rule prevents and what this surface exists to allow.</p>";
+    return h;
   }
 
   function wireDaComparison(host) {
@@ -3786,9 +3895,6 @@
         "<span class='pf-acts'>" +
         "<button type='button' class='btn ghost cmp-remove-member' data-cmp-id='" +
           escAttr(id) + "'>Remove</button>" +
-        (S.cmp.mode === "places"
-          ? "<button type='button' class='btn ghost cmp-futures' data-cmp-id='" +
-            escAttr(id) + "'>Futures &rsaquo;</button>" : "") +
         "</span></li>";
     });
     return h + "</ul></div>";
@@ -4041,38 +4147,65 @@
       });
     });
 
-    var modeControls = "";
-    if (futures) {
-      var scenarioOptions = Object.keys(D.scenario_labels).map(function (key) {
-        return "<option value='" + escAttr(key) + "'>" + esc(D.scenario_labels[key]) + "</option>";
-      }).join("");
-      var periodOptions = Object.keys(D.period_labels).map(function (key) {
-        return "<option value='" + escAttr(key) + "'>" + esc(D.period_labels[key]) + "</option>";
-      }).join("");
-      modeControls =
-        "<div class='cmp-mode'>" +
-          "<label>Scenario<select id='cmp-add-scenario'>" + scenarioOptions + "</select></label>" +
-          "<label>Period<select id='cmp-add-period'>" + periodOptions + "</select></label>" +
-          "<button type='button' class='btn ghost' id='cmp-add-slice'>Add future</button>" +
-          "<button type='button' class='btn ghost' id='cmp-back-places'>Compare places</button>" +
-        "</div>";
-    }
+    /* CHG-0520: the comparison sets nothing the screen already sets. Risk Domain,
+       Scenario and Period are read from the filter bar above; a second pair of
+       pickers inside the card would let the user state the same fact twice and
+       then have to be told which copy moves the map.
+       CHG-0521: and there is one control, phrased as the question it answers --
+       what differs from one column to the next. */
+    var headerFuture = D.scenario_labels[S.scenario] + " \u00b7 " + D.period_labels[S.period];
+    var addSid = sliceId();
+    var trayFull = S.cmp.slices.length >= 4;
+    var alreadyIn = S.cmp.slices.indexOf(addSid) >= 0;
+    var subjectOptions = S.portfolio.map(function (m) {
+      var id = cmpIdentity(m);
+      return "<option value='" + escAttr(id) + "'" +
+        (futures && S.cmp.subject && cmpIdentity(S.cmp.subject) === id ? " selected" : "") +
+        ">" + esc(m.name) + " \u00b7 " + esc(siteBasis(m)) + "</option>";
+    }).join("");
+    var modeControls =
+      "<div class='cmp-mode'>" +
+        "<span class='cmp-vary' role='group' aria-label='What differs between the columns'>" +
+          "<span class='cmp-vary-lab'>Vary</span>" +
+          "<button type='button' class='cmp-vary-btn' id='cmp-vary-places' aria-pressed='" +
+            (!futures) + "' title='Columns differ by place. Scenario and period come from the " +
+            "filter bar and move every column together.'>Places</button>" +
+          "<button type='button' class='cmp-vary-btn' id='cmp-vary-futures' aria-pressed='" +
+            futures + "'" +
+            (S.portfolio.length ? " title='Columns differ by future, for one place held fixed.'"
+                                : " disabled title='Collect a place first \u2014 futures are compared for one place.'") +
+            ">Futures</button>" +
+        "</span>" +
+        (futures
+          ? "<label>Place held fixed<select id='cmp-subject'>" + subjectOptions + "</select></label>" +
+            "<button type='button' class='btn ghost' id='cmp-add-slice'" +
+            (trayFull || alreadyIn ? " disabled" : "") + " title='" +
+            escAttr(trayFull ? "Four futures are already shown; remove one to add another."
+              : alreadyIn ? "That scenario and period are already a column."
+              : "Adds the Scenario and Period currently set in the filter bar above.") + "'>" +
+            esc(trayFull ? "Four futures shown"
+              : alreadyIn ? "Already shown"
+              : "Add this future") + "</button>" +
+            "<span class='cmp-bar-reads'>Filter bar reads<b>" + esc(headerFuture) + "</b></span>"
+          : "") +
+      "</div>";
 
     var html =
       "<section class='card compare' aria-label='Compare Portfolio'>" +
       "<div class='cmp-head'><div><h2>Compare Portfolio · " + esc(S.bundle) + "</h2>" +
-      "<p><b>Active Risk Domain:</b> " + esc(S.bundle) + " · " +
+      "<p><b>Risk Domain, Scenario and Period are the filter bar's</b> — this panel states " +
+        "them and never sets them. " + esc(S.bundle) + " · " +
         (futures
-          ? "Futures mode fixes " + esc(S.cmp.subject.name) + " (" +
-            esc(S.cmp.subject.level) + "). Each column keeps its own scenario and period; " +
-            "the page header selectors update the rest of Overview without rewriting this tray. " +
+          ? esc(S.cmp.subject.name) + " (" + esc(S.cmp.subject.level) + ") is held fixed and " +
+            "each column is one future, added from the filter bar's current pair. Changing the " +
+            "bar moves the rest of Overview and never rewrites a column already added. " +
             (S.portfolio.length > 1
               ? "Your other " + (S.portfolio.length - 1) + " portfolio member" +
                 (S.portfolio.length === 2 ? " is" : "s are") + " kept and simply not shown " +
-                "while one place is held fixed; Compare places brings the previous columns back."
+                "while one place is held fixed; Vary · Places brings the previous columns back."
               : "")
-          : "Places mode fixes " + esc(D.scenario_labels[S.scenario]) + " · " +
-            esc(D.period_labels[S.period]) + " while locations vary.") +
+          : "Every column reads " + esc(D.scenario_labels[S.scenario]) + " · " +
+            esc(D.period_labels[S.period]) + ", so only the place differs.") +
         " Members are retained when the Risk Domain changes; every figure is replaced by the active Risk Domain." +
         " Map outlines appear only for portfolio members inside the current geography; off-view " +
         "members remain listed here." +
@@ -4083,8 +4216,8 @@
        the panel's job is to say which four are on screen -- never to pick them
        silently, and never to drop the rest to make the table fit. */
     html += "<div class='btn-row'><button class='btn' id='da-compare'>" +
-      (S.advanced ? "Resume advanced comparison" : "Explore comparison in Detailed Analysis") + "</button>" +
-      (S.advanced ? "<button class='btn ghost' id='da-compare-current'>Start new advanced comparison from Overview</button>" : "") + "</div>";
+      (S.advanced ? "Resume multi-axis comparison \u203a" : "Vary more than one axis \u203a") + "</button>" +
+      (S.advanced ? "<button class='btn ghost' id='da-compare-current'>Start a new multi-axis comparison from these columns</button>" : "") + "</div>";
     html += pfListHtml();
 
     var nvalid = facts.map(function (f) { return f.nvalid; })
@@ -4115,7 +4248,7 @@
       });
     }
     if (Object.keys(blockScopes).length > 1) {
-      html += "<p class='cmp-alert'><b>Block ranks are not comparable in this tray.</b> " +
+      html += "<p class='cmp-alert'><b>Block ranks are not comparable in this comparison.</b> " +
         "Each block is ranked only inside its own district, and these blocks come from " +
         "different districts, which were subdivided by different administrations. Compare " +
         "their scores, which share one frozen ruler; do not order their ranks.</p>";
@@ -4123,7 +4256,7 @@
 
     if (!slots.length) {
       html += "<p class='sub'>" + (futures
-        ? "No futures are in the tray. Add a scenario and period above."
+        ? "No futures are shown. Set Scenario and Period in the filter bar above, then Add this future."
         : "Nothing is selected for display. Your portfolio is listed above — tick up to four " +
           "places to compare them. Nothing has been removed.") + "</p>" +
         "</section>";
@@ -4193,11 +4326,11 @@
             "<button type='button' class='btn ghost cmp-remove-slice' data-cmp-slice='" +
             escAttr(slot.sid) + "'>Remove</button></span>";
         }
+        /* Entering futures is the Vary control's job and only its job. A per-column
+           button was a third way to reach the same state, each with its own wording. */
         return "<span class='lab'>Actions</span><span class='cmp-actions'>" +
           "<button type='button' class='btn ghost cmp-remove-member' data-cmp-id='" +
-          escAttr(cmpIdentity(slot.member)) + "'>Remove</button>" +
-          "<button type='button' class='btn ghost cmp-futures' data-cmp-id='" +
-          escAttr(cmpIdentity(slot.member)) + "'>Compare futures &rsaquo;</button></span>";
+          escAttr(cmpIdentity(slot.member)) + "'>Remove</button></span>";
       });
       html += "</div></div></section>";
       host.innerHTML = html;
@@ -4215,14 +4348,6 @@
         render();
       });
     }
-    var futuresButtons = host.querySelectorAll(".cmp-futures");
-    for (var j = 0; j < futuresButtons.length; j++) {
-      futuresButtons[j].addEventListener("click", function (ev) {
-        var id = ev.currentTarget.dataset.cmpId, member = null;
-        S.portfolio.forEach(function (m) { if (cmpIdentity(m) === id) member = m; });
-        if (member) enterFutures(member);
-      });
-    }
     var removeSlices = host.querySelectorAll(".cmp-remove-slice");
     for (var k = 0; k < removeSlices.length; k++) {
       removeSlices[k].addEventListener("click", function (ev) {
@@ -4231,34 +4356,35 @@
         render();
       });
     }
-    var back = document.getElementById("cmp-back-places");
-    if (back) back.addEventListener("click", leaveFutures);
-    var add = document.getElementById("cmp-add-slice");
-    var addScenario = document.getElementById("cmp-add-scenario");
-    var addPeriod = document.getElementById("cmp-add-period");
-    function updateFutureAdd() {
-      if (!add) return;
-      var sid = addScenario.value + "|" + addPeriod.value;
-      var full = S.cmp.slices.length >= 4;
-      var present = S.cmp.slices.indexOf(sid) >= 0;
-      add.disabled = full || present;
-      add.textContent = full ? "Tray full (4)" : present ? "Already added" : "Add future";
-      add.title = full ? "The comparison tray holds at most four futures."
-        : present ? "That scenario and period are already in the tray." : "Add this future.";
-    }
-    if (add) {
-      addScenario.value = S.scenario;
-      addPeriod.value = S.period;
-      addScenario.addEventListener("change", updateFutureAdd);
-      addPeriod.addEventListener("change", updateFutureAdd);
-      add.addEventListener("click", function () {
-        var sid = addScenario.value + "|" + addPeriod.value;
-        if (S.cmp.slices.length < 4 && S.cmp.slices.indexOf(sid) < 0) {
-          S.cmp.slices.push(sid); render();
-        }
-      });
-      updateFutureAdd();
-    }
+    /* Vary is a toggle over the same comparison, never a different feature: the
+       portfolio, its members and the previously shown columns all survive both
+       directions. */
+    var varyPlaces = host.querySelector("#cmp-vary-places");
+    if (varyPlaces) varyPlaces.addEventListener("click", function () {
+      if (S.cmp.mode === "futures") leaveFutures();
+    });
+    var varyFutures = host.querySelector("#cmp-vary-futures");
+    if (varyFutures) varyFutures.addEventListener("click", function () {
+      if (S.cmp.mode === "futures") return;
+      var shownNow = cmpDisplayed();
+      var member = shownNow.length ? shownNow[0] : S.portfolio[0];
+      if (member) enterFutures(member);
+    });
+    var subjectSel = host.querySelector("#cmp-subject");
+    if (subjectSel) subjectSel.addEventListener("change", function () {
+      var id = subjectSel.value, member = null;
+      S.portfolio.forEach(function (m) { if (cmpIdentity(m) === id) member = m; });
+      if (member) { S.cmp.subject = member; render(); }
+    });
+    /* The added future is whatever the filter bar currently reads. Nothing in
+       this card can disagree with the bar, because nothing in it can set one. */
+    var add = host.querySelector("#cmp-add-slice");
+    if (add) add.addEventListener("click", function () {
+      var sid = sliceId();
+      if (S.cmp.slices.length < 4 && S.cmp.slices.indexOf(sid) < 0) {
+        S.cmp.slices.push(sid); render();
+      }
+    });
   }
 
   /* ================= Context and Evidence ================= */
@@ -5019,13 +5145,13 @@
       target: "The open unit’s score, band, rank, count with data, metrics, distribution and ranked lists live here. It is the “understand” step of the journey, not a filing cabinet." },
     { n: 9, what: "Add to Analysis wherever a unit is named",
       today: "Add to Analysis already exists in the map-click information surface and Spatial Panel; the ranking table also has a portfolio action.",
-      target: "Every place a unit appears — map, ranked lists, ranked table, block inspection, coordinate result — can put it in the tray, and one compare surface serves both places and futures." },
+      target: "Every place a unit appears — map, ranked lists, ranked table, block inspection, coordinate result — can add it to My Portfolio, and one comparison over that portfolio serves both places and futures — the Overview varying one axis, Detailed Analysis varying all three." },
     { n: 10, what: "A coordinate lands in the same profile",
       today: "Coordinate Analysis is a separate path with its own result.",
       target: "A named site keeps its own identity and coordinates in the portfolio; its containing block supplies the assessment. CSV review retains separate sites in one block, skips repeated sites and shows unresolved rows." },
     { n: 11, what: "Two doorways at every named unit",
       today: "There is no report, and no explicit route from a screening result into a deeper analysis.",
-      target: "Detailed Analysis and Download report are offered wherever a unit is named. Detailed Analysis carries roster keys rather than display names, opens already showing the score the Overview just gave, refuses the signals it has no surface for, and Back restores the previous Overview context and clears temporary emphasis. Advanced comparison keeps its independently edited places, metrics and futures for the next crossing." },
+      target: "Detailed Analysis and Download report are offered wherever a unit is named. Detailed Analysis carries roster keys rather than display names, opens already showing the score the Overview just gave, refuses the signals it has no surface for, and Back restores the previous Overview context and clears temporary emphasis. The multi-axis comparison keeps its independently edited places, metrics and futures for the next crossing." },
     { n: 12, what: "A saved analysis is a question, not an answer",
       today: "Saved Analysis holds named records with Rename and Delete, and the portfolio is the same four-place object the comparison uses — so a comparison control can empty a collection.",
       target: "The portfolio and the comparison are separate: the collection has no cap, the comparison shows four columns chosen explicitly, and no mode switch removes a member. A saved analysis stores places, metrics, futures, statistic and layout but no scores; opening it resolves against the published release, states that release, says what changed since, and never prints a score measured on the old ruler. Renamed places restore; split, retired and ambiguous ones stay listed with their reason rather than being substituted or dropped." }
