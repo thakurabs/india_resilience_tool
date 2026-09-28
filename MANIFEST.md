@@ -813,7 +813,9 @@ For questions about the codebase:
   slugs. Measures the staged pilot and the published shade trees (cached in `<stage>/rollback_sizes.json`,
   written back per tree so an interrupted walk resumes; `--dry-run` skips the walk and yields no space
   verdict), then with `--build` runs resumable per-state compute followed by masters, optimized outputs,
-  strict state values and strict parity. Validates each state's roster coverage as its compute finishes,
+  strict state values and strict parity. Validates boundary-derived units and each model/scenario/year
+  against native per-unit yearly CSVs as each state's compute finishes (before master summaries exist),
+  recording validation failures in `status.json`. It
   preflights rostered inputs given `--source-root`, refuses to resume a stage built from a different
   specification, and writes `release_ready.json` only after full validation. Writes only under `--stage`;
   it never touches the published tree and never publishes. Promotion/rollback is not implemented.

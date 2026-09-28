@@ -818,8 +818,10 @@ and separates measurement from execution:
 - **`--dry-run`** — skips the published-tree walk entirely (seconds, not tens of minutes). It yields no
   space verdict, so it is refused in combination with `--build`.
 - **`--build`** — resumable state-by-state compute, then masters, optimized outputs, strict state values
-  and strict parity, validating each state's roster coverage as soon as its compute finishes rather than
-  only at the end. `--source-root` additionally preflights every rostered model-year input before the
+  and strict parity. Immediately after each state computes, validates native per-unit yearly CSVs against
+  boundary units, model/scenario/year rosters and shade signatures; no master summary is required yet.
+  Validation exceptions set `status.json` to failed and stop downstream stages. Resume with the same
+  command and stage to reuse valid compute markers and revalidate the outputs. `--source-root` additionally preflights every rostered model-year input before the
   first compute stage. A stage built from a different roster, state list or formula signature is refused
   rather than mixed. `--force` breaks a build lock only where the holding PID cannot be probed.
 

@@ -189,3 +189,21 @@ Rajasthan compute took 135.0 s, Himachal Pradesh 91.5 s; downstream masters took
 optimized conversion 50.6 s, state values 6.2 s and strict parity 16.0 s. Kerala compute/ensembles
 reported 53.4 s district plus 49.0 s block. These results do not constitute a national run or
 an atomic promotion/rollback rehearsal. Reports are retained beside the reference-validation evidence.
+
+### Recovery from post-compute validation failure (CHG-0600/0601)
+
+The national Andaman run completed its compute subprocess but stopped because the early validator
+requested `state_yearly_model_averages_district.csv`, a later master-builder output. The repaired gate
+reads native district/block yearly CSVs, derives expected units from compute boundaries, and rejects
+missing units/files, incomplete or duplicate years, identity mismatches and stale shade signatures.
+NaN values remain valid records. Validation failures now persist in `status.json`.
+
+Keep the existing stage and completion markers. After focused tests and validation of the existing
+state outputs, rerun the same build command above; `--skip-existing` with the `preserve` policy reuses
+valid compute artifacts and the state is validated again before advancing. Do not fabricate summaries
+or remove the early validation gate. The national restart remains an operator action.
+
+Verification of this repair: the five-suite focused run passed 120 tests. The repaired validator
+passed against the existing staged Andaman district/block outputs for all four shade metrics.
+The production task planner and completion-marker validator accepted all 228 district and 228 block
+compute tasks for reuse. No national compute or publication was started during these checks.

@@ -318,28 +318,59 @@ def validate_yearly(frame, *, models: list[str], years: dict[str, list[int]],
             raise ValueError(f"Incomplete model/year roster for {unit}")
 
 
-def validate_state_compute(stage: Path, state: str, roster: dict) -> None:
-    """Check one state's roster coverage right after its compute stage, not days later."""
-    import pandas as pd
+def validate_state_compute(stage: Path, state: str, roster: dict, *, data_dir: Path) -> None:
+    """Validate native per-unit yearly outputs before any masters exist.
 
-    expected = {(m, s, y) for m in roster["models"]
-                for s, ys in roster["required_years"].items() for y in ys}
-    for slug in sorted(SHADE_SLUGS):
-        for level in ("district", "block"):
-            path = (stage / "processed" / slug / state /
-                    f"state_yearly_model_averages_{level}.csv")
-            frame = pd.read_csv(path)
-            require_shade_signature(frame, context=str(path))
-            if frame.empty:
-                raise ValueError(f"Empty staged yearly averages: {path}")
-            actual = set(frame[["model", "scenario", "year"]].itertuples(index=False, name=None))
-            if actual != expected:
-                short = sorted(expected - actual)[:5]
-                raise ValueError(
-                    f"{path}: staged model/year coverage does not match the release roster "
-                    f"({len(expected - actual)} missing, e.g. {short}; "
-                    f"{len(actual - expected)} unexpected)"
-                )
+    Derive expected units from the same boundaries and filename normalization as
+    compute, so a wholly missing unit cannot disappear from the validation roster.
+    Missing values are valid records; missing or duplicate years are not.
+    """
+    import pandas as pd
+    from tools.pipeline.compute_indices_multiprocess import load_boundaries, _safe_component
+
+    for level in ("district", "block"):
+        boundaries = load_boundaries(data_dir / f"{level}s_4326.geojson",
+                                     state_filter=state, level=level)
+        columns = ["district_name"] + (["block_name"] if level == "block" else [])
+        units = list(boundaries[columns].drop_duplicates().itertuples(index=False, name=None))
+        if not units:
+            raise ValueError(f"Empty boundary roster: {state}/{level}")
+        tokens = [tuple(_safe_component(name) for name in unit) for unit in units]
+        if len(set(tokens)) != len(units):
+            raise ValueError(f"Boundary filename collision: {state}/{level}")
+        for slug in sorted(SHADE_SLUGS):
+            root = stage / "processed" / slug / state / f"{level}s"
+            for unit, parts in zip(units, tokens):
+                directory = root.joinpath(*parts)
+                if not directory.is_dir():
+                    raise ValueError(f"Missing staged unit directory: {directory}")
+                models = {p.name for p in directory.iterdir() if p.is_dir()}
+                if models != set(roster["models"]):
+                    raise ValueError(f"Model roster mismatch: {directory}")
+                for model in roster["models"]:
+                    model_dir = directory / model
+                    scenarios = {p.name for p in model_dir.iterdir() if p.is_dir()}
+                    if scenarios != set(roster["required_years"]):
+                        raise ValueError(f"Scenario roster mismatch: {model_dir}")
+                    for scenario, years in roster["required_years"].items():
+                        path = model_dir / scenario / f"{parts[-1]}_yearly.csv"
+                        if not path.is_file():
+                            raise ValueError(f"Missing staged yearly output: {path}")
+                        frame = pd.read_csv(path)
+                        require_shade_signature(frame, context=str(path))
+                        required = {"year", "model", "scenario", "value", "district"}
+                        if level == "block":
+                            required.add("block")
+                        if not required.issubset(frame.columns):
+                            raise ValueError(f"Missing yearly columns: {path}")
+                        if frame.empty or frame["year"].duplicated().any() or set(frame["year"]) != set(years):
+                            raise ValueError(f"Incomplete/duplicate yearly roster: {path}")
+                        identities = {"model": model, "scenario": scenario, "district": unit[0]}
+                        if level == "block":
+                            identities["block"] = unit[1]
+                        for column, expected in identities.items():
+                            if not frame[column].eq(expected).all():
+                                raise ValueError(f"Yearly {column} identity mismatch: {path}")
 
 
 def canonical_state_keys(stage: Path, level: str, state: str) -> set[str]:
@@ -561,7 +592,18 @@ def build(data_dir: Path, stage: Path, specification: dict, *,
             "--metrics", *slugs, "--workers", "1", "--level", "both",
             "--yearly-cleanup-policy", "preserve", "--skip-existing",
             "--output-root", str(stage / "processed")], data_dir)
-        validate_state_compute(stage, state, roster)
+        validation_label = "validate_compute_" + state.replace(" ", "_")
+        started = time.time()
+        write_json(status_path, {"current_stage": validation_label, "started_unix": started,
+                                 "completed": events})
+        try:
+            validate_state_compute(stage, state, roster, data_dir=data_dir)
+        except Exception as exc:
+            write_json(status_path, {"current_stage": validation_label, "completed": events,
+                                     "failed": True, "error": f"{type(exc).__name__}: {exc}"})
+            raise
+        events.append({"stage": validation_label, "seconds": time.time() - started, "exit_code": 0})
+        write_json(status_path, {"completed": events, "failed": False})
     run("masters", ["tools.pipeline.build_master_metrics", "--processed-root",
         str(stage / "processed"), "--level", "both", "--metrics", *slugs, "--workers", "1"], data_dir)
     for level in ("districts", "blocks", "states"):

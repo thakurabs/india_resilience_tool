@@ -956,5 +956,7 @@ The empirical outdoor family retains its numerical method under the label **Empi
 Existing shade artifacts require rebuilding; the national replacement has not been published.
 `python -m tools.pipeline.build_shade_release --data-dir <data> --stage <scratch dir>` budgets that
 rebuild (add `--dry-run` to skip the multi-minute published-tree walk) and, with `--build`, stages it
-resumably without ever writing to the published tree. Promotion and rollback are not implemented.
+resumably without ever writing to the published tree. Each state is validated against its native
+per-unit yearly files before masters are built; validation failures are recorded in `status.json`.
+Promotion and rollback are not implemented.
 See [shade release status, evidence and staged operator commands](docs/wbgt_shade_release.md).

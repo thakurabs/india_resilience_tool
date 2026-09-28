@@ -488,34 +488,136 @@ def test_release_validation_rejects_empty_and_short_coverage():
         validate_yearly(empty, **kwargs)
 
 
-def test_state_compute_validation_matches_the_release_roster(tmp_path):
-    import pytest
-    from tools.pipeline.build_shade_release import validate_state_compute
+@pytest.fixture
+def native_shade_stage(tmp_path):
+    """Write compute's native layout, deliberately without master summaries."""
+    import json
     from india_resilience_tool.data.wbgt_contract import SHADE_METHOD_SIGNATURE, SHADE_SLUGS
 
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "states_4326.geojson").write_text(json.dumps({
+        "type": "FeatureCollection", "features": []}))
+    stage = tmp_path / "stage"
     roster = {"models": ["m1"], "required_years": {"historical": [2000, 2001]}}
-    rows = pd.DataFrame({"scenario": ["historical"] * 2, "year": [2000, 2001],
-                         "model": ["m1"] * 2, "value": [26.0, 26.5], "n_units": [14, 14],
-                         "shade_method_signature": [SHADE_METHOD_SIGNATURE] * 2})
-
-    def write(frame):
+    for level in ("district", "block"):
+        properties = {"STATE_UT": "Kerala", "DISTRICT": "Test District"}
+        if level == "block":
+            properties["Sub_dist"] = "Test Block"
+        boundary = {"type": "FeatureCollection", "features": [
+            {"type": "Feature", "properties": properties,
+             "geometry": {"type": "Point", "coordinates": [76, 10]}}]}
+        (data / f"{level}s_4326.geojson").write_text(json.dumps(boundary))
         for slug in SHADE_SLUGS:
-            directory = tmp_path / "processed" / slug / "Kerala"
-            directory.mkdir(parents=True, exist_ok=True)
-            for level in ("district", "block"):
-                frame.to_csv(directory / f"state_yearly_model_averages_{level}.csv", index=False)
+            parts = ["Test_District"] + (["Test_Block"] if level == "block" else [])
+            directory = (stage / "processed" / slug / "Kerala" / f"{level}s").joinpath(*parts) / "m1" / "historical"
+            directory.mkdir(parents=True)
+            rows = pd.DataFrame({"year": [2000, 2001], "model": ["m1"] * 2,
+                                 "scenario": ["historical"] * 2, "value": [np.nan, np.nan],
+                                 "district": ["Test District"] * 2,
+                                 "shade_method_signature": [SHADE_METHOD_SIGNATURE] * 2})
+            if level == "block":
+                rows["block"] = "Test Block"
+            rows.to_csv(directory / f"{parts[-1]}_yearly.csv", index=False)
+    return stage, data, roster
 
-    write(rows)
-    validate_state_compute(tmp_path, "Kerala", roster)
 
-    write(rows.iloc[:1])
-    with pytest.raises(ValueError, match="does not match the release roster"):
-        validate_state_compute(tmp_path, "Kerala", roster)
+def test_state_compute_validation_matches_the_release_roster(native_shade_stage):
+    from tools.pipeline.build_shade_release import validate_state_compute
 
-    stale = rows.assign(shade_method_signature="shade-peak-v0")
-    write(stale)
-    with pytest.raises(ValueError, match="stale shade signature"):
-        validate_state_compute(tmp_path, "Kerala", roster)
+    stage, data, roster = native_shade_stage
+    assert not list(stage.rglob("state_yearly_model_averages_*.csv"))
+    validate_state_compute(stage, "Kerala", roster, data_dir=data)
+
+
+@pytest.mark.parametrize("level", ["district", "block"])
+@pytest.mark.parametrize("defect,match", [
+    ("missing_file", "Missing staged yearly output"),
+    ("missing_unit", "Missing staged unit directory"),
+    ("missing_model", "Model roster mismatch"),
+    ("missing_scenario", "Scenario roster mismatch"),
+    ("short", "Incomplete/duplicate"),
+    ("empty", "Incomplete/duplicate"),
+    ("duplicate", "Incomplete/duplicate"),
+    ("stale", "stale shade signature"),
+    ("identity", "identity mismatch"),
+    ("columns", "Missing yearly columns"),
+])
+def test_native_compute_validation_rejects_invalid_outputs(native_shade_stage, level, defect, match):
+    import shutil
+    from tools.pipeline.build_shade_release import validate_state_compute
+
+    stage, data, roster = native_shade_stage
+    root = stage / "processed" / "wbgt_shade_stull_annual_mean" / "Kerala" / f"{level}s"
+    path = next(root.rglob("*_yearly.csv"))
+    if defect == "missing_file":
+        path.unlink()
+    elif defect == "missing_unit":
+        shutil.rmtree(path.parents[2])
+    elif defect == "missing_model":
+        shutil.rmtree(path.parents[1])
+    elif defect == "missing_scenario":
+        shutil.rmtree(path.parent)
+    else:
+        frame = pd.read_csv(path)
+        if defect == "short":
+            frame = frame.iloc[:1]
+        elif defect == "empty":
+            frame = frame.iloc[:0]
+        elif defect == "duplicate":
+            frame = pd.concat([frame, frame.iloc[:1]], ignore_index=True)
+        elif defect == "stale":
+            frame["shade_method_signature"] = "shade-peak-v0"
+        elif defect == "identity":
+            frame[level] = "Other unit"
+        elif defect == "columns":
+            frame = frame.drop(columns=["value"])
+        frame.to_csv(path, index=False)
+    with pytest.raises(ValueError, match=match):
+        validate_state_compute(stage, "Kerala", roster, data_dir=data)
+
+
+def test_build_records_validation_failure_and_revalidates_on_resume(native_shade_stage, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import tools.pipeline.build_shade_release as runner
+
+    stage, data, roster = native_shade_stage
+    specification = {"space_passed": True, "signature": runner.SHADE_METHOD_SIGNATURE,
+                     "states": ["Kerala"], "workers": 1, "data_root": str(data),
+                     "boundary_source": {}, "roster": roster}
+    monkeypatch.setattr(runner, "preflight_inputs", lambda *a: {})
+    calls = []
+
+    def subprocess_run(arguments, **kwargs):
+        calls.append(arguments)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(runner.subprocess, "run", subprocess_run)
+    yearly = next(stage.rglob("*_yearly.csv"))
+    original = yearly.read_bytes()
+    yearly.unlink()
+    (stage / "release_ready.json").write_text('{}')
+    with pytest.raises(ValueError, match="Missing staged yearly output"):
+        runner.build(data, stage, specification)
+    status = json.loads((stage / "status.json").read_text())
+    assert status["failed"] is True
+    assert status["current_stage"] == "validate_compute_Kerala"
+    assert "Missing staged yearly output" in status["error"]
+    assert len(calls) == 1  # no downstream work after validation failure
+    assert not (stage / "release_ready.json").exists()
+    history = status["completed"]
+    yearly.write_bytes(original)
+    monkeypatch.setattr(runner, "validate_release", lambda *a: {"status": "validated"})
+    runner.build(data, stage, specification)
+    status = json.loads((stage / "status.json").read_text())
+    assert status["failed"] is False
+    assert status["completed"][:len(history)] == history
+    assert any(e["stage"] == "validate_compute_Kerala" for e in status["completed"])
+    for args in calls[:2]:
+        assert "--skip-existing" in args
+        assert args[args.index("--yearly-cleanup-policy") + 1] == "preserve"
+    assert (stage / "release_ready.json").exists()
 
 
 def test_dry_run_cannot_authorize_a_build():
