@@ -189,7 +189,7 @@ def test_heat_stress_gridfirst_slugs_do_not_overlap_heat_risk_gridfirst_slugs() 
 def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
     expected = {
         "wbgt_shade_stull_annual_mean": (
-            "Shaded WBGT (Annual Mean)",
+            "Shaded WBGT — Annual Mean of Estimated Daily Maxima",
             "wbgt_shade_stull_annual_mean",
             "wbgt_shade_stull_annual_mean_C",
         ),
@@ -209,22 +209,22 @@ def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
             "wbgt_shade_stull_days_ge_32_days",
         ),
         "swbgt_empirical_annual_mean": (
-            "Outdoor WBGT (Annual Mean)",
+            "Empirical sWBGT (Annual Mean)",
             "swbgt_empirical_annual_mean",
             "swbgt_empirical_annual_mean_C",
         ),
         "swbgt_empirical_days_ge_28": (
-            "Outdoor WBGT Days (≥ 28°C)",
+            "Empirical sWBGT Days (≥ 28°C)",
             "swbgt_empirical_days_ge_threshold",
             "swbgt_empirical_days_ge_28_days",
         ),
         "swbgt_empirical_days_ge_30": (
-            "Outdoor WBGT Days (≥ 30°C)",
+            "Empirical sWBGT Days (≥ 30°C)",
             "swbgt_empirical_days_ge_threshold",
             "swbgt_empirical_days_ge_30_days",
         ),
         "swbgt_empirical_days_ge_32": (
-            "Outdoor WBGT Days (≥ 32°C)",
+            "Empirical sWBGT Days (≥ 32°C)",
             "swbgt_empirical_days_ge_threshold",
             "swbgt_empirical_days_ge_32_days",
         ),
@@ -241,7 +241,7 @@ def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
         spec = METRICS_BY_SLUG[slug]
         assert spec.label == label
         assert spec.var == "tas"
-        assert list(spec.vars or []) == ["tas", "hurs"]
+        assert list(spec.vars or []) == (["tas", "tasmax", "hurs"] if slug.startswith("wbgt_shade") else ["tas", "hurs"])
         assert spec.compute == compute
         assert spec.value_col == value_col
         assert spec.description is not None

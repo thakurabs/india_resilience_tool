@@ -43,6 +43,7 @@ def build_parser(*, default_workers: Optional[int] = None) -> argparse.ArgumentP
         help="Spatial level for aggregation (default: both = district + block)",
     )
     parser.add_argument("-s", "--state", default="Telangana", help="State to process (default: Telangana)")
+    parser.add_argument("--output-root", default=None, help="Override processed output root for isolated staging; source data paths stay unchanged")
     parser.add_argument("--metrics", nargs="+", help="Filter to specific metric slugs")
     parser.add_argument("--models", nargs="+", help="Filter to specific models")
     parser.add_argument("--scenarios", nargs="+", help="Filter to specific scenarios")

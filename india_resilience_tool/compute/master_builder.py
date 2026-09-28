@@ -31,6 +31,8 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
+from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS, SHADE_METHOD_SIGNATURE, require_shade_signature, shade_artifact_current
+
 from pathlib import Path
 import argparse
 import json
@@ -440,6 +442,9 @@ def _collect_file_frame(
     metric_col = _first_existing_metric_col(df, metric_col_candidates)
     if not metric_col or metric_col not in df.columns:
         return None
+    is_shade = any(part in SHADE_SLUGS for part in csv_path.parts)
+    if is_shade:
+        require_shade_signature(df, context=str(csv_path))
     frame = pd.DataFrame({"value": df[metric_col].to_numpy()})
     frame[time_col] = df[time_col].to_numpy() if time_col in df.columns else ""
     for key, val in scalar_ids.items():
@@ -452,6 +457,9 @@ def _collect_file_frame(
         frame["climate_fill_method"] = df["climate_fill_method"].to_numpy()
         if "climate_fill_method" not in cols:
             cols = cols + ["climate_fill_method"]
+    if is_shade:
+        frame["shade_method_signature"] = SHADE_METHOD_SIGNATURE
+        cols.append("shade_method_signature")
     return frame.reindex(columns=cols)
 
 
@@ -715,6 +723,18 @@ def _build_wide_master(
         master = master.merge(prov, on=id_cols, how="left")
         master["climate_fill_method"] = master["climate_fill_method"].fillna("native")
 
+    if "shade_method_signature" in df_all:
+        require_shade_signature(df_all, context="shade master inputs")
+        # Retain every requested slice even when every model/unit value is NaN.
+        for scenario, period in df_all[["scenario", "period"]].drop_duplicates().itertuples(index=False, name=None):
+            prefix = f"{_metric_col_name}__{scenario}__{period}"
+            for stat in ("mean", "std", "median", "p05", "p95"):
+                if f"{prefix}__{stat}" not in master:
+                    master[f"{prefix}__{stat}"] = np.nan
+            for stat, default in (("n_models", 0), ("values_per_model", "{}")):
+                col = f"{prefix}__{stat}"
+                master[col] = master[col].fillna(default) if col in master else default
+        master["shade_method_signature"] = SHADE_METHOD_SIGNATURE
     return master
 
 
@@ -900,6 +920,10 @@ def build_master_metrics(
     state_model_df, state_ensemble_df, state_yearly_model_df, state_yearly_ensemble_df = _build_state_summaries(
         df_all, df_yearly, metric_col_in_periods, level
     )
+
+    if root.name in SHADE_SLUGS:
+        for summary in (state_model_df, state_ensemble_df, state_yearly_model_df, state_yearly_ensemble_df):
+            summary["shade_method_signature"] = SHADE_METHOD_SIGNATURE
 
     # Write outputs (master CSV goes in state root)
     if out_path:
@@ -1128,7 +1152,7 @@ def build_all_master_metrics(
         for scope_name in scopes:
             out_path = metric_root / scope_name / master_filename
 
-            if skip_existing and out_path.exists():
+            if skip_existing and out_path.exists() and (slug not in SHADE_SLUGS or shade_artifact_current(out_path)):
                 if verbose:
                     print(f"[BATCH] {slug}/{scope_name}: exists; skipping")
                 continue

@@ -263,8 +263,8 @@ def test_wbgt_shade_threshold_gridfirst_count_exceeds_polygon_mean_first(tmp_pat
     # the WBGT formula and threshold -> Stull Twb of the polygon mean stays well below
     # 28 deg, so the threshold is exceeded on ~0 days. The grid-first result must be
     # strictly larger; this guards the CHG-0012 methodology change.
-    days = 30
-    time = pd.date_range("2020-06-01", periods=days, freq="D")
+    days = 365
+    time = pd.date_range("2021-01-01", periods=days, freq="D")
     tas_c = np.zeros((days, 1, 2))
     rh = np.zeros((days, 1, 2))
     tas_c[:, 0, 0] = 35.0  # hot
@@ -273,6 +273,7 @@ def test_wbgt_shade_threshold_gridfirst_count_exceeds_polygon_mean_first(tmp_pat
     rh[:, 0, 1] = 20.0     # dry
     tas = _write_da(tmp_path / "tas.nc", "tas", tas_c + 273.15, time)
     hurs = _write_da(tmp_path / "hurs.nc", "hurs", rh, time)
+    tasmax = _write_da(tmp_path / "tasmax.nc", "tasmax", tas_c + 273.15, time)
     weights = pd.DataFrame(
         {"unit_key": ["D", "D"], "cell_index": [0, 1], "area_m2": [1.0, 1.0]}
     )
@@ -288,7 +289,7 @@ def test_wbgt_shade_threshold_gridfirst_count_exceeds_polygon_mean_first(tmp_pat
         },
         model="MODEL",
         scenario="ssp585",
-        year_to_paths={2020: {"tas": tas, "hurs": hurs}},
+        year_to_paths={2021: {"tas": tas, "tasmax": tasmax, "hurs": hurs}},
         weights=weights,
     )
 

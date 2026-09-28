@@ -800,3 +800,23 @@ For questions about the codebase:
 | `__init__.py` | Package marker |
 | `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin (district/block) yearly parity outputs, selector-index artifacts, persisted geometry `area_m2`, optional admin level/state filtering, exact-target scoped prune, and a post-build parity audit; artifact version 5 records distinct fitted/published frozen-ruler grids and audits every frozen master and State-value row against the complete grid |
 | `audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the legacy processed contract, with optional level/state filtering and optional scoped report output |
+
+### Shade WBGT release correction
+
+- `india_resilience_tool/compute/wbgt.py`: shared explicit-unit shade daily-peak estimate, validity diagnostics and complete-calendar annual reductions.
+- `india_resilience_tool/data/wbgt_contract.py`: lightweight shade signature and artifact freshness/validation contract.
+- `tools/diagnostics/wbgt_shade_release.py`: offline six-site reproduction, frozen-candidate confirmation, complete-year policy, uncertainty and absolute-target reporting.
+- `tools/diagnostics/wbgt_shade_inventory.py`: eight-metric published audit, local input intersection and full input-calendar audit.
+- `tools/diagnostics/wbgt_shade_pilot.py`: three-state production-helper timing, memory, I/O and private-cache pilot.
+- `tools/diagnostics/wbgt_shade_nex.py`: shade-specific local NEX distribution and annual-count residuals.
+- `tools/pipeline/build_shade_release.py`: national release **budget and staging** runner for the four shade
+  slugs. Measures the staged pilot and the published shade trees (cached in `<stage>/rollback_sizes.json`,
+  written back per tree so an interrupted walk resumes; `--dry-run` skips the walk and yields no space
+  verdict), then with `--build` runs resumable per-state compute followed by masters, optimized outputs,
+  strict state values and strict parity. Validates each state's roster coverage as its compute finishes,
+  preflights rostered inputs given `--source-root`, refuses to resume a stage built from a different
+  specification, and writes `release_ready.json` only after full validation. Writes only under `--stage`;
+  it never touches the published tree and never publishes. Promotion/rollback is not implemented.
+- `tests/test_wbgt_shade_release.py`: formula, completeness, units, calendars, route parity, temporal IDW prevention, NaN retention and provenance regressions.
+- `docs/wbgt_shade_release.md`: release status and chronological operator commands; national publication remains outstanding.
+- `tools/pipeline/compute_indices_multiprocess.py --output-root`: isolated compute destination inherited by worker processes; raw source paths are unchanged.

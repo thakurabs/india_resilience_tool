@@ -105,6 +105,7 @@ from india_resilience_tool.compute.heat_risk_gridfirst import (
     read_spatial_weights_cache as read_heat_risk_spatial_weights_cache,
     write_spatial_weights_cache as write_heat_risk_spatial_weights_cache,
 )
+from india_resilience_tool.compute.wbgt import SHADE_SLUGS, SHADE_METHOD_SIGNATURE, shade_daily, shade_annual, require_shade_signature
 from india_resilience_tool.compute.heat_stress_gridfirst import (
     HEAT_STRESS_GRIDFIRST_SLUGS,
     compute_heat_stress_rows_for_metric,
@@ -151,6 +152,10 @@ from tools.pipeline.compute_indices_cli_common import (
 )
 
 # -----------------------------------------------------------------------------
+# Isolated staging destination is inherited by spawned Windows workers.
+if os.environ.get("IRT_COMPUTE_OUTPUT_ROOT"):
+    BASE_OUTPUT_ROOT = Path(os.environ["IRT_COMPUTE_OUTPUT_ROOT"])
+
 # CLIMATE-INDICES PACKAGE INTEGRATION (SPI/SPEI)
 # -----------------------------------------------------------------------------
 # Try to import the climate-indices adapter for scientifically-validated SPI
@@ -964,41 +969,41 @@ def _swbgt_empirical_daily_mean_c(
     return 0.567 * tas_c + 0.393 * vapour_pressure_hpa + 3.94
 
 
-def wbgt_shade_stull_annual_mean(
-    tas_da: xr.DataArray,
-    hurs_da: xr.DataArray,
-    mask: xr.DataArray,
+def _shade_legacy_reduce(
+    tas_da: xr.DataArray, hurs_da: xr.DataArray, mask: xr.DataArray,
+    tasmax_da: xr.DataArray | None, key: str,
 ) -> float:
-    """
-    Annual mean shaded/no-solar WBGT approximation (°C).
+    if tasmax_da is None or hurs_da is None or mask is None:
+        raise ValueError("Shade requires tas_da, tasmax_da, hurs_da, then an area-weight mask")
+    daily = shade_daily(tas_da, tasmax_da, hurs_da)
+    years = np.unique(daily.time.dt.year)
+    if len(years) != 1:
+        raise ValueError("Shade wrapper requires exactly one year")
+    annual = shade_annual(daily, int(years[0]))[key]
+    annual, mask = xr.align(annual, mask, join="exact")
+    weights = mask.astype(float).where(mask > 0, 0)
+    valid_weights = weights.where(np.isfinite(annual), 0)
+    denom = float(valid_weights.sum())
+    return float((annual.fillna(0) * valid_weights).sum() / denom) if denom else np.nan
 
-    Missing daily values are ignored in the annual mean. If no valid daily values
-    are available for the unit/year, NaN is returned.
-    """
-    wbgt = _wbgt_shade_stull_daily_mean_c(tas_da, hurs_da, mask)
-    if wbgt is None:
-        return np.nan
-    return float(wbgt.mean(dim="time", skipna=True).item())
+
+def wbgt_shade_stull_annual_mean(
+    tas_da: xr.DataArray, tasmax_da: xr.DataArray | None = None,
+    hurs_da: xr.DataArray | None = None, mask: xr.DataArray | None = None, **kwargs: Any,
+) -> float:
+    """Area-weight complete annual cell peaks; arguments follow registry variable order."""
+    return _shade_legacy_reduce(tas_da, hurs_da, mask, tasmax_da, "annual_mean")
 
 
 def wbgt_shade_stull_days_ge_threshold(
-    tas_da: xr.DataArray,
-    hurs_da: xr.DataArray,
-    mask: xr.DataArray,
-    thresh_c: float = 30.0,
-    **kwargs: Any,
-) -> int:
-    """
-    Count days where shaded/no-solar WBGT approximation is >= `thresh_c` °C.
-
-    Missing daily values are treated as non-events for threshold counts.
-    """
-    _ = kwargs
-    wbgt = _wbgt_shade_stull_daily_mean_c(tas_da, hurs_da, mask)
-    if wbgt is None:
-        return 0
-    flags = (wbgt >= float(thresh_c)).fillna(False)
-    return int(flags.sum(dim="time").item())
+    tas_da: xr.DataArray, tasmax_da: xr.DataArray | None = None,
+    hurs_da: xr.DataArray | None = None, mask: xr.DataArray | None = None,
+    thresh_c: float = 30.0, **kwargs: Any,
+) -> float:
+    """Area-weight complete annual cell counts; arguments follow registry variable order."""
+    if thresh_c not in (28, 30, 32):
+        raise ValueError("Shade thresholds must be 28, 30 or 32 C")
+    return _shade_legacy_reduce(tas_da, hurs_da, mask, tasmax_da, f"days_ge_{thresh_c:g}")
 
 
 def swbgt_empirical_annual_mean(
@@ -3853,6 +3858,8 @@ def _write_metric_rows_outputs(
     )
 
     df_yearly = pd.DataFrame(rows)
+    if slug in SHADE_SLUGS:
+        df_yearly["shade_method_signature"] = SHADE_METHOD_SIGNATURE
 
     available_years = set(df_yearly["year"].unique())
     if level == "block":
@@ -3873,7 +3880,7 @@ def _write_metric_rows_outputs(
                     grp["years_used_count"] = n_avail
                     grp["years_requested"] = n_req
                     grp[value_col] = grp["value"]
-                    for meta_col in ("method_version", "aggregation_method"):
+                    for meta_col in ("method_version", "aggregation_method", "shade_method_signature"):
                         if meta_col in df_yearly.columns:
                             meta_values = df_yearly.loc[df_yearly["year"].isin(avail), meta_col].dropna().unique()
                             if len(meta_values) == 1:
@@ -3997,10 +4004,14 @@ def process_metric_for_model_scenario(
         for v in req_vars:
             vdir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], v, model)
             if not vdir.exists():
+                if slug in SHADE_SLUGS:
+                    raise ValueError(f"Shade requires {v} for {model}/{scenario}: {vdir}")
                 logging.info(f"[{slug}] Skipping {model}/{scenario}: missing variable directory '{v}'")
                 return
             valid_year_files, _bad_year_files = validated_year_files_for_var(vdir, v)
             if not valid_year_files:
+                if slug in SHADE_SLUGS:
+                    raise ValueError(f"Shade requires valid {v} files for {model}/{scenario}")
                 logging.info(f"[{slug}] Skipping {model}/{scenario}: no valid yearly files for '{v}'")
                 return
             valid_by_var[v] = valid_year_files
@@ -4013,6 +4024,11 @@ def process_metric_for_model_scenario(
         for y in sorted(common_years):
             year_to_paths[y] = {v: valid_by_var[v][y] for v in req_vars}
 
+    if slug in SHADE_SLUGS:
+        expected = {y for start, end in scenario_conf["periods"].values() for y in range(start, end + 1)}
+        if not expected.issubset(year_to_paths):
+            raise ValueError(f"Shade requires every publication year; missing {sorted(expected - year_to_paths.keys())}")
+        year_to_paths = {y: paths for y, paths in year_to_paths.items() if y in expected}
     if not year_to_paths:
         return
 
@@ -5133,12 +5149,16 @@ def _clean_ensemble_yearly_frame(
             "year": pd.to_numeric(df["year"], errors="coerce"),
             "value": pd.to_numeric(df[value_column], errors="coerce"),
         }
-    ).dropna(subset=["year", "value"])
+    ).dropna(subset=["year"] if "shade_method_signature" in df else ["year", "value"])
     if cleaned.empty:
         return None, "no_numeric_rows"
 
     cleaned["year"] = cleaned["year"].astype(int)
     cleaned["model"] = model_name
+    if "shade_method_signature" in df:
+        require_shade_signature(df, context="ensemble yearly inputs")
+        cleaned["shade_method_signature"] = SHADE_METHOD_SIGNATURE
+        return cleaned[["year", "value", "model", "shade_method_signature"]], None
     return cleaned[["year", "value", "model"]], None
 
 
@@ -5239,6 +5259,8 @@ def _compute_district_ensembles(
                 expected_output = True
                 try:
                     dfy = read_csv(ycsv)
+                    if slug in SHADE_SLUGS:
+                        require_shade_signature(dfy, context=str(ycsv))
                     cleaned, skip_reason = _clean_ensemble_yearly_frame(
                         dfy,
                         metadata_columns=metadata_columns,
@@ -5267,6 +5289,8 @@ def _compute_district_ensembles(
                         ),
                     )
 
+            if scenario_failure and slug in SHADE_SLUGS:
+                continue
             if not expected_output:
                 continue
 
@@ -5376,6 +5400,8 @@ def _compute_block_ensembles(
                     expected_output = True
                     try:
                         dfy = read_csv(ycsv)
+                        if slug in SHADE_SLUGS:
+                            require_shade_signature(dfy, context=str(ycsv))
                         cleaned, skip_reason = _clean_ensemble_yearly_frame(
                             dfy,
                             metadata_columns=metadata_columns,
@@ -5411,6 +5437,8 @@ def _compute_block_ensembles(
                             ),
                         )
 
+                if scenario_failure and slug in SHADE_SLUGS:
+                    continue
                 if not expected_output:
                     continue
 
@@ -5524,7 +5552,10 @@ def _write_ensemble_stats(
     if "year" not in df_yc.columns or "value" not in df_yc.columns or "model" not in df_yc.columns:
         return 0
     df_yc["year"] = df_yc["year"].astype(int)
-    pivot = df_yc.pivot_table(index="year", columns="model", values="value", aggfunc="first")
+    is_shade = "shade_method_signature" in df_yc
+    if is_shade:
+        require_shade_signature(df_yc, context="ensemble output")
+    pivot = df_yc.pivot_table(index="year", columns="model", values="value", aggfunc="first", dropna=not is_shade)
     if pivot.empty:
         return 0
     summary = pd.DataFrame({
@@ -5537,6 +5568,8 @@ def _write_ensemble_stats(
         "ensemble_p95": pivot.quantile(0.95, axis=1),
     }).reset_index(drop=True)
 
+    if is_shade:
+        summary["shade_method_signature"] = SHADE_METHOD_SIGNATURE
     write_csv(summary, out_dir / f"{file_stem or unit_name}_yearly_ensemble.csv", index=False)
     return 1
 
@@ -5736,10 +5769,26 @@ def build_processing_task_plan(
             signatures["baseline"] = eval_signature
         return signatures
 
+    shade_roster = set(models_to_process)
+    if any(str(metric["slug"]) in SHADE_SLUGS for _, metric in metrics_to_process):
+        for model in models_to_process:
+            for scenario, sconf in scenarios_to_process.items():
+                expected = {year for start, end in sconf["periods"].values() for year in range(start, end + 1)}
+                if any(not expected.issubset(_availability_for(model, scenario, sconf, var).valid_years)
+                       for var in ("tas", "tasmax", "hurs")):
+                    shade_roster.discard(model)
+                    logging.warning("Shade roster excludes %s: missing required inputs in %s publication years", model, scenario)
+                    break
+        logging.info("Stable shade roster across selected publication slices: %s", sorted(shade_roster))
+
     for model in models_to_process:
         for scenario, sconf in scenarios_to_process.items():
             for midx, metric in metrics_to_process:
                 slug = str(metric["slug"]).strip()
+                if slug in SHADE_SLUGS and model not in shade_roster:
+                    skipped_counts[SKIP_REASON_NO_COMMON_YEARS] += 1
+                    skipped_reasons_by_metric[slug].add(SKIP_REASON_NO_COMMON_YEARS)
+                    continue
                 req_vars = tuple(required_vars_for_metric(metric))
                 if not req_vars:
                     skipped_counts[SKIP_REASON_MISSING_REQUIRED_VARS] += 1
@@ -5858,6 +5907,9 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
     if not payload:
         return MarkerValidationStatus(valid=False, reason="missing_compute_marker")
 
+    if task.slug in SHADE_SLUGS and payload.get("shade_method_signature") != SHADE_METHOD_SIGNATURE:
+        return MarkerValidationStatus(valid=False, reason="compute_marker_shade_method_mismatch")
+
     if is_aridity_gridfirst(task.slug, task.level) and payload.get("aridity_method_version") != ARIDITY_GRIDFIRST_METHOD_VERSION:
         return MarkerValidationStatus(valid=False, reason="compute_marker_aridity_method_mismatch")
 
@@ -5952,6 +6004,9 @@ def ensemble_completion_marker_status(
     payload = _load_marker_json(marker_path)
     if not payload:
         return MarkerValidationStatus(valid=False, reason="missing_ensemble_marker")
+    if slug in SHADE_SLUGS and payload.get("shade_method_signature") != SHADE_METHOD_SIGNATURE:
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_shade_method_mismatch")
+
     if is_aridity_gridfirst(slug, level) and payload.get("aridity_method_version") != ARIDITY_GRIDFIRST_METHOD_VERSION:
         return MarkerValidationStatus(valid=False, reason="ensemble_marker_aridity_method_mismatch")
 
@@ -6034,6 +6089,8 @@ def _write_task_completion_marker(task: ProcessingTask, *, output_meta: Optional
         "yearly_cleanup_policy": task.yearly_cleanup_policy,
         "completed_at": time.time(),
     }
+    if task.slug in SHADE_SLUGS:
+        payload["shade_method_signature"] = SHADE_METHOD_SIGNATURE
     if is_aridity_gridfirst(task.slug, task.level):
         payload["aridity_method_version"] = ARIDITY_GRIDFIRST_METHOD_VERSION
     _write_marker_json(
@@ -6074,6 +6131,8 @@ def _write_ensemble_completion_marker(
         "yearly_cleanup_policy": yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level),
         "completed_at": time.time(),
     }
+    if slug in SHADE_SLUGS:
+        payload["shade_method_signature"] = SHADE_METHOD_SIGNATURE
     if is_aridity_gridfirst(slug, level):
         payload["aridity_method_version"] = ARIDITY_GRIDFIRST_METHOD_VERSION
     _write_marker_json(
@@ -6637,6 +6696,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_compute_parser(default_workers=DEFAULT_WORKERS)
     args = parser.parse_args(argv)
     validate_yearly_cleanup_policy_args(args, parser=parser)
+    global BASE_OUTPUT_ROOT
+    if args.output_root:
+        BASE_OUTPUT_ROOT = Path(args.output_root).resolve()
+        os.environ["IRT_COMPUTE_OUTPUT_ROOT"] = str(BASE_OUTPUT_ROOT)
     
     # Handle SPI implementation + distribution flags
     global USE_CLIMATE_INDICES_PACKAGE

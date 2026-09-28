@@ -611,18 +611,18 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
-        "name": "Shaded WBGT (Annual Mean)",
+        "name": "Shaded WBGT — Annual Mean of Estimated Daily Maxima",
         "slug": "wbgt_shade_stull_annual_mean",
         "var": "tas",
-        "vars": ["tas", "hurs"],
+        "vars": ["tas", "tasmax", "hurs"],
         "value_col": "wbgt_shade_stull_annual_mean_C",
         "units": "°C",
         "compute": "wbgt_shade_stull_annual_mean",
         "params": {},
         "group": "temperature",
         "description": (
-            "Annual mean Shaded WBGT (°C), computed from tas and hurs as "
-            "0.7 × Stull wet-bulb temperature + 0.3 × near-surface air temperature. "
+            "Annual mean Shaded WBGT (°C), estimated from tas, tasmax and hurs as "
+            "0.7 × Stull(tasmax, reconstructed RH) + 0.3 × tasmax. Complete years only. "
             "It estimates humid heat stress in shaded or no-direct-sun conditions, "
             "but does not include direct solar radiation or radiant heat load."
         ),
@@ -631,15 +631,15 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "name": "Shaded WBGT Days (≥ 28°C)",
         "slug": "wbgt_shade_stull_days_ge_28",
         "var": "tas",
-        "vars": ["tas", "hurs"],
+        "vars": ["tas", "tasmax", "hurs"],
         "value_col": "wbgt_shade_stull_days_ge_28_days",
         "units": "days",
         "compute": "wbgt_shade_stull_days_ge_threshold",
         "params": {"thresh_c": 28.0},
         "group": "temperature",
         "description": (
-            "Number of days per year with Shaded WBGT ≥ 28°C, computed from tas and "
-            "hurs using Stull wet-bulb temperature and near-surface air temperature. "
+            "Number of days per year with Shaded WBGT ≥ 28°C, estimated from tas, tasmax and "
+            "hurs-derived RH at tasmax using Stull wet-bulb temperature and tasmax. Complete years only. "
             "It captures humid heat stress in shaded or no-direct-sun conditions, but "
             "does not include direct solar radiation or radiant heat load."
         ),
@@ -648,15 +648,15 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "name": "Shaded WBGT Days (≥ 30°C)",
         "slug": "wbgt_shade_stull_days_ge_30",
         "var": "tas",
-        "vars": ["tas", "hurs"],
+        "vars": ["tas", "tasmax", "hurs"],
         "value_col": "wbgt_shade_stull_days_ge_30_days",
         "units": "days",
         "compute": "wbgt_shade_stull_days_ge_threshold",
         "params": {"thresh_c": 30.0},
         "group": "temperature",
         "description": (
-            "Number of days per year with Shaded WBGT ≥ 30°C, computed from tas and "
-            "hurs using Stull wet-bulb temperature and near-surface air temperature. "
+            "Number of days per year with Shaded WBGT ≥ 30°C, estimated from tas, tasmax and "
+            "hurs-derived RH at tasmax using Stull wet-bulb temperature and tasmax. Complete years only. "
             "It captures humid heat stress in shaded or no-direct-sun conditions, but "
             "does not include direct solar radiation or radiant heat load."
         ),
@@ -665,21 +665,21 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "name": "Shaded WBGT Days (≥ 32°C)",
         "slug": "wbgt_shade_stull_days_ge_32",
         "var": "tas",
-        "vars": ["tas", "hurs"],
+        "vars": ["tas", "tasmax", "hurs"],
         "value_col": "wbgt_shade_stull_days_ge_32_days",
         "units": "days",
         "compute": "wbgt_shade_stull_days_ge_threshold",
         "params": {"thresh_c": 32.0},
         "group": "temperature",
         "description": (
-            "Number of days per year with Shaded WBGT ≥ 32°C, computed from tas and "
-            "hurs using Stull wet-bulb temperature and near-surface air temperature. "
+            "Number of days per year with Shaded WBGT ≥ 32°C, estimated from tas, tasmax and "
+            "hurs-derived RH at tasmax using Stull wet-bulb temperature and tasmax. Complete years only. "
             "It captures humid heat stress in shaded or no-direct-sun conditions, but "
             "does not include direct solar radiation or radiant heat load."
         ),
     },
     {
-        "name": "Outdoor WBGT (Annual Mean)",
+        "name": "Empirical sWBGT (Annual Mean)",
         "slug": "swbgt_empirical_annual_mean",
         "var": "tas",
         "vars": ["tas", "hurs"],
@@ -689,7 +689,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {},
         "group": "temperature",
         "description": (
-            "Annual mean Outdoor WBGT (°C), computed from tas and hurs as a simplified "
+            "Annual mean Empirical sWBGT (°C), computed from tas and hurs as a simplified "
             "temperature-humidity-based WBGT-style estimate: "
             "0.567 × near-surface air temperature + 0.393 × vapour pressure + 3.94. "
             "It should be treated as an outdoor heat-stress screening indicator rather "
@@ -698,7 +698,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
-        "name": "Outdoor WBGT Days (≥ 28°C)",
+        "name": "Empirical sWBGT Days (≥ 28°C)",
         "slug": "swbgt_empirical_days_ge_28",
         "var": "tas",
         "vars": ["tas", "hurs"],
@@ -708,7 +708,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"thresh_c": 28.0},
         "group": "temperature",
         "description": (
-            "Number of days per year with Outdoor WBGT ≥ 28°C, computed from tas and "
+            "Number of days per year with Empirical sWBGT ≥ 28°C, computed from tas and "
             "hurs via vapour pressure as a simplified temperature-humidity-based "
             "WBGT-style estimate. It should be treated as an outdoor heat-stress "
             "screening indicator rather than a full open-sky WBGT calculation because it "
@@ -717,7 +717,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
-        "name": "Outdoor WBGT Days (≥ 30°C)",
+        "name": "Empirical sWBGT Days (≥ 30°C)",
         "slug": "swbgt_empirical_days_ge_30",
         "var": "tas",
         "vars": ["tas", "hurs"],
@@ -727,7 +727,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"thresh_c": 30.0},
         "group": "temperature",
         "description": (
-            "Number of days per year with Outdoor WBGT ≥ 30°C, computed from tas and "
+            "Number of days per year with Empirical sWBGT ≥ 30°C, computed from tas and "
             "hurs via vapour pressure as a simplified temperature-humidity-based "
             "WBGT-style estimate. It should be treated as an outdoor heat-stress "
             "screening indicator rather than a full open-sky WBGT calculation because it "
@@ -736,7 +736,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
-        "name": "Outdoor WBGT Days (≥ 32°C)",
+        "name": "Empirical sWBGT Days (≥ 32°C)",
         "slug": "swbgt_empirical_days_ge_32",
         "var": "tas",
         "vars": ["tas", "hurs"],
@@ -746,7 +746,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"thresh_c": 32.0},
         "group": "temperature",
         "description": (
-            "Number of days per year with Outdoor WBGT ≥ 32°C, computed from tas and "
+            "Number of days per year with Empirical sWBGT ≥ 32°C, computed from tas and "
             "hurs via vapour pressure as a simplified temperature-humidity-based "
             "WBGT-style estimate. It should be treated as an outdoor heat-stress "
             "screening indicator rather than a full open-sky WBGT calculation because it "

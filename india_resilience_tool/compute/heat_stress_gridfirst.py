@@ -16,7 +16,10 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from india_resilience_tool.compute.wbgt import (SHADE_SLUGS, SHADE_METHOD_SIGNATURE, shade_daily, shade_annual, shade_value_key)
+
 from india_resilience_tool.compute.gridfirst_spatial import (
+    GridSpec,
     _hash_paths,
     assert_grid_matches,
     grid_metric_cache_path as _shared_grid_metric_cache_path,
@@ -148,7 +151,9 @@ def _open_year_dataarray(
     try:
         if var not in ds:
             raise KeyError(f"Variable {var!r} not found in {path}")
-        return subset_grid_by_index(ds[var], index_range).load()
+        da = subset_grid_by_index(ds[var], index_range).load()
+        da.attrs = {**{k: ds.attrs[k] for k in ("source_id", "experiment_id", "variant_label") if k in ds.attrs}, **da.attrs}
+        return da
     finally:
         ds.close()
 
@@ -181,6 +186,20 @@ def _twb_daily_for_year(
     return stull_twb_c(tas_k - 273.15, hurs)
 
 
+def _shade_year(
+    year_to_paths: Mapping[int, Mapping[str, Path]], year: int, *,
+    index_range: tuple[int, int, int, int] | None = None, grid: GridSpec | None = None,
+) -> xr.Dataset:
+    arrays = []
+    for var in ("tas", "tasmax", "hurs"):
+        if var not in year_to_paths[year]:
+            raise ValueError(f"Shade requires {var} for {year}; rebuild the input inventory")
+        da = _concat_year_var(year_to_paths, var, [year], index_range=index_range)
+        assert_grid_matches(da, grid, name=f"shade {var} {year}")
+        arrays.append(da)
+    return shade_annual(shade_daily(*arrays), year)
+
+
 def _cell_values_for_metric(
     metric: Mapping[str, object],
     year_to_paths: Mapping[int, Mapping[str, Path]],
@@ -191,6 +210,9 @@ def _cell_values_for_metric(
 ) -> xr.DataArray:
     slug = str(metric.get("slug") or "")
     params = dict(metric.get("params") or {})
+
+    if slug in SHADE_SLUGS:
+        return _shade_year(year_to_paths, year, index_range=index_range, grid=grid)[shade_value_key(slug)]
 
     if slug == "tasmin_tropical_nights_gt28":
         tasmin_raw = _concat_year_var(year_to_paths, "tasmin", [year], index_range=index_range)
@@ -219,7 +241,7 @@ def _cell_values_for_metric(
         threshold = float(params.get("thresh_c", 28.0 if slug == "twb_days_ge_28" else 30.0))
         return (twb >= threshold).fillna(False).sum(dim="time").astype(float)
 
-    if slug.startswith("wbgt_shade_stull") or slug.startswith("swbgt_empirical"):
+    if slug.startswith("swbgt_empirical"):
         tas_raw = _concat_year_var(year_to_paths, "tas", [year], index_range=index_range)
         hurs_raw = _concat_year_var(year_to_paths, "hurs", [year], index_range=index_range)
         assert_grid_matches(tas_raw, grid, name=f"[{slug}] tas {year}")
@@ -227,13 +249,10 @@ def _cell_values_for_metric(
         tas_k = _drop_feb29(tas_raw)
         hurs = _drop_feb29(hurs_raw)
         tas_c = tas_k - 273.15
-        if slug.startswith("wbgt_shade_stull"):
-            field = wbgt_shade_stull_cell_c(tas_c, hurs)
-        else:
-            field = swbgt_empirical_cell_c(tas_c, hurs)
-        if slug in {"wbgt_shade_stull_annual_mean", "swbgt_empirical_annual_mean"}:
+        field = swbgt_empirical_cell_c(tas_c, hurs)
+        if slug == "swbgt_empirical_annual_mean":
             return field.mean(dim="time", skipna=True)
-        if slug in WBGT_SHADE_DAY_COUNT_SLUGS or slug in SWBGT_EMPIRICAL_DAY_COUNT_SLUGS:
+        if slug in SWBGT_EMPIRICAL_DAY_COUNT_SLUGS:
             if "thresh_c" not in params:
                 raise ValueError(f"{slug} requires metric params['thresh_c']")
             threshold = float(params["thresh_c"])
@@ -263,7 +282,7 @@ def _grid_sidecar(
     value_col: str,
 ) -> dict[str, object]:
     return {
-        "method_version": HEAT_STRESS_GRIDFIRST_METHOD_VERSION,
+        "method_version": SHADE_METHOD_SIGNATURE if str(metric.get("slug")) in SHADE_SLUGS else HEAT_STRESS_GRIDFIRST_METHOD_VERSION,
         "artifact_type": "annual-grid-first-metric",
         "slug": str(metric.get("slug") or ""),
         "model": model,
@@ -275,10 +294,13 @@ def _grid_sidecar(
         "params": _jsonable(dict(metric.get("params") or {})),
         "input_file_hashes": _hash_paths(input_paths),
         "baseline": None,
+        **({"shade_method_signature": SHADE_METHOD_SIGNATURE} if str(metric.get("slug")) in SHADE_SLUGS else {}),
         "methodology_note": (
-            "Heat Stress v2 annual per-cell metric field before polygon aggregation; "
-            "covers Twb, Shaded WBGT, and Outdoor sWBGT cell fields under method version "
-            "heat-stress-v2-gridfirst-2."
+            "Estimated shade daily maxima; complete source-calendar years excluding February 29; cell-first area weighting."
+            if str(metric.get("slug")) in SHADE_SLUGS else
+            ("Heat Stress v2 annual per-cell metric field before polygon aggregation; "
+             "covers Twb, Shaded WBGT, and Outdoor sWBGT cell fields under method version "
+             "heat-stress-v2-gridfirst-2.")
         ),
     }
 
@@ -322,6 +344,26 @@ def compute_heat_stress_rows_for_metric(
     grid_id = str(dict(metric.get("params") or {}).get("grid_id") or "")
     rows: list[dict[str, object]] = []
 
+    # Source-period support distinguishes structural absence from temporal loss.
+    shade_years = {}
+    support = None
+    if slug in SHADE_SLUGS:
+        for source_year in sorted(year_to_paths):
+            annual = None
+            if cache_root is not None:
+                source_sidecar = _grid_sidecar(metric=metric, model=model, scenario=scenario,
+                    year=source_year, grid_id=grid_id,
+                    input_paths=list(year_to_paths[source_year].values()), value_col=value_col)
+                source_cache = heat_stress_grid_metric_cache_path(Path(cache_root), slug=slug,
+                    model=model, grid_id=grid_id, scenario=scenario, year=source_year)
+                annual = read_grid_metric_cache(source_cache, expected_sidecar=source_sidecar)
+                if annual is not None:
+                    annual = annual.rename({value_col: shade_value_key(slug)})
+            if annual is None:
+                annual = _shade_year(year_to_paths, source_year, index_range=index_range, grid=grid)
+            shade_years[source_year] = annual
+            support = annual.native_support if support is None else support | annual.native_support
+
     for year in sorted(year_to_paths):
         paths = list(year_to_paths[int(year)].values())
         sidecar = _grid_sidecar(
@@ -346,15 +388,27 @@ def compute_heat_stress_rows_for_metric(
             )
             grid_ds = read_grid_metric_cache(cache_path, expected_sidecar=sidecar)
         if grid_ds is None:
-            cell_values = _cell_values_for_metric(
-                metric, year_to_paths, int(year), index_range=index_range, grid=grid
-            )
-            grid_ds = xr.Dataset({value_col: cell_values.rename(value_col)})
+            if slug in SHADE_SLUGS:
+                grid_ds = shade_years[year].rename({shade_value_key(slug): value_col})
+            else:
+                cell_values = _cell_values_for_metric(
+                    metric, year_to_paths, int(year), index_range=index_range, grid=grid
+                )
+                grid_ds = xr.Dataset({value_col: cell_values.rename(value_col)})
             if cache_path is not None:
                 write_grid_metric_cache(grid_ds, cache_path, sidecar=sidecar)
 
         values = aggregate_cell_values(grid_ds[value_col], weights, grid=grid)
-        fills = subcell_idw_fill(grid_ds[value_col], weights, grid=grid)
+        coverage = {}
+        if slug in SHADE_SLUGS:
+            support_flat = np.asarray(support.transpose("lat", "lon")).reshape(-1)
+            eligible = [str(unit) for unit, group in weights.groupby("unit_key")
+                        if not support_flat[group.cell_index.to_numpy(dtype=int)].any()]
+            coverage = aggregate_cell_values(np.isfinite(grid_ds[value_col]).astype(float), weights, grid=grid)
+            values = {str(unit): values.get(str(unit), np.nan) for unit in weights.unit_key.unique()}
+        fills_before = subcell_idw_fill(grid_ds[value_col], weights, grid=grid)
+        fills = ({unit: value for unit, value in fills_before.items() if unit in eligible}
+                 if slug in SHADE_SLUGS else fills_before)
         for unit_key in list(values.keys()) + [u for u in fills if u not in values]:
             if unit_key in fills:
                 value, fill_method = fills[unit_key], "idw"
@@ -365,10 +419,15 @@ def compute_heat_stress_rows_for_metric(
                 "value": float(value) if np.isfinite(value) else np.nan,
                 value_col: float(value) if np.isfinite(value) else np.nan,
                 "source_file": json.dumps([str(path) for path in paths]),
-                "method_version": HEAT_STRESS_GRIDFIRST_METHOD_VERSION,
+                "method_version": SHADE_METHOD_SIGNATURE if str(metric.get("slug")) in SHADE_SLUGS else HEAT_STRESS_GRIDFIRST_METHOD_VERSION,
                 "aggregation_method": HEAT_STRESS_AGGREGATION_METHOD,
                 "climate_fill_method": fill_method,
             }
+            if slug in SHADE_SLUGS:
+                row["shade_method_signature"] = SHADE_METHOD_SIGNATURE
+                row["valid_area_fraction"] = coverage.get(str(unit_key), 0.0)
+                row["idw_candidate_before_temporal_guard"] = unit_key in fills_before
+                row["idw_blocked_temporal"] = unit_key in fills_before and unit_key not in fills
             _add_unit_fields(row, str(unit_key), level)
             if scenario:
                 row["scenario"] = scenario

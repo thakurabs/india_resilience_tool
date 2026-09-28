@@ -720,7 +720,7 @@ def _make_data_for_var(spec: _VarSpec) -> tuple[xr.DataArray, xr.DataArray]:
     if spec.kind == "temp_k":
         return make_constant_series(kelvin(25), n_days=30)  # short is enough for smoke
     if spec.kind == "rh_pct":
-        return make_constant_series(50.0, n_days=30)
+        return make_constant_series(50.0, n_days=30, units="%")
     if spec.kind == "pr_kgm2s":
         # 10 mm/day in kg m-2 s-1
         return make_constant_series(10.0 / 86400.0, n_days=30, units="kg m-2 s-1")

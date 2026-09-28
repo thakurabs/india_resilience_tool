@@ -480,6 +480,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from india_resilience_tool.config.paths import get_paths_config
+from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS, shade_artifact_current
 
 # CHG-0048 (W2): optional per-slug timing for the freshness probe. stdout MUST stay
 # JSON-only (Get-StaleMasterSlugs parses it with ConvertFrom-Json), so timings are
@@ -619,7 +620,7 @@ need_periods = []  # (slug, threshold)
 phase1_t0 = time.perf_counter() if timing_enabled else 0.0
 for slug in slugs:
     master_path = base / slug / state / master_filename
-    if not master_path.exists():
+    if not master_path.exists() or (slug in SHADE_SLUGS and not shade_artifact_current(master_path)):
         stale.append(slug)
         continue
     try:

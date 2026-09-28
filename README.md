@@ -947,3 +947,14 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 **Author:** Abu Bakar Siddiqui Thakur  
 **Email:** absthakur@resilience.org.in
+
+### Shade WBGT correction
+
+The four shade WBGT metrics now require `tas`, `tasmax` and `hurs`, estimate daily maxima
+with reconstructed RH at `tasmax`, and require complete cell-years after February-29 exclusion.
+The empirical outdoor family retains its numerical method under the label **Empirical sWBGT**.
+Existing shade artifacts require rebuilding; the national replacement has not been published.
+`python -m tools.pipeline.build_shade_release --data-dir <data> --stage <scratch dir>` budgets that
+rebuild (add `--dry-run` to skip the multi-minute published-tree walk) and, with `--build`, stages it
+resumably without ever writing to the published tree. Promotion and rollback are not implemented.
+See [shade release status, evidence and staged operator commands](docs/wbgt_shade_release.md).

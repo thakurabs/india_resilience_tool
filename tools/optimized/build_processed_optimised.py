@@ -8,6 +8,8 @@ This tool is intentionally non-destructive: it reads from the current
 
 from __future__ import annotations
 
+from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS, SHADE_METHOD_SIGNATURE, require_shade_signature, shade_artifact_current
+
 import argparse
 import math
 import os
@@ -663,6 +665,8 @@ def _select_master_columns(
     level: str,
     supported_stats: Iterable[str],
 ) -> pd.DataFrame:
+    if slug in SHADE_SLUGS:
+        require_shade_signature(df, context=f"optimized {slug}/{level}")
     id_cols = list(ADMIN_ID_COLS[level])
     keep_cols = [c for c in id_cols if c in df.columns]
     keep_cols.extend(_metric_value_cols(df, supported_stats=supported_stats))
@@ -674,6 +678,8 @@ def _select_master_columns(
     # _safe_numeric_downcast only touches float/int, so it passes through untouched.
     if "climate_fill_method" in df.columns:
         keep_cols.append("climate_fill_method")
+    if slug in SHADE_SLUGS:
+        keep_cols.append("shade_method_signature")
     keep_cols = list(dict.fromkeys(keep_cols))
     out = df[keep_cols].copy()
     if level in {"district", "block"}:
@@ -725,9 +731,14 @@ def _iter_yearly_csv_paths(state_root: Path, *, level: str) -> tuple[Path, ...]:
 
 def _read_yearly_csv(path: Path) -> pd.DataFrame:
     try:
-        return pd.read_csv(path)
+        frame = pd.read_csv(path)
     except Exception:
+        if any(part in SHADE_SLUGS for part in path.parts):
+            raise
         return pd.DataFrame()
+    if any(part in SHADE_SLUGS for part in path.parts):
+        require_shade_signature(frame, context=str(path))
+    return frame
 
 
 def _normalize_legacy_ensemble_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -754,10 +765,10 @@ def _normalize_legacy_ensemble_df(df: pd.DataFrame) -> pd.DataFrame:
         out["mean"] = pd.to_numeric(out["mean"], errors="coerce")
     if "median" in out.columns:
         out["median"] = pd.to_numeric(out["median"], errors="coerce")
-    keep_cols = [c for c in ("year", "mean", "median") if c in out.columns]
+    keep_cols = [c for c in ("year", "mean", "median", "shade_method_signature") if c in out.columns]
     if "year" not in keep_cols or "mean" not in keep_cols:
         return pd.DataFrame()
-    out = out[keep_cols].dropna(subset=["year", "mean"]).sort_values("year").reset_index(drop=True)
+    out = out[keep_cols].dropna(subset=["year"] if "shade_method_signature" in out else ["year", "mean"]).sort_values("year").reset_index(drop=True)
     return out
 
 
@@ -791,7 +802,7 @@ def _load_one_legacy_admin_yearly_model(
     df = df.copy()
     df["year"] = pd.to_numeric(df["year"], errors="coerce")
     df["value"] = pd.to_numeric(df[value_col], errors="coerce")
-    df = df.dropna(subset=["year", "value"])
+    df = df.dropna(subset=["year"] if "shade_method_signature" in df else ["year", "value"])
     if df.empty:
         return pd.DataFrame()
 
@@ -811,6 +822,8 @@ def _load_one_legacy_admin_yearly_model(
         df["model"] = csv_path.parts[-3]
 
     keep_cols = ["year", "value", "scenario", "model", key_col]
+    if "shade_method_signature" in df:
+        keep_cols.append("shade_method_signature")
     return df[keep_cols]
 
 
@@ -1421,6 +1434,25 @@ def _frozen_ruler_manifest_payload(
     return payload
 
 
+def _shade_release_signature(data_dir: Path) -> str | None:
+    """Reject a release inventory containing mixed shade methods or shard scopes."""
+    root = resolve_optimized_bundle_root(data_dir=data_dir) / "metrics"
+    scopes: dict[str, set[str]] = {}
+    current: list[bool] = []
+    for slug in sorted(SHADE_SLUGS):
+        masters = root / slug / "masters"
+        paths = sorted(masters.rglob("*.parquet"))
+        scopes[slug] = {str(path.relative_to(masters)) for path in paths}
+        current.extend(shade_artifact_current(path) for path in paths)
+    if not current:
+        return None
+    if any(current):
+        if not all(current) or any(scope != next(iter(scopes.values())) for scope in scopes.values()):
+            raise ValueError("Mixed shade release: rebuild all four metrics with identical state/level coverage and signatures")
+        return SHADE_METHOD_SIGNATURE
+    return "legacy-daily-mean-inputs"
+
+
 def _write_manifest(
     *,
     data_dir: Path,
@@ -1449,6 +1481,9 @@ def _write_manifest(
         "glance_view_model": glance_manifest_payload(data_dir=data_dir),
         "frozen_rulers": _frozen_ruler_manifest_payload(data_dir=data_dir),
     }
+    shade_signature = _shade_release_signature(data_dir)
+    if shade_signature is not None:
+        manifest["shade_method_signature"] = shade_signature
     path = bundle_manifest_path(data_dir=data_dir)
 
     def _write_one() -> None:
@@ -2399,6 +2434,15 @@ def build_processed_optimised_bundle(
         include_geometry=include_geometry,
         include_context=include_context,
     )
+
+    shade_tasks = [task for task in plan.master_tasks if task.slug in SHADE_SLUGS]
+    if shade_tasks:
+        if {task.slug for task in shade_tasks} != SHADE_SLUGS:
+            raise ValueError("Publish all four shade metrics together; partial shade releases are unsupported")
+        # Validate every source before the first output write, so old/new versions
+        # cannot be combined by a scoped optimized build.
+        for task in shade_tasks:
+            require_shade_signature(_read_legacy_master(task.source_path), context=str(task.source_path))
 
     bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
     summaries_map = {

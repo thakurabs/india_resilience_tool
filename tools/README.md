@@ -789,3 +789,38 @@ Notes:
 - compute marker schema version is 5 and ensemble marker schema version is 4
 - default cleanup deletes block yearly CSVs after ensembles but preserves district, basin, and sub-basin yearly CSVs
 - preserve keeps block per-model yearly CSVs; budget disk before full-state runs
+
+## Shade WBGT correction (CHG-0583–0587)
+
+Run from the repository root in the existing `irt` environment. None of these diagnostics downloads data.
+
+| Tool | Command | Inputs | Outputs |
+|---|---|---|---|
+| Shade validation | `python -m tools.diagnostics.wbgt_shade_release` | Cached six-site hourly parquets, 1990–2014 | Exact reproduction, site/season/year errors, bootstrap intervals and release gate under `docs/diagnostics/wbgt_shade_release/` |
+| Input/published audit | `python -m tools.diagnostics.wbgt_shade_inventory --data-root D:/projects/irt_data` | Eight published metric masters and local NEX tree | Baseline zero/NaN fractions and shared input roster |
+| Calendar audit | `python -m tools.diagnostics.wbgt_shade_inventory --data-root D:/projects/irt_data --calendars-only` | Previous roster plus every selected NetCDF header | `source_calendars.csv`, supported `release_roster.json` |
+| Helper pilot | `python -m tools.diagnostics.wbgt_shade_pilot --data-root D:/projects/irt_data` | Local ACCESS-CM2 historical inputs and admin boundaries | Private caches, rows, time/RSS/I/O and provisional budget in `scratch/wbgt_shade_pilot/` |
+| NEX residuals | `python -m tools.diagnostics.wbgt_shade_nex --source-root D:/projects/irt_data/r1i1p1f1` | Local historical inputs and cached hourly references | Distribution/annual-count comparisons and explicit calendar exclusions |
+| National staging runner | `python -m tools.pipeline.build_shade_release --data-dir D:/projects/irt_data --stage scratch/wbgt_shade_national [--dry-run] [--build]` | `release_roster.json`, `pilot_report.json`, `staged_downstream_timings.json`, `published_baseline.csv`, the staged pilot tree, and the published shade trees under `--data-dir` | `budget.json`, cached `rollback_sizes.json`, `build_spec.json`, per-stage logs, `status.json`, `parity.json` and `release_ready.json`, all under `--stage`. **Never writes to the published tree and never publishes.** |
+
+The validation tool supports `--dry-run` (cache existence check) and `--summarize-only` (derive reports
+from existing scores). Every tool supports `--help`. Compute supports `--output-root` for staging;
+spawned workers inherit `IRT_COMPUTE_OUTPUT_ROOT`. See
+[the ordered release runbook](../docs/wbgt_shade_release.md) before using this destination override.
+
+`build_shade_release` refuses to stage inside the published tree, requires both release gates to pass,
+and separates measurement from execution:
+
+- **Budget only (default, no `--build`)** — measures the staged pilot and the published shade trees,
+  then extrapolates time and disk. Walking the published trees costs minutes *per tree*, so results are
+  cached in `<stage>/rollback_sizes.json` and written back after each tree; an interrupted run resumes.
+  Pass `--remeasure-rollback` after the published shade trees change.
+- **`--dry-run`** — skips the published-tree walk entirely (seconds, not tens of minutes). It yields no
+  space verdict, so it is refused in combination with `--build`.
+- **`--build`** — resumable state-by-state compute, then masters, optimized outputs, strict state values
+  and strict parity, validating each state's roster coverage as soon as its compute finishes rather than
+  only at the end. `--source-root` additionally preflights every rostered model-year input before the
+  first compute stage. A stage built from a different roster, state list or formula signature is refused
+  rather than mixed. `--force` breaks a build lock only where the holding PID cannot be probed.
+
+National publication and rollback rehearsal are not complete; nothing consumes `release_ready.json` yet.

@@ -1,0 +1,14 @@
+{
+  "n_days": 0.0,
+  "bias_c": 0.0,
+  "median_abs_bias_c": 0.0,
+  "rmse_c": 0.0,
+  "pearson_r": 0.0,
+  "p99_bias_c": 0.0,
+  "days_ge_28_ref": 0.0,
+  "days_ge_28_cand": 0.0,
+  "days_ge_30_ref": 0.0,
+  "days_ge_30_cand": 0.0,
+  "days_ge_32_ref": 0.0,
+  "days_ge_32_cand": 0.0
+}

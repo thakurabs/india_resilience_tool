@@ -100,43 +100,11 @@ def test_wet_bulb_days_ge_28_is_monotonic_relative_to_ge_30(monkeypatch: pytest.
     assert ge_30 == 2
     assert ge_28 >= ge_30
 
-def test_wbgt_shade_stull_annual_mean_uses_stull_wet_bulb_and_air_temperature(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    time = pd.date_range("2000-01-01", periods=3, freq="D")
-    twb = xr.DataArray(np.array([24.0, 26.0, 28.0], dtype=float), coords={"time": time}, dims=("time",))
-    tas_k = xr.DataArray(
-        np.array([30.0, 32.0, 34.0], dtype=float) + 273.15,
-        coords={"time": time},
-        dims=("time",),
-    )
-
-    monkeypatch.setattr(CMP, "_wet_bulb_daily_mean_c", lambda *args, **kwargs: twb)
-    monkeypatch.setattr(CMP, "_get_district_daily_mean", lambda *args, **kwargs: tas_k)
-
-    result = CMP.wbgt_shade_stull_annual_mean(None, None, None)
-
-    expected_daily = 0.7 * np.array([24.0, 26.0, 28.0]) + 0.3 * np.array([30.0, 32.0, 34.0])
-    assert result == pytest.approx(float(expected_daily.mean()))
-
-
-def test_wbgt_shade_stull_threshold_counts_are_monotonic(monkeypatch: pytest.MonkeyPatch) -> None:
-    time = pd.date_range("2000-01-01", periods=5, freq="D")
-    wbgt = xr.DataArray(
-        np.array([27.0, 28.0, 29.0, 30.0, 32.0], dtype=float),
-        coords={"time": time},
-        dims=("time",),
-    )
-    monkeypatch.setattr(CMP, "_wbgt_shade_stull_daily_mean_c", lambda *args, **kwargs: wbgt)
-
-    ge_28 = CMP.wbgt_shade_stull_days_ge_threshold(None, None, None, thresh_c=28.0)
-    ge_30 = CMP.wbgt_shade_stull_days_ge_threshold(None, None, None, thresh_c=30.0)
-    ge_32 = CMP.wbgt_shade_stull_days_ge_threshold(None, None, None, thresh_c=32.0)
-
-    assert ge_28 == 4
-    assert ge_30 == 2
-    assert ge_32 == 1
-    assert ge_28 >= ge_30 >= ge_32
+def test_wbgt_shade_requires_explicit_tasmax() -> None:
+    with pytest.raises(ValueError, match="tasmax"):
+        CMP.wbgt_shade_stull_annual_mean(None, None, None)
+    with pytest.raises(ValueError, match="tasmax"):
+        CMP.wbgt_shade_stull_days_ge_threshold(None, None, None)
 
 
 def test_swbgt_empirical_annual_mean_uses_vapour_pressure(
