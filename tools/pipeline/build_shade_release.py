@@ -29,14 +29,22 @@ def tree_size(root: Path, *, block_bytes: int = 4096) -> dict[str, int]:
     Uses an explicit ``os.scandir`` walk with accumulators rather than materializing a
     size per file: the published shade trees are large enough that a list comprehension
     over ``rglob`` costs on the order of a gigabyte of resident memory.
+
+    Read failures are counted rather than swallowed. A tree whose root does not exist
+    legitimately contributes zero (``root_absent``); a tree that exists but cannot be fully
+    walked is reported ``complete=False`` so callers never mistake an unreadable tree for a
+    small one and clear a space check on an understated requirement.
     """
     total = 0
     files = 0
-    pending = [str(root)]
+    errors = 0
+    absent = not root.exists()
+    pending = [] if absent else [str(root)]
     while pending:
         try:
             entries = list(os.scandir(pending.pop()))
-        except (FileNotFoundError, NotADirectoryError, PermissionError):
+        except OSError:
+            errors += 1
             continue
         for entry in entries:
             try:
@@ -46,8 +54,10 @@ def tree_size(root: Path, *, block_bytes: int = 4096) -> dict[str, int]:
                     total += entry.stat(follow_symlinks=False).st_size
                     files += 1
             except OSError:
+                errors += 1
                 continue
-    return {"bytes": total, "files": files, "reserved_bytes": total + block_bytes * files}
+    return {"bytes": total, "files": files, "reserved_bytes": total + block_bytes * files,
+            "read_errors": errors, "root_absent": absent, "complete": errors == 0}
 
 
 def write_json(path: Path, value: object) -> None:
@@ -63,18 +73,29 @@ def measure_rollback(data_dir: Path, cache_path: Path, *, remeasure: bool) -> di
 
     Each tree is written back to the cache as soon as it is measured, so an interrupted
     budget keeps every completed measurement instead of starting over.
+
+    The cache is bound to the resolved published root it was measured from. A cache written
+    for another root -- or by a version that did not record one -- is discarded rather than
+    reused, because sizes from a different data directory would silently understate the
+    rollback requirement. Trees that could not be fully walked are remeasured on resume.
     """
+    resolved_root = str(data_dir.resolve())
     cached: dict = {}
     if cache_path.exists() and not remeasure:
         try:
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             cached = {}
+    if cached and cached.get("data_root") != resolved_root:
+        print(json.dumps({"discarded_rollback_cache": cached.get("data_root"),
+                          "current_data_root": resolved_root}), flush=True)
+        cached = {}
+    cached["data_root"] = resolved_root
     trees = cached.setdefault("trees", {})
     for base in ROLLBACK_BASES:
         for slug in sorted(SHADE_SLUGS):
             relative = f"{base}/{slug}"
-            if relative in trees:
+            if trees.get(relative, {}).get("complete"):
                 continue
             started = time.time()
             measured = tree_size(data_dir / base / slug)
@@ -83,8 +104,11 @@ def measure_rollback(data_dir: Path, cache_path: Path, *, remeasure: bool) -> di
             trees[relative] = measured
             write_json(cache_path, cached)
             print(json.dumps({"measured_rollback_tree": relative, **measured}), flush=True)
+    incomplete = sorted(k for k, t in trees.items() if not t.get("complete"))
     cached["reserved_bytes"] = sum(t["reserved_bytes"] for t in trees.values())
     cached["oldest_measurement_unix"] = min(t["measured_unix"] for t in trees.values())
+    cached["incomplete_trees"] = incomplete
+    cached["complete"] = not incomplete
     write_json(cache_path, cached)
     return cached
 
@@ -101,6 +125,38 @@ def volume_free_bytes(paths: dict[str, Path]) -> dict:
                                             "free_bytes": shutil.disk_usage(probe).free})
         entry["roles"].append(role)
     return {str(device): entry for device, entry in volumes.items()}
+
+
+def boundary_identity(data_dir: Path) -> dict[str, dict[str, int]]:
+    """Identify the boundary layers a staged tree was built against.
+
+    Size and modification time detect a replaced layer, which would change the canonical unit
+    roster underneath a resumed build. They do not detect an in-place edit that preserves
+    both, so this guards against boundary migrations rather than against tampering.
+    """
+    identity: dict[str, dict[str, int]] = {}
+    for level in ("districts", "blocks", "states"):
+        path = data_dir / f"{level}_4326.geojson"
+        try:
+            status = path.stat()
+        except OSError:
+            identity[level] = {"bytes": -1, "mtime_ns": -1}
+            continue
+        identity[level] = {"bytes": status.st_size, "mtime_ns": status.st_mtime_ns}
+    return identity
+
+
+def compute_source_root(data_dir: Path) -> Path:
+    """Derive the raw archive the spawned compute workers will actually read.
+
+    ``build`` sets ``IRT_DATA_DIR`` to ``data_dir`` for every spawned stage and
+    ``config.paths`` resolves the archive beneath it, so the archive name is taken from that
+    resolver rather than restated here. Preflighting any other path would verify inputs the
+    build never opens.
+    """
+    from india_resilience_tool.config.paths import get_paths_config
+
+    return data_dir / get_paths_config().data_root.name
 
 
 def pilot_model_years(pilot: Path) -> int:
@@ -160,12 +216,15 @@ def budget(data_dir: Path, stage: Path, evidence: Path, pilot: Path, *,
                        else measure_rollback(data_dir, stage / "rollback_sizes.json",
                                             remeasure=remeasure_rollback))
     rollback = None if rollback_report is None else int(rollback_report["reserved_bytes"])
+    rollback_complete = None if rollback_report is None else bool(rollback_report["complete"])
 
     # Staging lives on the stage volume; the promotion copy and retained previous release
     # land on the published volume, which is not necessarily the same device.
     volumes = volume_free_bytes({"stage": stage, "published": data_dir})
     need = {"stage": staged, "published": staged + (rollback or 0)}
-    space_passed: bool | None = None if rollback is None else True
+    # An understated requirement must not clear the check: an unreadable published tree is
+    # indistinguishable from a small one by size alone, so it withholds the verdict entirely.
+    space_passed: bool | None = None if rollback is None or not rollback_complete else True
     for entry in volumes.values():
         entry["required_bytes"] = sum(need[role] for role in entry["roles"])
         entry["passed"] = entry["free_bytes"] >= entry["required_bytes"]
@@ -177,6 +236,7 @@ def budget(data_dir: Path, stage: Path, evidence: Path, pilot: Path, *,
     result = {
         "status": "measured", "dry_run": dry_run,
         "signature": SHADE_METHOD_SIGNATURE, "states": states, "roster": roster,
+        "data_root": str(data_dir.resolve()), "boundary_source": boundary_identity(data_dir),
         "workers": 1, "national_units": int(units), "pilot_units": pilot_units,
         "pilot_model_years": pilot_years, "model_year_unit_scale": scale, "pilot": pilot_size,
         "measured_pilot_compute_seconds": pilot_compute,
@@ -186,6 +246,9 @@ def budget(data_dir: Path, stage: Path, evidence: Path, pilot: Path, *,
         "estimated_total_hours": (compute + pilot_downstream * scale) / 3600,
         "estimated_staged_reserved_bytes": staged,
         "existing_release_rollback_reserved_bytes": rollback,
+        "rollback_measurement_complete": rollback_complete,
+        "rollback_incomplete_trees": (None if rollback_report is None
+                                      else rollback_report["incomplete_trees"]),
         "required_free_bytes_including_promotion_copy":
             None if rollback is None else 2 * staged + rollback,
         "volumes": volumes, "space_passed": space_passed,
@@ -198,6 +261,11 @@ def budget(data_dir: Path, stage: Path, evidence: Path, pilot: Path, *,
     if dry_run:
         result["limitations"] += (" DRY RUN: published rollback trees were not measured, so "
                                  "no space verdict is available and --build is refused.")
+    elif not rollback_complete:
+        result["limitations"] += (
+            " INCOMPLETE ROLLBACK MEASUREMENT: one or more published trees could not be fully "
+            "read, so their sizes understate the rollback requirement and no space verdict is "
+            "available. Resolve the read failures and re-run; listed trees are remeasured.")
     write_json(report_path, result)
     return result
 
@@ -207,7 +275,8 @@ def preflight_inputs(source_root: Path, roster: dict) -> dict:
 
     ``validate_yearly`` demands the exact roster year set, but the compute CLI derives years
     from whatever inputs are present, so a single absent model-year would otherwise surface
-    only in post-build validation. One directory listing per scenario/variable/model is enough.
+    only in post-build validation. One directory listing per scenario/variable/model is enough,
+    so this runs on every build rather than only when an archive path is supplied.
     """
     missing: list[str] = []
     for scenario in sorted(roster["required_years"]):
@@ -337,6 +406,8 @@ def build_spec_of(specification: dict) -> dict:
     """Capture the inputs a staged tree was built from, for resume-safety comparison."""
     return {"signature": specification["signature"], "states": specification["states"],
             "workers": specification["workers"],
+            "data_root": specification["data_root"],
+            "boundary_source": specification["boundary_source"],
             "models": sorted(specification["roster"]["models"]),
             "required_years": {s: sorted(y) for s, y
                                in specification["roster"]["required_years"].items()}}
@@ -380,12 +451,16 @@ def process_is_running(pid: int) -> bool | None:
 
 
 def acquire_lock(stage: Path, *, force: bool) -> Path:
-    """Take the build lock, breaking one left by a process that is provably gone."""
+    """Take the build lock, breaking one left by a process that is provably gone.
+
+    The holder is probed *before* ``force`` is honoured: two builds writing one stage would
+    interleave compute markers and each could delete the other's lock, so a provably live
+    holder is refused unconditionally. ``force`` covers only the case this platform cannot
+    decide -- an unprobeable PID -- where the operator has to make the call instead.
+    """
     lock = stage / ".build.lock"
     record = json.dumps({"pid": os.getpid(), "started_unix": time.time()})
-    if force:
-        lock.write_text(record, encoding="utf-8")
-        return lock
+    stage.mkdir(parents=True, exist_ok=True)
     try:
         with lock.open("x", encoding="utf-8") as stream:
             stream.write(record)
@@ -398,13 +473,38 @@ def acquire_lock(stage: Path, *, force: bool) -> Path:
     except (OSError, ValueError, TypeError):
         pid = -1
     alive = process_is_running(pid) if pid > 0 else False
+    if alive is True:
+        raise RuntimeError(
+            f"Build lock {lock} is held by PID {pid}, which is still running. "
+            "--force cannot break a live lock; stop that build first."
+        )
     if alive is False:
         print(json.dumps({"broke_stale_lock": str(lock), "dead_pid": pid}), flush=True)
         lock.write_text(record, encoding="utf-8")
         return lock
-    detail = ("is still running" if alive else
-              "cannot be probed on this platform; confirm it is not running, then pass --force")
-    raise RuntimeError(f"Build lock {lock} is held by PID {pid}, which {detail}.")
+    if force:
+        print(json.dumps({"forced_unprobeable_lock": str(lock), "unprobeable_pid": pid}),
+              flush=True)
+        lock.write_text(record, encoding="utf-8")
+        return lock
+    raise RuntimeError(
+        f"Build lock {lock} is held by PID {pid}, whose liveness cannot be probed on this "
+        "platform; confirm it is not running, then pass --force."
+    )
+
+
+def release_lock(lock: Path) -> None:
+    """Release the lock only while this process still owns it.
+
+    An unconditional unlink would let a build that took the lock over a stale record delete a
+    lock subsequently written by another process.
+    """
+    try:
+        held = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if held.get("pid") == os.getpid():
+        lock.unlink(missing_ok=True)
 
 
 def build(data_dir: Path, stage: Path, specification: dict, *,
@@ -416,8 +516,17 @@ def build(data_dir: Path, stage: Path, specification: dict, *,
     # A record from an earlier attempt must never outlive the outputs it described.
     (stage / "release_ready.json").unlink(missing_ok=True)
     roster = specification["roster"]
-    if source_root is not None:
-        write_json(stage / "input_preflight.json", preflight_inputs(source_root, roster))
+    # Preflight the archive compute will read, not one supplied alongside it: a pass against
+    # any other path says nothing about the inputs this build opens. --source-root is kept as
+    # an explicit assertion that the operator's expected archive is that same path.
+    derived_source = compute_source_root(data_dir)
+    if source_root is not None and source_root.resolve() != derived_source.resolve():
+        raise ValueError(
+            f"--source-root {source_root} is not the archive this build will read "
+            f"({derived_source}); compute resolves its inputs from --data-dir. Pass the "
+            "matching path or omit --source-root."
+        )
+    write_json(stage / "input_preflight.json", preflight_inputs(derived_source, roster))
     slugs = sorted(SHADE_SLUGS)
     metric_args = [part for slug in slugs for part in ("--metric", slug)]
     state_args = [part for state in specification["states"] for part in ("--state", state)]
@@ -474,15 +583,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence", type=Path, default=Path("docs/diagnostics/wbgt_shade_release"))
     parser.add_argument("--pilot", type=Path, default=Path("scratch/wbgt_shade_stage"))
     parser.add_argument("--source-root", type=Path, default=None,
-                        help="Raw NEX root (<root>/<scenario>/<variable>/<model>/<year>.nc) to "
-                             "preflight against the release roster before compute starts")
+                        help="Assert the raw NEX archive compute will read; every build "
+                             "preflights the archive derived from --data-dir either way")
     parser.add_argument("--build", action="store_true", help="Run the national build after budget/free-space checks")
     parser.add_argument("--dry-run", action="store_true",
                         help="Skip the multi-minute published-tree walk; report no space verdict")
     parser.add_argument("--remeasure-rollback", action="store_true",
                         help="Discard cached published-tree sizes and measure them again")
     parser.add_argument("--force", action="store_true",
-                        help="Break a build lock this platform cannot prove is stale")
+                        help="Break a build lock whose holder cannot be probed on this "
+                             "platform; a provably live holder is always refused")
     args = parser.parse_args(argv)
     if args.dry_run and args.build:
         parser.error("--dry-run produces no space verdict, so it cannot authorize --build")
@@ -500,7 +610,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             build(data_dir, stage, specification, source_root=args.source_root)
         finally:
-            lock.unlink(missing_ok=True)
+            release_lock(lock)
     return 0
 
 

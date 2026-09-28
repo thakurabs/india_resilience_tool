@@ -2,7 +2,9 @@
 
 This implements CHG-0572 and the code/validation portions of CHG-0583–0586.
 CHG-0587 provides the national staging runner, hardened by CHG-0588..0592 (streaming/cached budget,
-resume safety, roster preflight, boundary-coverage validation, tests and this documentation).
+resume safety, roster preflight, boundary-coverage validation, tests and this documentation) and by
+CHG-0593..0598 (live-lock and lock-ownership safety, rollback cache bound to its published root,
+preflight derived from the real compute archive, incomplete measurements barred from a space verdict).
 Complete national execution, release verification and promotion remain outstanding.
 No published metric directories have been replaced. Do not treat the new source code as evidence
 that existing processed or optimized shade artifacts were rebuilt.
@@ -76,13 +78,18 @@ levels. Peak process RSS was 748,228,608 bytes. Its early conservative 20-model 
 roster and excluded downstream and rollback cost, so it is **superseded** and must not be quoted as
 the national budget.
 
-The measured budget from `build_shade_release` on the supported 19-model roster is **188.5 hours**
-with one worker (513,939 s compute plus 164,510 s downstream) and **228.7 GB** of reserved staged
-output, extrapolated from 21 measured pilot model-years and 656 pilot units to 2,717 model-years and
-7,921 units. Pilot model-years are measured from the staged tree rather than assumed. Staging and the
+The budget from `build_shade_release` on the supported 19-model roster is **an extrapolation, not a
+measured national runtime**: **188.5 hours** with one worker (513,939 s compute plus 164,510 s
+downstream) and **228.7 GB** of reserved staged output, scaled from 21 measured pilot model-years and
+656 pilot units to 2,717 model-years and 7,921 units. Only the pilot is measured; the national
+figures inherit its per-unit and per-model-year cost. Record the actual national cost after staging. Pilot model-years are measured from the staged tree rather than assumed. Staging and the
 published tree share one volume here, so the space check sums both requirements against its 6.45 TB
-free. Rollback storage for the four published shade trees is measured separately and cached; see
-`budget.json` and `rollback_sizes.json` under the stage directory.
+free. Rollback storage for the four published shade trees is measured separately and cached, so a space
+requirement quoted before that walk completes excludes it; see `budget.json` and
+`rollback_sizes.json` under the stage directory. The cache records the published root it was
+measured from and is discarded rather than reused for another `--data-dir`. A tree that exists but
+cannot be fully read is reported incomplete and withholds the space verdict instead of contributing
+an understated zero (CHG-0594, CHG-0596).
 District-first cache warming makes the subsequent block pass warm even on its first iteration;
 `cached=false` denotes the first pass for that level, not necessarily a cold cache.
 
@@ -153,11 +160,15 @@ Then stage all four metrics together in the isolated tree:
 python -m tools.pipeline.build_shade_release --data-dir D:/projects/irt_data --stage scratch/wbgt_shade_national --source-root D:/projects/irt_data/r1i1p1f1 --build
 ```
 
-`--source-root` preflights every rostered model-year input before the first compute stage, because the
+Every build preflights every rostered model-year input before the first compute stage, because the
 compute CLI derives years from whatever inputs exist while release validation demands the exact roster.
-Each state's roster coverage is checked as soon as its compute finishes, not days later at the end.
-Resuming a stage built from a different roster, state list or formula signature is refused rather than
-silently mixed; `--force` breaks a build lock only where the holding PID cannot be probed.
+The archive preflighted is the one compute resolves from `--data-dir`; `--source-root` asserts that it
+is the path the operator expected and fails on disagreement, rather than substituting a path compute
+never opens (CHG-0595). Each state's roster coverage is checked as soon as its compute finishes, not
+days later at the end. Resuming a stage built from a different roster, state list, formula signature,
+published root or boundary layer is refused rather than silently mixed. A build lock whose holder is
+provably alive is always refused; `--force` applies only where the holding PID cannot be probed on
+this platform, and a lock is released only while this process still owns it (CHG-0593).
 
 This stages outputs and validates identifiers/slices/roster/signatures and missing values. It does
 **not** publish. Promotion of the four metrics together with a tested rollback is still unimplemented:

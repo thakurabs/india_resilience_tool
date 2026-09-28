@@ -1,5 +1,8 @@
 """Scientific and release-contract regression checks for shade peak correction."""
 
+import os
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -365,7 +368,8 @@ def test_tree_size_streams_without_materializing_sizes(tmp_path):
     (tmp_path / "a/one.txt").write_bytes(b"x" * 10)
     (tmp_path / "a/b/two.txt").write_bytes(b"y" * 5)
     measured = tree_size(tmp_path, block_bytes=100)
-    assert measured == {"bytes": 15, "files": 2, "reserved_bytes": 215}
+    assert measured == {"bytes": 15, "files": 2, "reserved_bytes": 215,
+                        "read_errors": 0, "root_absent": False, "complete": True}
     # A path that does not exist must measure as empty rather than raise mid-budget.
     assert tree_size(tmp_path / "absent")["files"] == 0
 
@@ -399,7 +403,7 @@ def test_rollback_measurement_is_cached_and_resumable(tmp_path, monkeypatch):
     # A cache truncated by an interruption keeps its completed trees and finishes the rest.
     partial = json.loads(cache.read_text())
     kept = dict(list(partial["trees"].items())[:3])
-    cache.write_text(json.dumps({"trees": kept}))
+    cache.write_text(json.dumps({"data_root": partial["data_root"], "trees": kept}))
     calls.clear()
     resumed = runner.measure_rollback(data_dir, cache, remeasure=False)
     assert len(calls) == 2 * len(SHADE_SLUGS) - 3
@@ -438,13 +442,17 @@ def test_resume_refuses_a_stage_built_from_another_specification(tmp_path):
     from india_resilience_tool.data.wbgt_contract import SHADE_METHOD_SIGNATURE
 
     specification = {"signature": SHADE_METHOD_SIGNATURE, "states": ["Kerala"], "workers": 1,
+                     "data_root": "/published/irt_data",
+                     "boundary_source": {"districts": {"bytes": 10, "mtime_ns": 1}},
                      "roster": {"models": ["m1"], "required_years": {"historical": [2000]}}}
     guard_build_spec(tmp_path, specification)
     guard_build_spec(tmp_path, specification)  # unchanged resume is allowed
 
     for mutation in ({"states": ["Kerala", "Rajasthan"]},
                      {"roster": {"models": ["m1", "m2"], "required_years": {"historical": [2000]}}},
-                     {"roster": {"models": ["m1"], "required_years": {"historical": [2000, 2001]}}}):
+                     {"roster": {"models": ["m1"], "required_years": {"historical": [2000, 2001]}}},
+                     {"data_root": "/published/other_data"},
+                     {"boundary_source": {"districts": {"bytes": 99, "mtime_ns": 1}}}):
         with pytest.raises(ValueError, match="different specification"):
             guard_build_spec(tmp_path, {**specification, **mutation})
 
@@ -583,3 +591,148 @@ def test_budget_derives_pilot_model_years_and_defers_space_on_dry_run(tmp_path):
     assert "DRY RUN" in result["limitations"]
     # units/pilot_units * model_years/pilot_model_years = 14/7 * 2/2
     assert result["model_year_unit_scale"] == pytest.approx(2.0)
+
+
+def test_force_never_breaks_a_lock_whose_holder_is_alive(tmp_path, monkeypatch):
+    """Two builds in one stage would interleave markers and delete each other's lock."""
+    import json
+    from tools.pipeline import build_shade_release as runner
+
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / ".build.lock").write_text(json.dumps({"pid": 4242, "started_unix": 0.0}))
+    monkeypatch.setattr(runner, "process_is_running", lambda pid: True)
+    for force in (False, True):
+        with pytest.raises(RuntimeError, match="still running"):
+            runner.acquire_lock(stage, force=force)
+    # The live holder's record survives both attempts.
+    assert json.loads((stage / ".build.lock").read_text())["pid"] == 4242
+
+
+def test_force_applies_only_where_liveness_cannot_be_probed(tmp_path, monkeypatch):
+    import json
+    from tools.pipeline import build_shade_release as runner
+
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / ".build.lock").write_text(json.dumps({"pid": 4242, "started_unix": 0.0}))
+    monkeypatch.setattr(runner, "process_is_running", lambda pid: None)
+    with pytest.raises(RuntimeError, match="cannot be probed"):
+        runner.acquire_lock(stage, force=False)
+    lock = runner.acquire_lock(stage, force=True)
+    assert json.loads(lock.read_text())["pid"] == os.getpid()
+
+
+def test_lock_release_leaves_another_process_record_alone(tmp_path):
+    """An unconditional unlink would release a lock this process no longer owns."""
+    import json
+    from tools.pipeline import build_shade_release as runner
+
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    lock = runner.acquire_lock(stage, force=False)
+    lock.write_text(json.dumps({"pid": 4242, "started_unix": 0.0}))
+    runner.release_lock(lock)
+    assert lock.exists(), "released a lock belonging to another process"
+    lock.write_text(json.dumps({"pid": os.getpid(), "started_unix": 0.0}))
+    runner.release_lock(lock)
+    assert not lock.exists()
+
+
+def test_rollback_cache_is_not_reused_across_published_roots(tmp_path):
+    """Cached sizes from another data directory would understate the rollback requirement."""
+    import json
+    from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS
+    from tools.pipeline import build_shade_release as runner
+
+    def published(root: Path, payload: bytes) -> Path:
+        for base in runner.ROLLBACK_BASES:
+            for slug in sorted(SHADE_SLUGS):
+                tree = root / base / slug
+                tree.mkdir(parents=True)
+                (tree / "part.csv").write_bytes(payload)
+        return root
+
+    small = published(tmp_path / "small", b"x" * 10)
+    large = published(tmp_path / "large", b"x" * 1000)
+    cache = tmp_path / "rollback_sizes.json"
+
+    first = runner.measure_rollback(small, cache, remeasure=False)
+    assert first["data_root"] == str(small.resolve())
+    second = runner.measure_rollback(large, cache, remeasure=False)
+    assert second["data_root"] == str(large.resolve())
+    assert second["reserved_bytes"] > first["reserved_bytes"], "reused the other root's sizes"
+    # A cache written before roots were recorded is unbound, so it is discarded too.
+    cache.write_text(json.dumps({"trees": {"processed/x": {
+        "reserved_bytes": 1, "measured_unix": 0.0, "complete": True}}}))
+    assert runner.measure_rollback(large, cache, remeasure=False)["data_root"] == str(large.resolve())
+    assert "processed/x" not in json.loads(cache.read_text())["trees"]
+
+
+def test_tree_size_reports_an_unreadable_subtree_as_incomplete(tmp_path, monkeypatch):
+    """An absent tree is legitimately zero; an unreadable one must not look small."""
+    from tools.pipeline import build_shade_release as runner
+
+    (tmp_path / "tree/blocked").mkdir(parents=True)
+    (tmp_path / "tree/kept.csv").write_bytes(b"x" * 8)
+    (tmp_path / "tree/blocked/hidden.csv").write_bytes(b"y" * 4096)
+
+    real = os.scandir
+
+    def blocked(path):
+        if str(path).endswith("blocked"):
+            raise PermissionError(13, "denied")
+        return real(path)
+
+    monkeypatch.setattr(runner.os, "scandir", blocked)
+    measured = runner.tree_size(tmp_path / "tree")
+    assert measured["complete"] is False and measured["read_errors"] == 1
+    assert measured["files"] == 1, "the unreadable subtree is simply absent from the total"
+
+    monkeypatch.undo()
+    absent = runner.tree_size(tmp_path / "nothing-here")
+    assert absent["complete"] is True and absent["root_absent"] is True
+    assert runner.tree_size(tmp_path / "tree")["complete"] is True
+
+
+def test_incomplete_rollback_measurement_withholds_the_space_verdict(tmp_path, monkeypatch):
+    """A partial size sum must never clear a check that --build depends on."""
+    from tools.pipeline import build_shade_release as runner
+
+    evidence, pilot = shade_budget_evidence(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    real_tree_size = runner.tree_size
+
+    def unreadable(root, **kwargs):
+        if "wbgt_shade" in str(root):
+            return {"bytes": 0, "files": 0, "reserved_bytes": 0,
+                    "read_errors": 3, "root_absent": False, "complete": False}
+        return real_tree_size(root, **kwargs)
+
+    monkeypatch.setattr(runner, "tree_size", unreadable)
+    result = runner.budget(data_dir, tmp_path / "stage", evidence, pilot)
+    assert result["space_passed"] is None, "cleared a check on an understated requirement"
+    assert result["rollback_measurement_complete"] is False
+    assert result["rollback_incomplete_trees"], "must name the trees that failed to read"
+    assert "INCOMPLETE ROLLBACK MEASUREMENT" in result["limitations"]
+
+
+def test_preflight_inspects_the_archive_compute_will_read(tmp_path):
+    """--source-root asserts the derived archive; it cannot substitute another one."""
+    from india_resilience_tool.config.paths import get_paths_config
+    from tools.pipeline import build_shade_release as runner
+
+    data_dir = tmp_path / "data"
+    derived = runner.compute_source_root(data_dir)
+    assert derived.parent == data_dir
+    assert derived.name == get_paths_config().data_root.name
+
+    specification = {"space_passed": True, "signature": runner.SHADE_METHOD_SIGNATURE,
+                     "states": ["Kerala"], "workers": 1,
+                     "data_root": str(data_dir), "boundary_source": {},
+                     "roster": {"models": ["m1"], "required_years": {"historical": [2000]},
+                                "model_years": 1}}
+    with pytest.raises(ValueError, match="is not the archive this build will read"):
+        runner.build(data_dir, tmp_path / "stage", specification,
+                     source_root=tmp_path / "somewhere-else")

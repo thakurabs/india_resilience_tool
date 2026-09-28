@@ -24,9 +24,9 @@ Daily scores and seasonal errors: `site_scores.csv`, `seasonal.csv`. Annual erro
 ## Remaining publication work
 
 National build and staged promotion have not run. `tools/pipeline/build_shade_release.py` is the
-budget and staging runner (CHG-0587, hardened by CHG-0588..0591); it writes only under its `--stage`
-directory and has no publication path. Promotion and rollback remain unimplemented: nothing consumes
-`release_ready.json`. The three-state single-model/year pilot is in `pilot_report.json`. Complete downstream staging cost, full calendar audit, release verification and rollback rehearsal are still required. The sibling `twb_days_ge_*` false-zero defect remains unresolved; W-04/F-05 are not fixed across Heat Stress.
+budget and staging runner (CHG-0587, hardened by CHG-0588..0592 and again by CHG-0593..0598); it
+writes only under its `--stage` directory and has no publication path. Promotion and rollback remain unimplemented: nothing consumes
+`release_ready.json`. The three-state single-model/year pilot is in `pilot_report.json`. Complete downstream staging cost, full calendar audit, release verification and rollback rehearsal are still required. The 188.5 h / 228.7 GB budget is extrapolated from the pilot, not a measured national runtime, and any space figure quoted before the published-tree walk completes excludes rollback storage. The sibling `twb_days_ge_*` false-zero defect remains unresolved; W-04/F-05 are not fixed across Heat Stress.
 
 ## Staged production pilot
 
@@ -44,8 +44,10 @@ See [NEX residuals](NEX_RESIDUALS.md) for remaining model bias without QDM.
 
 ## Verification
 
-- Dedicated shade suite `tests/test_wbgt_shade_release.py`: 27 passed (17 before CHG-0591;
-  `verification.json` previously mis-recorded this as 16).
+- Dedicated shade suite `tests/test_wbgt_shade_release.py`: 34 passed (17 before CHG-0591,
+  27 before CHG-0597; `verification.json` once mis-recorded the 17 as 16). The seven cases added
+  by CHG-0597 are regressions for the release-runner defects an external review found in
+  CHG-0588..0592, each reproduced before it was fixed.
 - Focused compute/registry/marker/bootstrap/state-value/ensemble tests: 135 passed.
 - Full `python -m pytest -q tests --tb=short`: 1,673 passed, 3 skipped, 15 failures.
   The same 15 failure cases reproduce on untouched `269be91`; no new failure remains.

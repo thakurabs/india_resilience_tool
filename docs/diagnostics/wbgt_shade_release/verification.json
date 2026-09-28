@@ -22,14 +22,15 @@
       "FAILED tests/test_optimized_bundle.py::test_strict_audit_requires_block_yearly_models_when_ensemble_exists"
     ],
     "baseline": "All 15 failing cases reproduced using an isolated git archive of 269be91",
-    "note": "Predates CHG-0588..0592. The dedicated suite has been re-run since; the full suite has not."
+    "note": "Predates CHG-0588..0598. The 15 failures reproduce on clean 269be91 and are unrelated to the shade programme; re-run the full suite before publication."
   },
   "focused_suite": "135 passed",
   "embedded_compute_plus_shade": "41 passed",
-  "latest_dedicated_shade": "27 passed",
+  "latest_dedicated_shade": "34 passed",
   "new_module_ruff": "passed",
   "runtime_ruff_findings": 86,
   "baseline_runtime_ruff_findings": 88,
   "black_and_mypy": "Unavailable modules; no dependency installation performed",
-  "latest_dedicated_shade_note": "Was recorded as 16 while the suite had 17; CHG-0591 added 10 budget/resume/preflight regressions, giving 27. Command: python -m pytest -q tests/test_wbgt_shade_release.py"
+  "latest_dedicated_shade_note": "tests/test_wbgt_shade_release.py after CHG-0593..0597: 34 passed. The seven new cases cover the release-runner findings from external review -- --force against a live lock, lock ownership on release, rollback cache bound to its published root, unreadable-subtree detection, an incomplete measurement withholding the space verdict, and preflight derived from the compute archive. Three earlier cases were updated to the new contracts.",
+  "latest_focused_shade": "99 passed"
 }
