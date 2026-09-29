@@ -1,0 +1,54 @@
+{
+  "status": "IDENTICAL",
+  "historical_file": "docs\\diagnostics\\wbgt_deployed_vs_reference\\daily_series.parquet",
+  "comparisons": [
+    {
+      "site": "Kochi",
+      "window": "2005-2014",
+      "n_compared_days": 3651,
+      "max_abs_difference_c": 0.0,
+      "days_ge_32_historical": 2113,
+      "days_ge_32_reproduced": 2113
+    },
+    {
+      "site": "Kolkata",
+      "window": "2005-2014",
+      "n_compared_days": 3651,
+      "max_abs_difference_c": 0.0,
+      "days_ge_32_historical": 1439,
+      "days_ge_32_reproduced": 1439
+    },
+    {
+      "site": "Bikaner",
+      "window": "2005-2014",
+      "n_compared_days": 3651,
+      "max_abs_difference_c": 0.0,
+      "days_ge_32_historical": 897,
+      "days_ge_32_reproduced": 897
+    },
+    {
+      "site": "Lucknow",
+      "window": "2005-2014",
+      "n_compared_days": 3651,
+      "max_abs_difference_c": 0.0,
+      "days_ge_32_historical": 1218,
+      "days_ge_32_reproduced": 1218
+    },
+    {
+      "site": "Hyderabad",
+      "window": "2005-2014",
+      "n_compared_days": 3651,
+      "max_abs_difference_c": 0.0,
+      "days_ge_32_historical": 511,
+      "days_ge_32_reproduced": 511
+    },
+    {
+      "site": "Shimla",
+      "window": "2005-2014",
+      "n_compared_days": 3651,
+      "max_abs_difference_c": 0.0,
+      "days_ge_32_historical": 0,
+      "days_ge_32_reproduced": 0
+    }
+  ]
+}

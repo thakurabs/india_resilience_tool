@@ -1,0 +1,29 @@
+{
+  "C1": {
+    "daily_gate": "PASS",
+    "daily_pairs": 12,
+    "daily_pairs_passing": 12,
+    "count_gate": "FAIL",
+    "count_pairs_gated": 30,
+    "count_pairs_passing": 28,
+    "count_pairs_not_gated": 6
+  },
+  "C2": {
+    "daily_gate": "PASS",
+    "daily_pairs": 12,
+    "daily_pairs_passing": 12,
+    "count_gate": "FAIL",
+    "count_pairs_gated": 30,
+    "count_pairs_passing": 28,
+    "count_pairs_not_gated": 6
+  },
+  "C3": {
+    "daily_gate": "FAIL",
+    "daily_pairs": 12,
+    "daily_pairs_passing": 0,
+    "count_gate": "FAIL",
+    "count_pairs_gated": 30,
+    "count_pairs_passing": 6,
+    "count_pairs_not_gated": 6
+  }
+}
