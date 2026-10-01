@@ -1,0 +1,15 @@
+state_name,model,run,non_finite_cell_days,out_of_range_cell_days,tasmin_gt_tasmax_cell_days,invalid_cell_days,total_cell_days,rh_policy,rh_policy_version,rh_clipped_cell_days,rh_max_correction_pct,rh_above_100_cell_days,rh_above_102_cell_days,rh_observed_max_pct
+Kerala,ACCESS-CM2,baseline,51380,0,1,51381,121110,strict,rhpolicy-v1,0,0.0,0,0,96.15250396728516
+Kerala,ACCESS-CM2,rh,51380,0,1,51381,121110,clip100,rhpolicy-v1,0,0.0,0,0,96.15250396728516
+Kerala,ACCESS-CM2,elev,51380,0,1,51381,121110,strict,rhpolicy-v1,0,0.0,0,0,96.15250396728516
+Kerala,ACCESS-CM2,combined,51380,0,1,51381,121110,clip100,rhpolicy-v1,0,0.0,0,0,96.15250396728516
+Rajasthan,ACCESS-CM2,baseline,367,3,0,370,472329,strict,rhpolicy-v1,0,0.0,3,0,101.4632797241211
+Rajasthan,ACCESS-CM2,rh,367,0,0,367,472329,clip100,rhpolicy-v1,3,1.4632797241210938,3,0,101.4632797241211
+Rajasthan,ACCESS-CM2,elev,367,3,0,370,472329,strict,rhpolicy-v1,0,0.0,3,0,101.4632797241211
+Rajasthan,ACCESS-CM2,combined,367,0,0,367,472329,clip100,rhpolicy-v1,3,1.4632797241210938,3,0,101.4632797241211
+Himachal Pradesh,ACCESS-CM2,baseline,0,21,0,21,99090,strict,rhpolicy-v1,0,0.0,21,0,101.20829772949219
+Himachal Pradesh,ACCESS-CM2,rh,0,0,0,0,99090,clip100,rhpolicy-v1,21,1.2082977294921875,21,0,101.20829772949219
+Himachal Pradesh,ACCESS-CM2,elev,0,21,0,21,99090,strict,rhpolicy-v1,0,0.0,21,0,101.20829772949219
+Himachal Pradesh,ACCESS-CM2,combined,0,0,0,0,99090,clip100,rhpolicy-v1,21,1.2082977294921875,21,0,101.20829772949219
+Himachal Pradesh,MRI-ESM2-0,baseline,0,54,0,54,99090,strict,rhpolicy-v1,0,0.0,54,0,101.4023666381836
+Himachal Pradesh,MRI-ESM2-0,combined,0,0,0,0,99090,clip100,rhpolicy-v1,54,1.4023666381835938,54,0,101.4023666381836

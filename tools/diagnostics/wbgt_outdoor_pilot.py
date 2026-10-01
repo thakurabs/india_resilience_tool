@@ -47,6 +47,19 @@ COMPARISON_CANDIDATE = "C1"
 ELEVATION_CONVENTION = "elev-sea-level-constant-no-dem"
 ELEVATION_M = 0.0
 
+#: Flag written for a cell that fell back to sea level because its elevation was missing.
+#: The fallback is never silent: it must be requested explicitly and it is recorded per cell.
+ELEVATION_FALLBACK_FLAG = "sea_level"
+
+#: Input-quality policies for ``hurs`` (milestone 4b, pilot_qc SPEC.md 2.2).
+#: ``strict`` is milestone 4's behaviour: a finite value above 100 % invalidates the cell-day.
+#: ``clip100`` replaces a finite value above 100 % with exactly 100 % and flags it.  That is an
+#: experimental physical-bound treatment, NOT accepted source repair: NEX-GDDP-CMIP6 publishes
+#: no ``valid_range`` for ``hurs`` and documents no tolerance.
+RH_POLICIES = ("strict", "clip100")
+RH_POLICY_VERSION = "rhpolicy-v1"
+RH_PHYSICAL_MAX_PCT = 100.0
+
 PILOT_STATES = ("Kerala", "Rajasthan", "Himachal Pradesh")
 PILOT_LEVELS = ("district", "block")
 PILOT_MODEL = "ACCESS-CM2"
@@ -113,21 +126,70 @@ LIMITATIONS = (
     "Rare-event regimes remain insufficiently evaluated.",
     "Spatial ranking accuracy is NOT established.",
     "Daily time-boundary semantics remain INFERRED; no NEX file publishes time_bnds.",
-    f"Cell elevation is a sea-level constant ({ELEVATION_CONVENTION}); no DEM is available. "
-    "Measured WBGT sensitivity is 0.250 C between 0 m and 2276 m at fixed drivers.",
+    f"Cell elevation in this run is a sea-level constant ({ELEVATION_CONVENTION}); no DEM is "
+    "used. The 0.250 C difference measured between 0 m and 2276 m at fixed drivers is a single "
+    "measured example, NOT a national upper bound on the elevation effect.",
     "All thresholds, including >=28 and >=30 C, remain diagnostic-only on NEX.",
+    "Where this milestone's coverage failures are called a data problem rather than a code "
+    "problem, that statement applies ONLY to those observed coverage failures. It does not "
+    "extend to the other outdoor limitations listed here.",
+    "Method sensitivity (W1 vs C1) and model sensitivity (ACCESS-CM2 vs MRI-ESM2-0) were "
+    "measured over different geographic and metric scopes; their rank-shift magnitudes are "
+    "not comparable.",
+    "Numerical block-to-district aggregation agreement verifies aggregation consistency under "
+    "the tested support. It does NOT prove that blocks tile districts; that is tested "
+    "independently by geometry.",
 )
+
+
+def limitations(
+    *, rh_policy: str = "strict", elevation_convention: str = ELEVATION_CONVENTION
+) -> tuple[str, ...]:
+    """The caveats that must travel with one run's artifacts, given its declared policies.
+
+    ``LIMITATIONS`` is the strict, sea-level set.  A run that departs from either default adds
+    the caveat that names the departure, so no artifact can carry a treatment it does not
+    declare (pilot_qc SPEC.md 2.2, 3.3).
+    """
+
+    out = list(LIMITATIONS)
+    if rh_policy == "clip100":
+        out.append(
+            "Finite hurs above 100 % was CLIPPED to 100 % as an EXPERIMENTAL physical-bound "
+            "treatment, NOT accepted source repair: NEX-GDDP-CMIP6 publishes no valid_range "
+            "for hurs and documents no tolerance. Clipped days are flagged and counted; the "
+            "complete-365 rule still applies after the treatment."
+        )
+    if elevation_convention != ELEVATION_CONVENTION:
+        out.append(
+            f"Cell elevation is {elevation_convention}; only the elevation input changed and "
+            "the ISA elevation-to-pressure formulation is unchanged. Elevations are per climate "
+            "cell, never one value per district."
+        )
+    return tuple(out)
 
 QUANTITY_NAME = "Annual mean of daily maximum outdoor WBGT"
 EXCEEDANCE_NAME = "Area-weighted mean annual cell exceedance days"
 
 
-def method_signature(candidate: str = PILOT_CANDIDATE) -> str:
+def method_signature(
+    candidate: str = PILOT_CANDIDATE,
+    *,
+    rh_policy: str = "strict",
+    elevation_convention: str = ELEVATION_CONVENTION,
+) -> str:
     """The full frozen identity of one pilot candidate.
 
     Every element that could change a number appears here, so a cache written under one
     signature can never be reused under another (SPEC.md 7).
+
+    The ``v2`` prefix is milestone 4b: the input-quality policy and the elevation identity are
+    now part of the identity, so a ``v2`` signature never equals a ``v1`` one and no milestone-4
+    cache can be reused across the policy change (pilot_qc SPEC.md 8.1).
     """
+
+    if rh_policy not in RH_POLICIES:
+        raise ValueError(f"Unknown rh_policy {rh_policy!r}; expected one of {RH_POLICIES}")
 
     wind = (
         f"wind-w1-dtr-slope{m2.WIND_DTR_SLOPE_PER_C}"
@@ -137,13 +199,14 @@ def method_signature(candidate: str = PILOT_CANDIDATE) -> str:
     )
     params = m1.CANDIDATE_PARAMS["C1"]
     return (
-        f"outdoor-pilot-v1:{candidate}"
+        f"outdoor-pilot-v2:{candidate}"
         f":parton-logan-a{params.parton_logan_a_h}-b{params.parton_logan_b}"
         f":humidity-{params.humidity_invariant}"
         f":magnus-{m1.MAGNUS_A_HPA}-{m1.MAGNUS_B}-{m1.MAGNUS_C_C}"
         f":toa-shape-erbs1982"
         f":{wind}"
-        f":pressure-isa-{ELEVATION_CONVENTION}"
+        f":rh-{rh_policy}-{RH_POLICY_VERSION}"
+        f":pressure-isa-{elevation_convention}"
         f":liljegren-thermofeel{_thermofeel_version()}"
         f":day-nex-normalised-complete365-feb29dropped"
     )
@@ -163,7 +226,13 @@ def _thermofeel_version() -> str:
 # ==========================================================================
 
 
-def guard_write_target(path: Path, label: str, *, extra_protected: Sequence[Path] = ()) -> Path:
+def guard_write_target(
+    path: Path,
+    label: str,
+    *,
+    extra_protected: Sequence[Path] = (),
+    extra_fragments: Sequence[str] = (),
+) -> Path:
     """Resolve ``path`` and refuse it if it lands in a protected root.
 
     Resolution happens first, so a symlink into production is refused on its destination
@@ -173,7 +242,7 @@ def guard_write_target(path: Path, label: str, *, extra_protected: Sequence[Path
 
     resolved = Path(path).resolve()
     lowered = str(resolved).replace("\\", "/").lower()
-    for fragment in FORBIDDEN_WRITE_FRAGMENTS:
+    for fragment in tuple(FORBIDDEN_WRITE_FRAGMENTS) + tuple(extra_fragments):
         if f"/{fragment}/" in f"{lowered}/" or lowered.endswith(f"/{fragment}"):
             raise SystemExit(
                 f"Refusing to use {label} {resolved}: it resolves inside '{fragment}', "
@@ -377,6 +446,45 @@ def load_daily_cube(
     return cube, days
 
 
+def apply_rh_policy(
+    cube: Mapping[str, np.ndarray], *, rh_policy: str = "strict"
+) -> tuple[dict[str, np.ndarray], np.ndarray, dict[str, float]]:
+    """Apply the declared input-quality policy to ``hurs`` without touching the source.
+
+    Returns ``(cube, flags, record)``.  The input mapping and its arrays are never modified:
+    ``clip100`` copies ``hurs`` before writing to it, so the raw values a caller still holds
+    stay raw.  ``flags`` marks the adjusted cell-days, which keeps a *flagged corrected* day
+    distinguishable from an *unresolved invalid* day (pilot_qc SPEC.md 2.2).
+
+    Non-finite ``hurs`` is never clipped into a value, and negative ``hurs`` is left alone so
+    that the validity mask still rejects it.
+    """
+
+    if rh_policy not in RH_POLICIES:
+        raise ValueError(f"Unknown rh_policy {rh_policy!r}; expected one of {RH_POLICIES}")
+    out = dict(cube)
+    hurs = np.asarray(cube["hurs"], dtype=float)
+    flags = np.zeros(hurs.shape, dtype=bool)
+    record: dict[str, float] = {
+        "rh_policy": rh_policy,
+        "rh_policy_version": RH_POLICY_VERSION,
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": int(np.sum(np.isfinite(hurs) & (hurs > RH_PHYSICAL_MAX_PCT))),
+        "rh_above_102_cell_days": int(np.sum(np.isfinite(hurs) & (hurs > 102.0))),
+        "rh_observed_max_pct": float(np.nanmax(hurs)) if np.isfinite(hurs).any() else np.nan,
+    }
+    if rh_policy == "clip100":
+        flags = np.isfinite(hurs) & (hurs > RH_PHYSICAL_MAX_PCT)
+        if flags.any():
+            adjusted = hurs.copy()
+            record["rh_max_correction_pct"] = float((adjusted[flags] - RH_PHYSICAL_MAX_PCT).max())
+            adjusted[flags] = RH_PHYSICAL_MAX_PCT
+            out["hurs"] = adjusted
+            record["rh_clipped_cell_days"] = int(flags.sum())
+    return out, flags, record
+
+
 def input_validity_mask(cube: Mapping[str, np.ndarray]) -> tuple[np.ndarray, dict[str, int]]:
     """Flag physically invalid cell-days without repairing them (SPEC.md 5.6, 5.7).
 
@@ -501,6 +609,12 @@ def compute_cell_grid(
     candidate: str = PILOT_CANDIDATE,
     valid_mask: np.ndarray | None = None,
     progress: object | None = None,
+    elevation_m: float | np.ndarray = ELEVATION_M,
+    elevation_convention: str = ELEVATION_CONVENTION,
+    rh_policy: str = "strict",
+    rh_flags: np.ndarray | None = None,
+    rh_excess_pct: np.ndarray | None = None,
+    allow_sea_level_fallback: bool = False,
 ) -> xr.Dataset:
     """Compute per-cell annual statistics for the requested flat cell indices.
 
@@ -508,7 +622,17 @@ def compute_cell_grid(
     to a daily maximum *before* any polygon ever sees it (SPEC.md 8).  Cells that are not
     requested stay NaN, which is how a polygon with no valid support stays NaN rather than
     acquiring a spatially filled value.
+
+    ``elevation_m`` is either one constant (milestone 4's sea-level convention) or a
+    ``(n_lat, n_lon)`` field.  A requested cell whose elevation is not finite is an **explicit
+    failure**: it raises unless ``allow_sea_level_fallback`` is set, in which case the cell runs
+    at sea level and is flagged in ``elevation_fallback``.  There is no silent substitution
+    (pilot_qc SPEC.md 3.3).
     """
+
+    elevation = np.asarray(elevation_m, dtype=float)
+    if elevation.ndim not in (0, 2):
+        raise ValueError("elevation_m must be a scalar or a (n_lat, n_lon) field")
 
     n_lat, n_lon = len(lat), len(lon)
     target = drop_feb29(days[days.year == year])
@@ -518,6 +642,10 @@ def compute_cell_grid(
     out = {name: np.full((n_lat, n_lon), np.nan, dtype=float) for name in fields}
     out["input_invalid_days"] = np.full((n_lat, n_lon), np.nan, dtype=float)
     out["solver_invalid_days"] = np.full((n_lat, n_lon), np.nan, dtype=float)
+    out["rh_clipped_days"] = np.full((n_lat, n_lon), np.nan, dtype=float)
+    out["rh_max_correction_pct"] = np.full((n_lat, n_lon), np.nan, dtype=float)
+    out["cell_elevation_m"] = np.full((n_lat, n_lon), np.nan, dtype=float)
+    out["elevation_fallback"] = np.full((n_lat, n_lon), np.nan, dtype=float)
 
     for position, flat in enumerate(cell_indices):
         i, j = divmod(int(flat), n_lon)
@@ -528,7 +656,20 @@ def compute_cell_grid(
             bad = ~valid_mask[:, i, j]
             if bad.any():
                 frame.loc[bad, :] = np.nan
-        static = m1.SiteStatic(f"cell_{i}_{j}", float(lat[i]), float(lon[j]), ELEVATION_M)
+        raw_elev = float(elevation) if elevation.ndim == 0 else float(elevation[i, j])
+        fallback = False
+        if not np.isfinite(raw_elev):
+            if not allow_sea_level_fallback:
+                raise SystemExit(
+                    f"No finite elevation for cell ({i}, {j}) at "
+                    f"{float(lat[i]):.3f}/{float(lon[j]):.3f}. Refusing to substitute sea level "
+                    "silently; pass allow_sea_level_fallback to run it flagged "
+                    "(pilot_qc SPEC.md 3.3)."
+                )
+            raw_elev, fallback = ELEVATION_M, True
+        out["cell_elevation_m"][i, j] = raw_elev
+        out["elevation_fallback"][i, j] = float(fallback)
+        static = m1.SiteStatic(f"cell_{i}_{j}", float(lat[i]), float(lon[j]), raw_elev)
         series = cell_daily_max_c(frame, static, candidate=candidate, target_days=target)
         stats = annual_statistics(series, expected_days=len(target))
         for name, value in stats.items():
@@ -542,12 +683,25 @@ def compute_cell_grid(
         out["solver_invalid_days"][i, j] = float(
             max(0, len(target) - int(stats["valid_days"]) - input_bad)
         )
+        in_target_rh = pd.DatetimeIndex(days).isin(target)
+        if rh_flags is not None:
+            out["rh_clipped_days"][i, j] = float(rh_flags[:, i, j][in_target_rh].sum())
+        else:
+            out["rh_clipped_days"][i, j] = 0.0
+        if rh_excess_pct is not None:
+            out["rh_max_correction_pct"][i, j] = float(
+                np.nanmax(rh_excess_pct[:, i, j][in_target_rh], initial=0.0))
+        else:
+            out["rh_max_correction_pct"][i, j] = 0.0
         if progress is not None:
             progress(position + 1, len(cell_indices))
 
     coords = {"lat": np.asarray(lat, dtype=float), "lon": np.asarray(lon, dtype=float)}
     ds = xr.Dataset({k: (("lat", "lon"), v) for k, v in out.items()}, coords=coords)
-    ds.attrs["method_signature"] = method_signature(candidate)
+    ds.attrs["method_signature"] = method_signature(
+        candidate, rh_policy=rh_policy, elevation_convention=elevation_convention)
+    ds.attrs["rh_policy"] = rh_policy
+    ds.attrs["elevation_convention"] = elevation_convention
     ds.attrs["quantity"] = QUANTITY_NAME
     ds.attrs["diagnostic_only"] = "true"
     return ds
@@ -568,6 +722,8 @@ def aggregate_units(
     model: str,
     year: int,
     candidate: str,
+    rh_policy: str = "strict",
+    elevation_convention: str = ELEVATION_CONVENTION,
 ) -> pd.DataFrame:
     """Area-weight per-cell annual statistics onto admin units.
 
@@ -602,7 +758,10 @@ def aggregate_units(
             "scenario": PILOT_SCENARIO,
             "year": int(year),
             "candidate": candidate,
-            "method_signature": method_signature(candidate),
+            "method_signature": method_signature(
+                candidate, rh_policy=rh_policy, elevation_convention=elevation_convention),
+            "rh_policy": rh_policy,
+            "elevation_convention": elevation_convention,
             "valid_intersected_area_m2": good_area,
             "total_intersected_area_m2": total_area,
             "valid_area_fraction": fraction,
@@ -850,11 +1009,17 @@ def _hash_files(paths: Sequence[Path]) -> str:
 def cell_cache_sidecar(
     *, state: str, model: str, year: int, candidate: str, grid_id: str,
     input_paths: Sequence[Path], boundary_hash: str,
+    rh_policy: str = "strict", elevation_identity: str = ELEVATION_CONVENTION,
 ) -> dict[str, object]:
-    """Everything that must match before a cached cell grid may be reused."""
+    """Everything that must match before a cached cell grid may be reused.
+
+    ``rh_policy`` and ``elevation_identity`` are part of the key, so a grid computed under one
+    input policy or one elevation field can never be served for another (pilot_qc SPEC.md 8.1).
+    """
 
     return {
-        "method_signature": method_signature(candidate),
+        "method_signature": method_signature(
+            candidate, rh_policy=rh_policy, elevation_convention=elevation_identity),
         "state": state,
         "model": model,
         "scenario": PILOT_SCENARIO,
@@ -863,7 +1028,9 @@ def cell_cache_sidecar(
         "grid_id": grid_id,
         "input_identity": _hash_files(input_paths),
         "boundary_hash": boundary_hash,
-        "elevation_convention": ELEVATION_CONVENTION,
+        "rh_policy": rh_policy,
+        "rh_policy_version": RH_POLICY_VERSION,
+        "elevation_identity": elevation_identity,
     }
 
 
@@ -1052,8 +1219,15 @@ def run_manifest(args: argparse.Namespace, extra: Mapping[str, object]) -> dict[
         "geopandas": geopandas.__version__,
         "psutil": psutil.__version__,
         "thermofeel": _thermofeel_version(),
-        "method_signature_w1": method_signature("W1"),
-        "method_signature_c1": method_signature("C1"),
+        "method_signature_w1": method_signature(
+            "W1", rh_policy=getattr(args, "rh_policy", "strict"),
+            elevation_convention=getattr(args, "elevation_convention",
+                                         ELEVATION_CONVENTION)),
+        "method_signature_c1": method_signature(
+            "C1", rh_policy=getattr(args, "rh_policy", "strict"),
+            elevation_convention=getattr(args, "elevation_convention",
+                                         ELEVATION_CONVENTION)),
+        "rh_policy": getattr(args, "rh_policy", "strict"),
         "frozen_method": "milestone 2 W1 == milestone 3 candidate B, unchanged",
         "scope": {
             "states": list(args.states),
@@ -1063,7 +1237,7 @@ def run_manifest(args: argparse.Namespace, extra: Mapping[str, object]) -> dict[
             "member": PILOT_MEMBER,
             "year": int(args.year),
         },
-        "elevation_convention": ELEVATION_CONVENTION,
+        "elevation_convention": getattr(args, "elevation_convention", ELEVATION_CONVENTION),
         "day_boundary": "INFERRED from the CMIP6 daily convention; no NEX file publishes "
                         "time_bnds, so this is not verified locally",
         "budget": {
@@ -1072,10 +1246,32 @@ def run_manifest(args: argparse.Namespace, extra: Mapping[str, object]) -> dict[
             "artifact_bytes": BUDGET_ARTIFACT_BYTES,
             "workers": int(args.workers),
         },
-        "limitations": list(LIMITATIONS),
+        "limitations": list(limitations(
+            rh_policy=getattr(args, "rh_policy", "strict"),
+            elevation_convention=getattr(args, "elevation_convention",
+                                         ELEVATION_CONVENTION))),
     }
     manifest.update(dict(extra))
     return manifest
+
+
+def load_elevation_argument(args: argparse.Namespace) -> tuple[np.ndarray | None, str]:
+    """Resolve ``--elevation-npz`` into a cell field and its declared convention name.
+
+    The archive is the one ``wbgt_outdoor_pilot_qc`` writes: ``elevation_m`` plus the
+    ``convention`` string that already encodes the source, the sampling method and the tile
+    digest, so the elevation identity reaching the cache key is the file's own, not a guess.
+    """
+
+    path = getattr(args, "elevation_npz", None)
+    if path is None:
+        args.elevation_convention = ELEVATION_CONVENTION
+        return None, ELEVATION_CONVENTION
+    with np.load(Path(path), allow_pickle=False) as archive:
+        field = np.asarray(archive["elevation_m"], dtype=float)
+        convention = str(archive["convention"].item())
+    args.elevation_convention = convention
+    return field, convention
 
 
 def _write_csv(frame: pd.DataFrame, path: Path, *, verbose: bool = True) -> None:
@@ -1103,10 +1299,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--rh-policy", choices=list(RH_POLICIES), default="strict",
+                        help="Input-quality treatment for hurs above 100 %% "
+                             "(pilot_qc SPEC.md 2.2). 'strict' is milestone 4's behaviour.")
+    parser.add_argument("--elevation-npz", type=Path, default=None,
+                        help="Per-cell elevation field written by wbgt_outdoor_pilot_qc; "
+                             "omitted means the sea-level constant.")
+    parser.add_argument("--allow-sea-level-fallback", action="store_true",
+                        help="Run cells with no elevation at sea level, flagged. Off by "
+                             "default: a missing elevation is an explicit failure.")
     parser.add_argument("--skip-sensitivity", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args(argv)
     verbose = not args.quiet
+    elevation_field, elevation_convention = load_elevation_argument(args)
 
     out_dir = guard_write_target(args.out_dir, "--out-dir")
     work_dir = guard_write_target(args.work_dir, "--work-dir")
@@ -1116,7 +1322,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if verbose:
         print("Outdoor-WBGT engineering pilot, milestone 4")
         print(f"  spec       docs/diagnostics/wbgt_outdoor_pilot/SPEC.md")
-        print(f"  method     {method_signature(PILOT_CANDIDATE)}")
+        print(f"  method     {method_signature(PILOT_CANDIDATE, rh_policy=args.rh_policy, elevation_convention=elevation_convention)}")
+        print(f"  rh policy  {args.rh_policy}")
+        print(f"  elevation  {elevation_convention}")
         print(f"  scope      {', '.join(args.states)} | {args.model} | {args.year}")
         print(f"  out-dir    {out_dir}")
         print(f"  work-dir   {work_dir}")
@@ -1188,7 +1396,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             cube, days = load_daily_cube(source_root=args.source_root, wbgt_root=args.wbgt_root,
                                          model=args.model, scenario=PILOT_SCENARIO,
                                          year=args.year, index_range=index_range)
+            cube, rh_flags, rh_record = apply_rh_policy(cube, rh_policy=args.rh_policy)
             valid_mask, invalid_counts = input_validity_mask(cube)
+            invalid_counts.update(rh_record)
             load_seconds = time.perf_counter() - started
             coverage_rows.append({"state": state, **invalid_counts,
                                   "load_seconds": load_seconds,
@@ -1207,7 +1417,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 sidecar = cell_cache_sidecar(
                     state=state, model=args.model, year=args.year, candidate=candidate,
                     grid_id=grid.grid_id, input_paths=input_paths,
-                    boundary_hash=hashes["district"])
+                    boundary_hash=hashes["district"], rh_policy=args.rh_policy,
+                    elevation_identity=elevation_convention)
                 cache_path = work_dir / f"cells_{state.replace(' ', '_')}_{args.model}_" \
                                         f"{args.year}_{candidate}.nc"
                 grid_ds = None
@@ -1220,9 +1431,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         raise SystemExit(
                             f"Refusing to overwrite {cache_path}; pass --overwrite or --resume.")
                     started = time.perf_counter()
-                    grid_ds = compute_cell_grid(cube, days, lat=grid.lat, lon=grid.lon,
-                                                cell_indices=cells, year=args.year,
-                                                candidate=candidate, valid_mask=valid_mask)
+                    grid_ds = compute_cell_grid(
+                        cube, days, lat=grid.lat, lon=grid.lon, cell_indices=cells,
+                        year=args.year, candidate=candidate, valid_mask=valid_mask,
+                        elevation_m=(elevation_field if elevation_field is not None
+                                     else ELEVATION_M),
+                        elevation_convention=elevation_convention,
+                        rh_policy=args.rh_policy, rh_flags=rh_flags,
+                        allow_sea_level_fallback=args.allow_sea_level_fallback)
                     compute_seconds = time.perf_counter() - started
                     write_cell_cache(grid_ds, cache_path, sidecar=sidecar)
                     timings.append({"state": state, "candidate": candidate,
@@ -1238,7 +1454,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for level in args.levels:
                     frame = aggregate_units(grid_ds, weights[level], level=level, grid=grid,
                                             state=state, model=args.model, year=args.year,
-                                            candidate=candidate)
+                                            candidate=candidate, rh_policy=args.rh_policy,
+                                            elevation_convention=elevation_convention)
                     all_units.append(frame)
                     if candidate == PILOT_CANDIDATE:
                         for check in check_admin_correctness(frame, level=level):
