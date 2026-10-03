@@ -20,6 +20,16 @@ def _alias(s: str) -> str:
     return str(s).strip().lower()
 
 
+def _boundary_signature(
+    *,
+    path: str = "/tmp/boundary.geojson",
+    mtime: float = 123.0,
+    tolerance: float | None = 0.01,
+    row_count: int = 1,
+) -> tuple[str, float | None, float | None, int]:
+    return (path, mtime, tolerance, row_count)
+
+
 def test_merge_filters_states_and_joins_districts(tmp_path: Path) -> None:
     adm2 = pd.DataFrame(
         {
@@ -45,6 +55,7 @@ def test_merge_filters_states_and_joins_districts(tmp_path: Path) -> None:
         master,
         slug="demo",
         master_path=master_path,
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
         session_state=session_state,
         alias_fn=_alias,
         adm2_state_col="state_name",
@@ -74,6 +85,7 @@ def test_cache_by_mtime(tmp_path: Path) -> None:
         master_v1,
         slug="demo",
         master_path=master_path,
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
         session_state=session_state,
         alias_fn=_alias,
     )
@@ -85,6 +97,7 @@ def test_cache_by_mtime(tmp_path: Path) -> None:
         master_v2,
         slug="demo",
         master_path=master_path,
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
         session_state=session_state,
         alias_fn=_alias,
     )
@@ -99,6 +112,7 @@ def test_cache_by_mtime(tmp_path: Path) -> None:
         master_v2,
         slug="demo",
         master_path=master_path,
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
         session_state=session_state,
         alias_fn=_alias,
     )
@@ -121,6 +135,7 @@ def test_cache_invalidates_when_multisource_signature_changes(tmp_path: Path) ->
         master_v1,
         slug="demo",
         master_path=(master_a, master_b),
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
         session_state=session_state,
         alias_fn=_alias,
     )
@@ -131,6 +146,7 @@ def test_cache_invalidates_when_multisource_signature_changes(tmp_path: Path) ->
         master_v2,
         slug="demo",
         master_path=(master_a, master_b),
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
         session_state=session_state,
         alias_fn=_alias,
     )
@@ -144,6 +160,7 @@ def test_cache_invalidates_when_multisource_signature_changes(tmp_path: Path) ->
         master_v2,
         slug="demo",
         master_path=(master_a, master_b),
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
         session_state=session_state,
         alias_fn=_alias,
     )
@@ -176,6 +193,7 @@ def test_block_merge_raises_when_master_states_are_missing_from_boundaries(tmp_p
             master,
             slug="demo",
             master_path=master_path,
+            boundary_signature=_boundary_signature(row_count=len(adm3)),
             session_state={},
             alias_fn=_alias,
             level="block",
@@ -207,6 +225,7 @@ def test_merge_ignores_nullable_master_states(tmp_path: Path) -> None:
         master,
         slug="demo",
         master_path=master_path,
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
         session_state={},
         alias_fn=_alias,
         adm2_state_col="state_name",
@@ -216,3 +235,99 @@ def test_merge_ignores_nullable_master_states(tmp_path: Path) -> None:
     assert merged.shape[0] == 1
     assert merged["district_name"].tolist() == ["Alpha"]
     assert float(merged["m"].iloc[0]) == 1.0
+
+
+def test_district_merge_distinguishes_same_district_name_across_states(tmp_path: Path) -> None:
+    adm2 = pd.DataFrame(
+        {
+            "district_name": ["Raigarh", "Raigarh"],
+            "state_name": ["Chhattisgarh", "Maharashtra"],
+        }
+    )
+    master = pd.DataFrame(
+        {
+            "district": ["Raigarh", "Raigarh"],
+            "state": ["Chhattisgarh", "Maharashtra"],
+            "m": [11.0, 22.0],
+        }
+    )
+
+    master_path = tmp_path / "master.csv"
+    master_path.write_text("x\n1\n")
+
+    merged = get_or_build_merged_for_index_cached(
+        adm2,
+        master,
+        slug="demo",
+        master_path=master_path,
+        boundary_signature=_boundary_signature(row_count=len(adm2)),
+        session_state={},
+        alias_fn=_alias,
+        adm2_state_col="state_name",
+        master_state_col="state",
+    )
+
+    by_state = merged.set_index("state_name")["m"].to_dict()
+    assert by_state == {"Chhattisgarh": 11.0, "Maharashtra": 22.0}
+
+
+def test_cache_invalidates_when_boundary_signature_changes() -> None:
+    adm2 = pd.DataFrame({"district_name": ["Alpha"], "state_name": ["Telangana"]})
+    master_v1 = pd.DataFrame({"district": ["alpha"], "state": ["telangana"], "m": [1]})
+    master_v2 = pd.DataFrame({"district": ["alpha"], "state": ["telangana"], "m": [9]})
+    session_state: dict = {}
+
+    out1 = get_or_build_merged_for_index_cached(
+        adm2,
+        master_v1,
+        slug="demo",
+        master_path=("a.csv",),
+        boundary_signature=_boundary_signature(path="/tmp/a.geojson", mtime=10.0, tolerance=0.01, row_count=1),
+        session_state=session_state,
+        alias_fn=_alias,
+    )
+    assert int(out1["m"].iloc[0]) == 1
+
+    out_path = get_or_build_merged_for_index_cached(
+        adm2,
+        master_v2,
+        slug="demo",
+        master_path=("a.csv",),
+        boundary_signature=_boundary_signature(path="/tmp/b.geojson", mtime=10.0, tolerance=0.01, row_count=1),
+        session_state=session_state,
+        alias_fn=_alias,
+    )
+    assert int(out_path["m"].iloc[0]) == 9
+
+    out_mtime = get_or_build_merged_for_index_cached(
+        adm2,
+        master_v1,
+        slug="demo",
+        master_path=("a.csv",),
+        boundary_signature=_boundary_signature(path="/tmp/b.geojson", mtime=11.0, tolerance=0.01, row_count=1),
+        session_state=session_state,
+        alias_fn=_alias,
+    )
+    assert int(out_mtime["m"].iloc[0]) == 1
+
+    out_tolerance = get_or_build_merged_for_index_cached(
+        adm2,
+        master_v2,
+        slug="demo",
+        master_path=("a.csv",),
+        boundary_signature=_boundary_signature(path="/tmp/b.geojson", mtime=11.0, tolerance=0.02, row_count=1),
+        session_state=session_state,
+        alias_fn=_alias,
+    )
+    assert int(out_tolerance["m"].iloc[0]) == 9
+
+    out_rows = get_or_build_merged_for_index_cached(
+        adm2,
+        master_v1,
+        slug="demo",
+        master_path=("a.csv",),
+        boundary_signature=_boundary_signature(path="/tmp/b.geojson", mtime=11.0, tolerance=0.02, row_count=2),
+        session_state=session_state,
+        alias_fn=_alias,
+    )
+    assert int(out_rows["m"].iloc[0]) == 1

@@ -1,0 +1,2 @@
+lat,lon,model,year,dates_aligned_across_variables,same_cell_across_variables,same_member_across_variables,same_model_across_variables,units_tasmin,units_tasmax,worst_date,tasmin_c,tasmax_c,tas_c,tas_between_min_and_max,inverted_days_at_cell,worst_inversion_c,classification
+12.375,74.875,ACCESS-CM2,2005,True,True,True,True,K,K,2005-11-03,25.924310302734398,25.166589355468773,25.545434570312523,True,1,-0.757720947265625,"unresolved source defect: dates, coordinates, units, model and member all agree, so the inversion is present in the delivered values"

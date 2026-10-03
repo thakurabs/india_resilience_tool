@@ -74,6 +74,30 @@ def test_build_rankings_table_with_baseline_and_delta_rank() -> None:
     assert b_rank_delta == 2
 
 
+def test_build_rankings_table_allows_partial_baseline_without_crashing() -> None:
+    merged = pd.DataFrame(
+        {
+            "district_name": ["A", "B"],
+            "state_name": ["Telangana", "Telangana"],
+            "cur": [20.0, 12.0],
+            "base": [10.0, pd.NA],
+        }
+    )
+
+    table, has_base = build_rankings_table_df(
+        merged,
+        metric_col="cur",
+        baseline_col="base",
+        selected_state="Telangana",
+        risk_class_from_percentile=_risk,
+    )
+
+    assert has_base is True
+    assert "rank_delta" in table.columns
+    assert int(table.loc[table["district_name"] == "A", "rank_delta"].iloc[0]) == 1
+    assert pd.isna(table.loc[table["district_name"] == "B", "rank_delta"].iloc[0])
+
+
 def test_build_rankings_table_preserves_hydro_context_columns() -> None:
     merged = pd.DataFrame(
         {

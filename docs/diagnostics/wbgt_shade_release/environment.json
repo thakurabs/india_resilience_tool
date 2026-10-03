@@ -1,0 +1,37 @@
+{
+  "interpreter": "C:/Users/22015611/AppData/Local/miniconda3/envs/irt/python.exe",
+  "versions": {
+    "pandas": "2.3.3",
+    "pyarrow": "21.0.0",
+    "xarray": "2025.6.1",
+    "thermofeel": "2.3.0"
+  },
+  "cached_site_readability": "150 site-year parquets read successfully by reference validation; original scores reproduced exactly",
+  "local_input_check": {
+    "tas": {
+      "path": "D:\\projects\\irt_data\\r1i1p1f1\\historical\\tas\\ACCESS-CM2\\2005.nc",
+      "units": "K",
+      "calendar": "proleptic_gregorian",
+      "days": 365,
+      "sample": NaN
+    },
+    "tasmax": {
+      "path": "D:\\projects\\irt_data\\r1i1p1f1\\historical\\tasmax\\ACCESS-CM2\\2005.nc",
+      "units": "K",
+      "calendar": "proleptic_gregorian",
+      "days": 365,
+      "sample": NaN
+    },
+    "hurs": {
+      "path": "D:\\projects\\irt_data\\r1i1p1f1\\historical\\hurs\\ACCESS-CM2\\2005.nc",
+      "units": "%",
+      "calendar": "proleptic_gregorian",
+      "days": 365,
+      "sample": NaN
+    }
+  },
+  "black": "not installed",
+  "mypy": "not installed",
+  "dependency_changes": false,
+  "published_outputs_replaced": false
+}

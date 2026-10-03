@@ -1,0 +1,19 @@
+variable,path,units,calendar,days,duplicate_dates,missing_dates,ok,reason
+tas,D:\projects\irt_data\r1i1p1f1\historical\tas\ACCESS-CM2\2004.nc,K,proleptic_gregorian,366,0,0,True,ok
+tasmin,D:\projects\irt_data\r1i1p1f1\historical\tasmin\ACCESS-CM2\2004.nc,K,proleptic_gregorian,366,0,0,True,ok
+tasmax,D:\projects\irt_data\r1i1p1f1\historical\tasmax\ACCESS-CM2\2004.nc,K,proleptic_gregorian,366,0,0,True,ok
+hurs,D:\projects\irt_data\r1i1p1f1\historical\hurs\ACCESS-CM2\2004.nc,%,proleptic_gregorian,366,0,0,True,ok
+rsds,D:\projects\irt_data\nex_gddp_cmip6_v2_wbgt\r1i1p1f1\historical\rsds\ACCESS-CM2\2004.nc,W m-2,proleptic_gregorian,366,0,0,True,ok
+sfcWind,D:\projects\irt_data\nex_gddp_cmip6_v2_wbgt\r1i1p1f1\historical\sfcWind\ACCESS-CM2\2004.nc,m s-1,proleptic_gregorian,366,0,0,True,ok
+tas,D:\projects\irt_data\r1i1p1f1\historical\tas\ACCESS-CM2\2005.nc,K,proleptic_gregorian,365,0,0,True,ok
+tasmin,D:\projects\irt_data\r1i1p1f1\historical\tasmin\ACCESS-CM2\2005.nc,K,proleptic_gregorian,365,0,0,True,ok
+tasmax,D:\projects\irt_data\r1i1p1f1\historical\tasmax\ACCESS-CM2\2005.nc,K,proleptic_gregorian,365,0,0,True,ok
+hurs,D:\projects\irt_data\r1i1p1f1\historical\hurs\ACCESS-CM2\2005.nc,%,proleptic_gregorian,365,0,0,True,ok
+rsds,D:\projects\irt_data\nex_gddp_cmip6_v2_wbgt\r1i1p1f1\historical\rsds\ACCESS-CM2\2005.nc,W m-2,proleptic_gregorian,365,0,0,True,ok
+sfcWind,D:\projects\irt_data\nex_gddp_cmip6_v2_wbgt\r1i1p1f1\historical\sfcWind\ACCESS-CM2\2005.nc,m s-1,proleptic_gregorian,365,0,0,True,ok
+tas,D:\projects\irt_data\r1i1p1f1\historical\tas\ACCESS-CM2\2006.nc,K,proleptic_gregorian,365,0,0,True,ok
+tasmin,D:\projects\irt_data\r1i1p1f1\historical\tasmin\ACCESS-CM2\2006.nc,K,proleptic_gregorian,365,0,0,True,ok
+tasmax,D:\projects\irt_data\r1i1p1f1\historical\tasmax\ACCESS-CM2\2006.nc,K,proleptic_gregorian,365,0,0,True,ok
+hurs,D:\projects\irt_data\r1i1p1f1\historical\hurs\ACCESS-CM2\2006.nc,%,proleptic_gregorian,365,0,0,True,ok
+rsds,D:\projects\irt_data\nex_gddp_cmip6_v2_wbgt\r1i1p1f1\historical\rsds\ACCESS-CM2\2006.nc,W m-2,proleptic_gregorian,365,0,0,True,ok
+sfcWind,D:\projects\irt_data\nex_gddp_cmip6_v2_wbgt\r1i1p1f1\historical\sfcWind\ACCESS-CM2\2006.nc,m s-1,proleptic_gregorian,365,0,0,True,ok

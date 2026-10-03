@@ -179,6 +179,11 @@ def _render_simple_rankings(
         display_cols.append("percentile_value")
     if "risk_class" in df.columns:
         display_cols.append("risk_class")
+    # Method B: when the risk class is derived from the bundle composite score,
+    # surface that 0-100 score next to the label so "Percentile" stays an honest
+    # ordinal and the label's basis is visible.
+    if "bundle_score" in df.columns:
+        display_cols.append("bundle_score")
     if "aspirational" in df.columns:
         display_cols.append("aspirational")
 
@@ -197,6 +202,7 @@ def _render_simple_rankings(
         "delta_pct": "%Δ vs baseline",
         "percentile_value": "Percentile",
         "risk_class": "Risk class",
+        "bundle_score": "Composite score (bundle)",
         "aspirational": "Aspirational",
     })
 
@@ -207,6 +213,12 @@ def _render_simple_rankings(
         f"**{metric_label}** • {sel_scenario} • {sel_period} • {sel_stat}"
         + (f" • Filtered to {selected_state}" if selected_state != "All" else "")
     )
+    # Only shown when Method B actually engaged (composite score present).
+    if "bundle_score" in df.columns:
+        st.caption(
+            "Risk class reflects the bundle composite (0–100) standing for each "
+            "unit, not the ordinal percentile of the value column."
+        )
 
 
 def _render_portfolio_rankings(

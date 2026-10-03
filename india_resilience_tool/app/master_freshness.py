@@ -12,6 +12,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS, shade_artifact_current
+
 from india_resilience_tool.data.optimized_bundle import is_optimized_metric_root
 
 
@@ -43,6 +45,10 @@ def latest_processed_periods_mtime(processed_root_str: str, state: str) -> float
 
 def master_needs_rebuild(master_path: Path | tuple[Path, ...], processed_root: Path, state: str) -> bool:
     """Return True when processed artifacts are newer than the master serving artifact."""
+    if Path(processed_root).name in SHADE_SLUGS:
+        paths = master_path if isinstance(master_path, tuple) else (master_path,)
+        if not paths or any(not shade_artifact_current(path) for path in paths):
+            return True
     if is_optimized_metric_root(processed_root):
         if isinstance(master_path, tuple):
             return not master_path or any(not p.exists() for p in master_path)
@@ -64,11 +70,12 @@ def master_needs_rebuild(master_path: Path | tuple[Path, ...], processed_root: P
 
 def state_profile_files_missing(processed_root: Path, state: str, level: str) -> bool:
     """Return True when required level-specific state profile files are missing."""
-    if is_optimized_metric_root(processed_root):
+    root = Path(processed_root)
+    if root.parent.name == "metrics" and any((root / child).exists() for child in ("masters", "yearly_ensemble", "yearly_models")):
         return False
 
     level_norm = str(level or "district").strip().lower()
-    state_root = Path(processed_root) / str(state)
+    state_root = root / str(state)
     required = [
         state_root / f"state_yearly_ensemble_stats_{level_norm}.csv",
         state_root / f"state_ensemble_stats_{level_norm}.csv",

@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Sequence
 
 import pandas as pd
+import numpy as np
 
 from india_resilience_tool.analysis.bundle_scores import BundleMetricSpec, compute_bundle_score_frame
+from india_resilience_tool.analysis.frozen_rulers import (
+    FrozenRulerSet,
+    finite_mask_frame,
+    frozen_ruler_dir,
+    load_ruler_set,
+    weighted_row_score,
+)
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.config.composite_metrics import (
     COMPOSITES_BY_SLUG,
@@ -34,9 +44,10 @@ ID_COLUMNS_BY_LEVEL = {
     "district": ("state", "district", "district_key"),
     "block": ("state", "district", "block", "block_key"),
 }
-SUPPORTED_SCENARIOS = ("ssp245", "ssp585")
-SUPPORTED_PERIODS = ("2020-2040", "2040-2060", "2060-2080")
+SUPPORTED_SCENARIOS = ("ssp245", "ssp585", "snapshot")
+SUPPORTED_PERIODS = ("1990-2010", "2020-2040", "2040-2060", "2060-2080", "Current")
 SUPPORTED_STAT = "mean"
+RETIRED_COMPOSITE_SLUGS = frozenset({"composite_agriculture_growing_conditions"})
 
 
 def _normalize_level(level: str) -> str:
@@ -147,35 +158,88 @@ def _load_component_master(
     return frame
 
 
-def _available_pairs_for_frame(df: pd.DataFrame, *, metric_slug: str) -> set[tuple[str, str]]:
-    """Return supported scenario-period pairs for one master frame."""
-    metric_base = METRICS_BY_SLUG[metric_slug].periods_metric_col or METRICS_BY_SLUG[metric_slug].value_col or metric_slug
+def _available_pairs_for_frame(
+    df: pd.DataFrame,
+    *,
+    metric_slug: str,
+    candidate_pairs: Optional[Sequence[tuple[str, str]]] = None,
+) -> set[tuple[str, str]]:
+    """Return available scenario-period pairs for one master frame.
+
+    Legacy composite modes use the historical future/snapshot discovery grid.
+    Frozen-ruler mode instead passes the ruler's immutable fitted-slice grid so
+    publication cannot silently omit a slice that forms part of the ruler
+    contract (CHG-0389).
+    """
     available: set[tuple[str, str]] = set()
-    for scenario in SUPPORTED_SCENARIOS:
-        for period in SUPPORTED_PERIODS:
-            if resolve_metric_column(df, metric_base, scenario, period, SUPPORTED_STAT):
-                available.add((scenario, period))
+    pairs = (
+        tuple(candidate_pairs)
+        if candidate_pairs is not None
+        else tuple(
+            (scenario, period)
+            for scenario in SUPPORTED_SCENARIOS
+            for period in SUPPORTED_PERIODS
+        )
+    )
+    for scenario, period in pairs:
+        col = _resolve_component_metric_column(
+            df,
+            metric_slug=metric_slug,
+            scenario=scenario,
+            period=period,
+        )
+        # ``resolve_metric_column`` has compatibility fallbacks. Require the
+        # resolved value column itself to encode the requested pair exactly so
+        # one slice cannot be mistaken for another.
+        parts = str(col or "").split("__")
+        if (
+            len(parts) == 4
+            and parts[1].strip().lower() == str(scenario).strip().lower()
+            and parts[2].strip().lower() == str(period).strip().lower()
+        ):
+            available.add((str(scenario), str(period)))
     return available
 
 
-def _intersect_available_pairs(component_frames: dict[str, pd.DataFrame]) -> list[tuple[str, str]]:
-    """Return schema-level scenario-period intersections across all component frames."""
+def _intersect_available_pairs(
+    component_frames: dict[str, pd.DataFrame],
+    *,
+    candidate_pairs: Optional[Sequence[tuple[str, str]]] = None,
+) -> list[tuple[str, str]]:
+    """Return ordered schema-level pair intersections across component frames."""
+    ordered_pairs = (
+        tuple((str(scenario), str(period)) for scenario, period in candidate_pairs)
+        if candidate_pairs is not None
+        else tuple(
+            (scenario, period)
+            for scenario in SUPPORTED_SCENARIOS
+            for period in SUPPORTED_PERIODS
+        )
+    )
     pair_sets: list[set[tuple[str, str]]] = []
     for metric_slug, frame in component_frames.items():
-        pair_sets.append(_available_pairs_for_frame(frame, metric_slug=metric_slug))
+        pair_sets.append(
+            _available_pairs_for_frame(
+                frame,
+                metric_slug=metric_slug,
+                candidate_pairs=ordered_pairs,
+            )
+        )
     if not pair_sets:
         return []
     available = set.intersection(*pair_sets)
-    return [
-        (scenario, period)
-        for scenario in SUPPORTED_SCENARIOS
-        for period in SUPPORTED_PERIODS
-        if (scenario, period) in available
-    ]
+    return [pair for pair in ordered_pairs if pair in available]
 
 
-def _bundle_metric_specs(spec: CompositeMetricSpec) -> list[BundleMetricSpec]:
-    """Return weighted component specs for composite computation."""
+def _bundle_metric_specs(
+    spec: CompositeMetricSpec, *, slugs: Optional[Sequence[str]] = None
+) -> list[BundleMetricSpec]:
+    """Return weighted component specs for composite computation.
+
+    ``slugs`` narrows the set to the metrics actually being scored -- the frozen
+    ruler publishes the headline half only, and passing the full component list
+    there would put weight in the numerator for metrics that were never loaded.
+    """
     from india_resilience_tool.config.bundle_weights import get_bundle_weights
 
     weights = {entry.metric_slug: float(entry.weight) for entry in get_bundle_weights(spec.bundle_domain)}
@@ -187,8 +251,38 @@ def _bundle_metric_specs(spec: CompositeMetricSpec) -> list[BundleMetricSpec]:
             weight=weights[metric_slug],
             higher_is_worse=bool(METRICS_BY_SLUG[metric_slug].rank_higher_is_worse),
         )
-        for metric_slug in spec.component_metric_slugs
+        for metric_slug in (spec.component_metric_slugs if slugs is None else slugs)
     ]
+
+
+def _resolve_component_metric_column(
+    frame: pd.DataFrame,
+    *,
+    metric_slug: str,
+    scenario: str,
+    period: str,
+) -> str | None:
+    """Resolve one component metric column with legacy slug fallback.
+
+    Persisted masters normally use the registry `periods_metric_col` / `value_col`
+    base. Some older fixtures and legacy outputs still expose the raw metric slug
+    as the left-most token, so we accept that as a compatibility fallback.
+    """
+    registry_spec = METRICS_BY_SLUG[metric_slug]
+    candidates: list[str] = []
+    for candidate in (
+        registry_spec.periods_metric_col,
+        registry_spec.value_col,
+        metric_slug,
+    ):
+        value = str(candidate or "").strip()
+        if value and value not in candidates:
+            candidates.append(value)
+    for candidate in candidates:
+        resolved = resolve_metric_column(frame, candidate, scenario, period, SUPPORTED_STAT)
+        if resolved:
+            return resolved
+    return None
 
 
 def _build_wide_component_frame(
@@ -202,12 +296,12 @@ def _build_wide_component_frame(
     id_columns = list(_required_id_columns(level))
     merged: Optional[pd.DataFrame] = None
     for metric_slug, frame in component_frames.items():
-        metric_base = (
-            METRICS_BY_SLUG[metric_slug].periods_metric_col
-            or METRICS_BY_SLUG[metric_slug].value_col
-            or metric_slug
+        metric_column = _resolve_component_metric_column(
+            frame,
+            metric_slug=metric_slug,
+            scenario=scenario,
+            period=period,
         )
-        metric_column = resolve_metric_column(frame, metric_base, scenario, period, SUPPORTED_STAT)
         metric_frame = frame.loc[:, id_columns].copy()
         metric_frame[metric_slug] = (
             pd.to_numeric(frame[metric_column], errors="coerce") if metric_column in frame.columns else pd.NA
@@ -217,6 +311,238 @@ def _build_wide_component_frame(
         else:
             merged = merged.merge(metric_frame, on=id_columns, how="outer")
     return merged if merged is not None else pd.DataFrame(columns=id_columns)
+
+
+def _normalize_with_anchor(values: pd.Series, anchor_values: pd.Series, *, higher_is_worse: bool) -> pd.Series:
+    numeric = pd.to_numeric(values, errors="coerce")
+    anchor = pd.to_numeric(anchor_values, errors="coerce")
+    finite_anchor = anchor[np.isfinite(anchor)]
+    out = pd.Series(np.nan, index=numeric.index, dtype=float)
+    if finite_anchor.empty:
+        return out
+    lo = float(finite_anchor.min())
+    hi = float(finite_anchor.max())
+    finite = numeric[np.isfinite(numeric)]
+    if finite.empty:
+        return out
+    if hi == lo:
+        out.loc[finite.index] = 50.0
+        return out
+    scaled = (finite - lo) / (hi - lo)
+    if not higher_is_worse:
+        scaled = 1.0 - scaled
+    out.loc[finite.index] = (scaled * 100.0).clip(0.0, 100.0)
+    return out
+
+
+def _compute_baseline_anchored_score_frame(
+    wide: pd.DataFrame,
+    *,
+    anchor_wide: pd.DataFrame,
+    metric_specs: list[BundleMetricSpec],
+    id_columns: list[str],
+    min_components: int,
+) -> pd.DataFrame:
+    out = wide.loc[:, [col for col in id_columns if col in wide.columns]].copy()
+    normalized_cols: list[str] = []
+    weights: list[float] = []
+    for spec in metric_specs:
+        if spec.slug not in wide.columns or spec.slug not in anchor_wide.columns:
+            continue
+        norm_col = f"{spec.slug}__landing_norm"
+        out[norm_col] = _normalize_with_anchor(
+            wide[spec.slug],
+            anchor_wide[spec.slug],
+            higher_is_worse=bool(spec.higher_is_worse),
+        )
+        normalized_cols.append(norm_col)
+        weights.append(float(spec.weight))
+    if not normalized_cols:
+        out["bundle_score"] = np.nan
+        out["available_metric_count"] = 0
+        return out
+    norm_frame = out[normalized_cols]
+    weight_series = pd.Series(weights, index=normalized_cols, dtype=float)
+    available_weights = norm_frame.notna().mul(weight_series, axis=1).sum(axis=1)
+    weighted_sum = norm_frame.mul(weight_series, axis=1).sum(axis=1, skipna=True)
+    out["available_metric_count"] = norm_frame.notna().sum(axis=1).astype(int)
+    out["bundle_score"] = weighted_sum.div(available_weights.where(available_weights > 0.0))
+    out.loc[out["available_metric_count"] < int(min_components), "bundle_score"] = np.nan
+    return out
+
+
+def _ordinal_class_bounds(metric_slug: str) -> tuple[int, int]:
+    """Return (min_code, max_code) for a scored ordinal component, or raise.
+
+    The ``pre_scaled_ordinal`` composite mode maps integer class codes to an
+    absolute 0-100 score. It requires every scored (weight>0) component to carry a
+    contiguous integer ``class_labels`` mapping in the registry (e.g. ``{1: ...,
+    2: ..., 3: ..., 4: ...}``). This blocks a future continuous component from
+    silently riding the ordinal mapping; such metrics must use a different mode.
+    """
+    spec = METRICS_BY_SLUG.get(metric_slug)
+    labels = getattr(spec, "class_labels", None) if spec is not None else None
+    if not labels:
+        raise ValueError(
+            "pre_scaled_ordinal composite requires integer class_labels for scored "
+            f"component {metric_slug!r}, but none are defined in the registry."
+        )
+    try:
+        codes = sorted(int(key) for key in labels.keys())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"pre_scaled_ordinal composite component {metric_slug!r} has non-integer "
+            f"class_labels keys: {list(labels.keys())!r}."
+        ) from exc
+    if len(codes) < 2 or codes != list(range(codes[0], codes[0] + len(codes))):
+        raise ValueError(
+            f"pre_scaled_ordinal composite component {metric_slug!r} must have contiguous "
+            f"integer class_labels; got {codes!r}."
+        )
+    return codes[0], codes[-1]
+
+
+def _pre_scaled_ordinal_series(
+    values: pd.Series,
+    *,
+    min_code: int,
+    max_code: int,
+    higher_is_worse: bool,
+) -> pd.Series:
+    """Map ordinal class codes onto an absolute 0-100 scale (min->0, max->100).
+
+    Unlike the default per-period min-max normalization, this mapping is data
+    independent, so the same class always yields the same score in every state.
+    Missing/non-numeric values become NaN.
+    """
+    numeric = pd.to_numeric(values, errors="coerce")
+    out = pd.Series(np.nan, index=numeric.index, dtype=float)
+    finite = numeric[np.isfinite(numeric)]
+    if finite.empty or max_code == min_code:
+        return out
+    scaled = (finite - float(min_code)) / (float(max_code) - float(min_code))
+    if not higher_is_worse:
+        scaled = 1.0 - scaled
+    out.loc[finite.index] = (scaled * 100.0).clip(0.0, 100.0)
+    return out
+
+
+def _compute_pre_scaled_ordinal_score_frame(
+    wide: pd.DataFrame,
+    *,
+    metric_specs: list[BundleMetricSpec],
+    id_columns: list[str],
+) -> pd.DataFrame:
+    """Score a composite from fixed ordinal classes (absolute pre-scaled mapping).
+
+    Every scored (weight>0) component is validated to carry contiguous integer
+    class_labels (raising otherwise), then mapped 1..k -> 0..100 before the
+    existing per-row weighted mean.
+    """
+    out = wide.loc[:, [col for col in id_columns if col in wide.columns]].copy()
+    normalized_cols: list[str] = []
+    weights: list[float] = []
+    for spec in metric_specs:
+        if float(spec.weight) <= 0.0:
+            continue  # attributes are excluded upstream; guard the scored contract anyway
+        min_code, max_code = _ordinal_class_bounds(spec.slug)
+        if spec.column not in wide.columns:
+            continue
+        norm_col = f"{spec.slug}__landing_norm"
+        out[norm_col] = _pre_scaled_ordinal_series(
+            wide[spec.column],
+            min_code=min_code,
+            max_code=max_code,
+            higher_is_worse=bool(spec.higher_is_worse),
+        )
+        normalized_cols.append(norm_col)
+        weights.append(float(spec.weight))
+    if not normalized_cols:
+        out["bundle_score"] = np.nan
+        out["available_metric_count"] = 0
+        return out
+    norm_frame = out[normalized_cols]
+    weight_series = pd.Series(weights, index=normalized_cols, dtype=float)
+    available_weights = norm_frame.notna().mul(weight_series, axis=1).sum(axis=1)
+    weighted_sum = norm_frame.mul(weight_series, axis=1).sum(axis=1, skipna=True)
+    out["bundle_score"] = weighted_sum.div(available_weights.where(available_weights > 0.0))
+    out["available_metric_count"] = norm_frame.notna().sum(axis=1).astype(int)
+    out.loc[out["available_metric_count"] == 0, "bundle_score"] = np.nan
+    return out
+
+
+FROZEN_NATIONAL_CDF = "frozen_national_cdf"
+
+
+@lru_cache(maxsize=8)
+def _frozen_ruler_set(composite_slug: str, version: str) -> FrozenRulerSet:
+    """Load and cache one committed frozen ruler set.
+
+    Cached because the composite is computed state by state and the artifact is
+    identical for every one of them -- and because reading it repeatedly is the
+    only way a run could end up scoring two states against two different files.
+    """
+    if not version:
+        raise ValueError(
+            f"Composite {composite_slug!r} is configured for {FROZEN_NATIONAL_CDF} "
+            "normalization but declares no frozen_ruler_version."
+        )
+    return load_ruler_set(frozen_ruler_dir(composite_slug, version))
+
+
+def _compute_frozen_ruler_score_frame(
+    wide: pd.DataFrame,
+    *,
+    ruler_set: FrozenRulerSet,
+    metric_specs: Sequence[BundleMetricSpec],
+    id_columns: Sequence[str],
+    coverage_gate: float,
+) -> pd.DataFrame:
+    """Score one wide component frame against a frozen national ruler set.
+
+    Every unit is scored through the same transfer function, so a district and a
+    block holding the same physical value receive the same score, and scores are
+    comparable across states and across time. Because the ruler is non-linear,
+    the area-weighted mean of a district's block scores is *not* that district's
+    own score; both are scored from their own physical values by design.
+
+    Unlike the min-max paths, a coverage gate applies: a row backed by less than
+    ``coverage_gate`` of the *configured* headline weight is published as NaN
+    rather than as a full-looking score computed from a fraction of the bundle.
+    """
+    out = wide.loc[:, list(id_columns)].copy()
+    scored: dict[str, pd.Series] = {}
+    clamped = pd.Series(0, index=wide.index, dtype=int)
+    for spec in metric_specs:
+        ruler = ruler_set.rulers.get(spec.slug)
+        if ruler is None or spec.slug not in wide.columns:
+            continue
+        scored[spec.slug] = ruler.apply(wide[spec.slug])
+        clamped = clamped.add(ruler.clamped_mask(wide[spec.slug]).astype(int), fill_value=0)
+
+    if not scored:
+        out["bundle_score"] = np.nan
+        out["available_metric_count"] = 0
+        return out
+
+    score_frame = pd.DataFrame(scored, index=wide.index)
+    weights = pd.Series(
+        {slug: float(ruler_set.weights.get(slug, 0.0)) for slug in score_frame.columns},
+        dtype=float,
+    )
+    # The denominator is the configured headline weight of the whole bundle, not
+    # the weight that happened to fit or to be present. Anything else lets a row
+    # missing a metric entirely report full coverage (CHG-0350).
+    score, coverage = weighted_row_score(
+        score_frame, weights, total_weight=float(ruler_set.configured_weight)
+    )
+    out["bundle_score"] = score.where(coverage >= float(coverage_gate))
+    out["available_metric_count"] = (
+        finite_mask_frame(score_frame, list(score_frame.columns)).sum(axis=1).astype(int)
+    )
+    out["weight_coverage"] = coverage
+    out["clamped_metric_count"] = clamped.astype(int)
+    return out
 
 
 def compute_composite_master_frame(
@@ -229,7 +555,10 @@ def compute_composite_master_frame(
     """Compute one persisted composite master frame for a bundle/level/state.
 
     Methodology:
-    - Scenario-period availability is based on schema intersection across all component masters.
+    - Legacy scenario-period availability is based on schema intersection across
+      all component masters.
+    - Frozen-ruler composites require and publish every slice declared by the
+      immutable ruler artifact; an incomplete component grid is an error.
     - Row-level partial values are allowed.
     - Weights are renormalized across available values per row.
     - Rows with all component values missing remain NaN for the composite column.
@@ -240,30 +569,135 @@ def compute_composite_master_frame(
     if level_norm == "admin":
         raise ValueError("compute_composite_master_frame requires a concrete level, not 'admin'.")
 
+    normalization_mode = getattr(spec, "normalization", "per_period")
+    ruler_set: Optional[FrozenRulerSet] = None
+    if normalization_mode == FROZEN_NATIONAL_CDF:
+        ruler_set = _frozen_ruler_set(spec.composite_slug, getattr(spec, "frozen_ruler_version", ""))
+
+    # In frozen mode only the headline (absolute-threshold) metrics are published,
+    # so only they are required: the baseline-referenced half is retained as a lens
+    # elsewhere and must not be able to block a state from being scored.
+    required_slugs = (
+        tuple(spec.headline_metric_slugs)
+        if ruler_set is not None and getattr(spec, "headline_metric_slugs", ())
+        else tuple(spec.component_metric_slugs)
+    )
+
     component_frames: dict[str, pd.DataFrame] = {}
-    for metric_slug in spec.component_metric_slugs:
+    for metric_slug in required_slugs:
         frame = _load_component_master(metric_slug, level=level_norm, state_name=state_name, data_dir=data_dir)
         if frame is None or frame.empty:
+            if ruler_set is not None:
+                raise FileNotFoundError(
+                    f"Frozen composite {spec.composite_slug!r} requires component master "
+                    f"{metric_slug!r} for state={state_name!r}, level={level_norm!r}."
+                )
             return pd.DataFrame(columns=list(_required_id_columns(level_norm)))
         component_frames[metric_slug] = frame
 
-    available_pairs = _intersect_available_pairs(component_frames)
+    declared_pairs = tuple(ruler_set.slices) if ruler_set is not None else None
+    available_pairs = _intersect_available_pairs(
+        component_frames,
+        candidate_pairs=declared_pairs,
+    )
+    if ruler_set is not None:
+        # The fitted grid is also the publication grid. Previously the global
+        # future-only scenario loop silently omitted historical/1990-2010 even
+        # though it contributed to the ruler fit (CHG-0389).
+        missing_pairs = [pair for pair in ruler_set.slices if pair not in set(available_pairs)]
+        if missing_pairs:
+            availability_by_metric = {
+                metric_slug: _available_pairs_for_frame(
+                    frame,
+                    metric_slug=metric_slug,
+                    candidate_pairs=ruler_set.slices,
+                )
+                for metric_slug, frame in component_frames.items()
+            }
+            rendered = ", ".join(
+                f"{scenario}/{period} (missing from: "
+                + ", ".join(
+                    metric_slug
+                    for metric_slug, pairs in availability_by_metric.items()
+                    if (scenario, period) not in pairs
+                )
+                + ")"
+                for scenario, period in missing_pairs
+            )
+            raise ValueError(
+                f"Frozen composite {spec.composite_slug!r} cannot publish an incomplete "
+                f"ruler grid for state={state_name!r}, level={level_norm!r}; missing "
+                f"declared slice(s): {rendered}."
+            )
+        for scenario, period in available_pairs:
+            ruler_set.validate_slice(scenario, period)
     id_columns = list(_required_id_columns(level_norm))
     if not available_pairs:
         return next(iter(component_frames.values()))[id_columns].drop_duplicates().reset_index(drop=True)
 
     output = next(iter(component_frames.values()))[id_columns].drop_duplicates().reset_index(drop=True)
-    bundle_metric_specs = _bundle_metric_specs(spec)
+    bundle_metric_specs = _bundle_metric_specs(spec, slugs=required_slugs)
+    anchor_wide = None
+    if normalization_mode == "baseline_anchored":
+        anchor_wide = _build_wide_component_frame(
+            component_frames,
+            level=level_norm,
+            scenario=spec.anchor_scenario,
+            period=spec.anchor_period,
+        )
     for scenario, period in available_pairs:
         wide = _build_wide_component_frame(component_frames, level=level_norm, scenario=scenario, period=period)
-        score_frame = compute_bundle_score_frame(
-            wide,
-            metric_specs=bundle_metric_specs,
-            id_columns=id_columns,
-        )
+        if ruler_set is not None:
+            score_frame = _compute_frozen_ruler_score_frame(
+                wide,
+                ruler_set=ruler_set,
+                metric_specs=bundle_metric_specs,
+                id_columns=id_columns,
+                coverage_gate=ruler_set.coverage_gate,
+            )
+        elif normalization_mode == "pre_scaled_ordinal":
+            score_frame = _compute_pre_scaled_ordinal_score_frame(
+                wide,
+                metric_specs=bundle_metric_specs,
+                id_columns=id_columns,
+            )
+        elif anchor_wide is not None:
+            score_frame = _compute_baseline_anchored_score_frame(
+                wide,
+                anchor_wide=anchor_wide,
+                metric_specs=bundle_metric_specs,
+                id_columns=id_columns,
+                min_components=spec.min_anchored_components,
+            )
+        else:
+            score_frame = compute_bundle_score_frame(
+                wide,
+                metric_specs=bundle_metric_specs,
+                id_columns=id_columns,
+            )
         score_column = f"{spec.composite_slug}__{scenario}__{period}__{SUPPORTED_STAT}"
         pair_frame = score_frame[id_columns + ["bundle_score"]].rename(columns={"bundle_score": score_column})
         output = output.merge(pair_frame, on=id_columns, how="left")
+
+    # Sub-cell climate-fill provenance. A composite blends its component metrics, so
+    # a unit whose composite draws on any idw-filled component must not read
+    # "native". _build_wide_component_frame slices to id+value and drops the flag, so
+    # read it here where the full component masters (component_frames) are still in
+    # scope. The composite is idw iff ANY component is idw for that unit, else native.
+    # Only fires when at least one component master carried the column (post-regen),
+    # so composites over all-native components stay byte-identical.
+    idw_units: Optional[pd.DataFrame] = None
+    for frame in component_frames.values():
+        if "climate_fill_method" not in frame.columns or not set(id_columns).issubset(frame.columns):
+            continue
+        is_idw = frame["climate_fill_method"].astype("string").str.lower().eq("idw").fillna(False)
+        comp_idw = frame.loc[is_idw.to_numpy(), id_columns].drop_duplicates()
+        idw_units = comp_idw if idw_units is None else pd.concat([idw_units, comp_idw], ignore_index=True)
+    if idw_units is not None:
+        idw_units = idw_units.drop_duplicates()
+        idw_units["climate_fill_method"] = "idw"
+        output = output.merge(idw_units, on=id_columns, how="left")
+        output["climate_fill_method"] = output["climate_fill_method"].fillna("native")
 
     return output
 
@@ -291,6 +725,22 @@ def _write_composite_master_frame(
     return target_path
 
 
+def _prune_retired_composite_artifacts(*, data_dir: Path, dry_run: bool, quiet: bool) -> list[Path]:
+    """Delete explicitly retired composite roots only when requested."""
+    pruned: list[Path] = []
+    for slug in sorted(RETIRED_COMPOSITE_SLUGS):
+        root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
+        if not root.exists():
+            continue
+        pruned.append(root)
+        if not quiet:
+            prefix = "[composite-prune-dry-run]" if dry_run else "[composite-prune]"
+            print(f"{prefix} retired root {root}")
+        if not dry_run:
+            shutil.rmtree(root)
+    return pruned
+
+
 def build_composite_metrics(
     *,
     levels: Sequence[str],
@@ -299,11 +749,14 @@ def build_composite_metrics(
     data_dir: Optional[Path] = None,
     overwrite: bool = False,
     dry_run: bool = False,
+    prune_retired: bool = False,
     quiet: bool = False,
 ) -> list[Path]:
     """Build persisted composite metric masters for visible Glance bundles."""
     if data_dir is None:
         data_dir = get_paths_config().data_dir
+
+    pruned = _prune_retired_composite_artifacts(data_dir=data_dir, dry_run=dry_run, quiet=quiet) if prune_retired else []
 
     requested_levels: list[str] = []
     for level in (levels or ("admin",)):
@@ -320,12 +773,16 @@ def build_composite_metrics(
     else:
         specs = list(VISIBLE_GLANCE_COMPOSITES)
 
-    written: list[Path] = []
+    written: list[Path] = list(pruned)
     for spec in specs:
         requested_states = [str(state).strip() for state in states or () if str(state).strip()]
         if not requested_states:
             requested_states = _discover_states_for_spec(spec, level=levels_resolved[0], data_dir=data_dir)
         for level in levels_resolved:
+            if level not in spec.supported_levels:
+                # District-only composites (e.g. composite_water_risk) must never
+                # await or build block masters.
+                continue
             for state_name in requested_states:
                 frame = compute_composite_master_frame(
                     spec,
@@ -372,6 +829,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--overwrite", action="store_true", help="Rewrite existing composite outputs.")
     parser.add_argument("--dry-run", action="store_true", help="Print planned composite outputs without writing.")
+    parser.add_argument(
+        "--prune-retired",
+        action="store_true",
+        help="Delete retired composite processed roots such as composite_agriculture_growing_conditions. Honors --dry-run.",
+    )
     parser.add_argument("--quiet", action="store_true", help="Suppress per-file success logging.")
     return parser.parse_args(argv)
 
@@ -385,6 +847,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         composite_slugs=args.metric,
         overwrite=bool(args.overwrite),
         dry_run=bool(args.dry_run),
+        prune_retired=bool(args.prune_retired),
         quiet=bool(args.quiet),
     )
     return 0

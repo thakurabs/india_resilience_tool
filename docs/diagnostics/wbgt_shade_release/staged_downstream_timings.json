@@ -1,0 +1,44 @@
+[
+  {
+    "stage": "Kerala_compute_district",
+    "seconds": 53.4,
+    "exit_code": 0,
+    "source": "scratch/wbgt_shade_kerala_stage.txt TOTAL line (district pass)"
+  },
+  {
+    "stage": "Kerala_compute_block",
+    "seconds": 49.0,
+    "exit_code": 0,
+    "source": "scratch/wbgt_shade_kerala_stage.txt TOTAL line (block pass)"
+  },
+  {
+    "stage": "Rajasthan_compute",
+    "seconds": 135.03475749999052,
+    "exit_code": 0
+  },
+  {
+    "stage": "Himachal_Pradesh_compute",
+    "seconds": 91.54189389996463,
+    "exit_code": 0
+  },
+  {
+    "stage": "masters",
+    "seconds": 32.54760089999763,
+    "exit_code": 0
+  },
+  {
+    "stage": "optimized",
+    "seconds": 50.581228900002316,
+    "exit_code": 0
+  },
+  {
+    "stage": "state_values",
+    "seconds": 6.184515899978578,
+    "exit_code": 0
+  },
+  {
+    "stage": "parity",
+    "seconds": 15.990808799979277,
+    "exit_code": 0
+  }
+]

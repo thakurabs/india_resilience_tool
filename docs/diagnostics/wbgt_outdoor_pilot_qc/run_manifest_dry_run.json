@@ -1,0 +1,19 @@
+{
+  "stage": "dry-run",
+  "elevation_identity": "elev-gmted2010-mea300-cellmean-7dcdaeb7a588c910",
+  "acquire_seconds": 0.06977599998936057,
+  "acquire_bytes": 52017230,
+  "runs": [
+    "baseline",
+    "rh",
+    "elev",
+    "combined"
+  ],
+  "states": [
+    "Kerala",
+    "Rajasthan",
+    "Himachal Pradesh"
+  ],
+  "out_dir": "D:\\projects\\india_resilience_tool\\docs\\diagnostics\\wbgt_outdoor_pilot_qc",
+  "work_dir": "D:\\projects\\india_resilience_tool\\scratch\\wbgt_outdoor_pilot_qc"
+}

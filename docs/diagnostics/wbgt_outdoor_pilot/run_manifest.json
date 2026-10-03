@@ -1,0 +1,118 @@
+{
+  "tool": "tools/diagnostics/wbgt_outdoor_pilot.py",
+  "spec": "docs/diagnostics/wbgt_outdoor_pilot/SPEC.md",
+  "generated_utc": "2026-09-30T15:02:24.097691+00:00",
+  "git_branch": "add_flood_depth",
+  "git_sha": "99e478a",
+  "git_dirty": true,
+  "command": "D:\\projects\\india_resilience_tool\\tools\\diagnostics\\wbgt_outdoor_pilot.py --resume",
+  "python": "3.10.20",
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "xarray": "2025.6.1",
+  "geopandas": "1.1.3",
+  "psutil": "7.1.3",
+  "thermofeel": "2.3.0",
+  "method_signature_w1": "outdoor-pilot-v1:W1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-w1-dtr-slope0.03-amp0.1-0.8:pressure-isa-elev-sea-level-constant-no-dem:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped",
+  "method_signature_c1": "outdoor-pilot-v1:C1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-constant-daily-mean:pressure-isa-elev-sea-level-constant-no-dem:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped",
+  "frozen_method": "milestone 2 W1 == milestone 3 candidate B, unchanged",
+  "scope": {
+    "states": [
+      "Kerala",
+      "Rajasthan",
+      "Himachal Pradesh"
+    ],
+    "levels": [
+      "district",
+      "block"
+    ],
+    "model": "ACCESS-CM2",
+    "scenario": "historical",
+    "member": "r1i1p1f1",
+    "year": 2005
+  },
+  "elevation_convention": "elev-sea-level-constant-no-dem",
+  "day_boundary": "INFERRED from the CMIP6 daily convention; no NEX file publishes time_bnds, so this is not verified locally",
+  "budget": {
+    "wall_seconds": 3600.0,
+    "peak_rss_bytes": 4294967296,
+    "artifact_bytes": 5368709120,
+    "workers": 1
+  },
+  "limitations": [
+    "DIAGNOSTIC-ONLY: no output enters the dashboard, production metric registry, composites, frozen rulers or published maps.",
+    "Uncorrected NEX inputs; no bias correction is applied.",
+    "Six-site reconstruction evidence does not establish national accuracy.",
+    "Remaining NEX distribution and count errors are unresolved.",
+    "W1 may benefit from compensating reconstruction errors; its wind shape is a declared assumption, not an established physical reconstruction.",
+    ">=32 C outcomes include reference-sensitive results.",
+    "Rare-event regimes remain insufficiently evaluated.",
+    "Spatial ranking accuracy is NOT established.",
+    "Daily time-boundary semantics remain INFERRED; no NEX file publishes time_bnds.",
+    "Cell elevation is a sea-level constant (elev-sea-level-constant-no-dem); no DEM is available. Measured WBGT sensitivity is 0.250 C between 0 m and 2276 m at fixed drivers.",
+    "All thresholds, including >=28 and >=30 C, remain diagnostic-only on NEX."
+  ],
+  "stage": "all",
+  "wall_seconds": 330.95364099997096,
+  "peak_rss_bytes": 832495616,
+  "artifact_bytes": 1138418,
+  "budget_respected": {
+    "wall": true,
+    "peak_rss": true,
+    "artifacts": true
+  },
+  "parity": [
+    {
+      "check": "pilot_vs_frozen_nex_path",
+      "candidate": "W1",
+      "n_common_days": 367,
+      "max_abs_diff_c": 0.0,
+      "tolerance_c": 1e-09,
+      "ok": true
+    },
+    {
+      "check": "pilot_vs_frozen_nex_path",
+      "candidate": "C1",
+      "n_common_days": 367,
+      "max_abs_diff_c": 0.0,
+      "tolerance_c": 1e-09,
+      "ok": true
+    },
+    {
+      "check": "target_year_hours_equal_full_span",
+      "n_days": 365,
+      "max_abs_diff_c": 0.0,
+      "boundary_days_max_abs_diff_c": 0.0,
+      "boundary_days_finite": true,
+      "tolerance_c": 1e-09,
+      "ok": true
+    },
+    {
+      "check": "single_cell_equals_batch",
+      "bit_identical": true,
+      "detail": "29.923057059625222 vs 29.923057059625222",
+      "ok": true
+    },
+    {
+      "check": "chunk_size_1_equals_whole",
+      "bit_identical": true,
+      "counts_exactly_equal": true,
+      "ok": true
+    },
+    {
+      "check": "chunk_size_3_equals_whole",
+      "bit_identical": true,
+      "counts_exactly_equal": true,
+      "ok": true
+    },
+    {
+      "check": "chunk_size_4_equals_whole",
+      "bit_identical": true,
+      "counts_exactly_equal": true,
+      "ok": true
+    }
+  ],
+  "admin_checks_failed": 0,
+  "quantity_name": "Annual mean of daily maximum outdoor WBGT",
+  "exceedance_label": "Area-weighted mean annual cell exceedance days"
+}

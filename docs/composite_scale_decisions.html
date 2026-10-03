@@ -1,0 +1,377 @@
+<title>Composite Scale Decisions and Workflow Amendment</title>
+<style>
+  :root {
+    --paper:#fbfcfd; --panel:#eef2f6; --ink:#101922; --muted:#5a6b7b;
+    --rule:#ccd6e0; --accent:#12506e; --quote:#12506e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:#0d1319; --panel:#161e27; --ink:#e8eef4; --muted:#8ea0b0;
+      --rule:#26303b; --accent:#6fb2d6; --quote:#6fb2d6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:#0d1319; --panel:#161e27; --ink:#e8eef4; --muted:#8ea0b0;
+    --rule:#26303b; --accent:#6fb2d6; --quote:#6fb2d6;
+  }
+  html { --sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+          scroll-behavior:smooth; }
+  @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
+  body { background:var(--paper); color:var(--ink); font:16px/1.65 var(--sans); margin:0; }
+  .shell { max-width:1180px; margin:0 auto; padding:30px clamp(18px,4vw,40px) 80px;
+    display:grid; grid-template-columns:minmax(0,1fr); gap:34px; }
+  @media (min-width:1000px) { .shell { grid-template-columns:236px minmax(0,1fr); } }
+
+  nav { font-size:13px; align-self:start; }
+  @media (min-width:1000px) { nav { position:sticky; top:24px; max-height:88vh; overflow:auto; } }
+  nav .navtitle { font:600 10.5px/1 var(--mono); letter-spacing:.13em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:12px; }
+  nav a { display:block; color:var(--muted); text-decoration:none; padding:3px 0 3px 10px;
+    border-left:2px solid var(--rule); }
+  nav a:hover { color:var(--ink); border-left-color:var(--accent); }
+  nav a.lvl3 { padding-left:22px; font-size:12.5px; }
+  nav a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  main { min-width:0; }
+  h1 { font-size:30px; font-weight:640; letter-spacing:-.025em; margin:0 0 22px;
+    text-wrap:balance; line-height:1.2; }
+  h2 { font-size:22px; font-weight:620; letter-spacing:-.015em; margin:46px 0 14px;
+    padding-top:20px; border-top:1px solid var(--rule); text-wrap:balance; }
+  h3 { font-size:17px; font-weight:620; margin:32px 0 10px; }
+  h4 { font-size:15px; font-weight:620; margin:24px 0 8px; color:var(--muted); }
+  p { margin:0 0 14px; max-width:74ch; }
+  li { max-width:72ch; margin-bottom:5px; }
+  ul, ol { margin:0 0 14px; padding-left:22px; }
+  code { font:.875em var(--mono); background:var(--panel); padding:1px 5px; border-radius:3px; }
+  pre { background:var(--panel); border:1px solid var(--rule); border-radius:6px;
+    padding:14px 16px; overflow-x:auto; margin:0 0 18px; }
+  pre code { background:none; padding:0; font-size:12.5px; line-height:1.6; }
+  blockquote { margin:0 0 18px; padding:2px 0 2px 18px; border-left:3px solid var(--quote);
+    color:var(--ink); max-width:74ch; }
+  hr { border:0; border-top:1px solid var(--rule); margin:40px 0; }
+  a { color:var(--accent); }
+  .tablewrap { overflow-x:auto; margin:0 0 20px; }
+  table { border-collapse:collapse; font-size:14px; min-width:100%; }
+  th { font:600 10.5px/1.4 var(--mono); letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); padding:8px 14px 8px 0; border-bottom:1px solid var(--rule);
+    white-space:nowrap; }
+  td { padding:7px 14px 7px 0; border-bottom:1px solid var(--rule); vertical-align:top; }
+  td[style*="right"] { font-variant-numeric:tabular-nums; font-family:var(--mono);
+    font-size:13px; }
+  tbody tr:last-child td { border-bottom:0; }
+</style>
+
+<div class="shell">
+  <nav aria-label="Contents">
+    <div class="navtitle">Contents</div>
+    <a class="lvl2" href="#part-a-the-scoring-contract-decided">Part A — The scoring contract (decided)</a><a class="lvl3" href="#a1-one-frozen-national-ruler-per-metric-cdf">A1. One frozen national ruler, per metric, `cdf`</a><a class="lvl3" href="#a2-headline-the-absolute-threshold-half-only">A2. Headline = the absolute-threshold half only</a><a class="lvl3" href="#a3-fixed-0-100-domain-one-colourbar-everywhere">A3. Fixed 0–100 domain, one colourbar, everywhere</a><a class="lvl3" href="#a4-ramp">A4. Ramp</a><a class="lvl3" href="#a5-blocks-use-the-district-fitted-ruler-unchanged">A5. Blocks use the district-fitted ruler, unchanged</a><a class="lvl3" href="#a6-never-aggregate-scores-across-levels">A6. Never aggregate scores across levels</a><a class="lvl3" href="#a7-state-statistic-area-weighted-mean-of-district-composite-scores">A7. State statistic = area-weighted mean of district composite scores</a><a class="lvl3" href="#a8-coverage-is-a-build-gate-not-a-shipped-field">A8. Coverage is a build gate, not a shipped field</a><a class="lvl3" href="#a9-map-encoding-and-boundary-grammar">A9. Map encoding and boundary grammar</a><a class="lvl3" href="#a10-range-bracket-and-the-local-contrast-view">A10. Range bracket, and the local-contrast view</a><a class="lvl2" href="#part-b-evidence">Part B — Evidence</a><a class="lvl3" href="#b1-data-completeness">B1. Data completeness</a><a class="lvl3" href="#b2-ruler-choice">B2. Ruler choice</a><a class="lvl3" href="#b3-blocks-nest-exactly-at-the-physical-layer">B3. Blocks nest exactly at the physical layer</a><a class="lvl3" href="#b4-score-layer-nesting-jensen">B4. Score-layer nesting (Jensen)</a><a class="lvl3" href="#b5-what-block-resolution-buys">B5. What block resolution buys</a><a class="lvl3" href="#b6-why-concentration-was-retired">B6. Why concentration was retired</a><a class="lvl3" href="#b7-area-vs-population-weighting">B7. Area vs population weighting</a><a class="lvl3" href="#b8-a-methodological-correction-recorded-deliberately">B8. A methodological correction, recorded deliberately</a><a class="lvl3" href="#b9-the-colour-ramp-was-faking-a-problem">B9. The colour ramp was faking a problem</a><a class="lvl2" href="#part-c-amendment-to-recommended-target-workflow-md">Part C — Amendment to `recommended_target_workflow.md`</a><a class="lvl3" href="#c1-1-opening-list-and-the-concentration-definition-lines-23-120">C1. §1 opening list and the concentration definition — lines 23–120</a><a class="lvl3" href="#c2-coverage-and-ranking-eligibility-lines-122-186">C2. Coverage and ranking eligibility — lines 122–186</a><a class="lvl3" href="#c3-denominator-and-provenance-lines-208-281">C3. Denominator and provenance — lines 208–281</a><a class="lvl3" href="#c4-national-map-visual-encoding-lines-308-367">C4. National map visual encoding — lines 308–367</a><a class="lvl3" href="#c5-national-map-interaction-lines-369-390">C5. National map interaction — lines 369–390</a><a class="lvl3" href="#c6-visual-hierarchy-and-layout-contracts-lines-402-504">C6. Visual hierarchy and layout contracts — lines 402–504</a><a class="lvl3" href="#c7-production-migration-contract-lines-772-811">C7. Production migration contract — lines 772–811</a><a class="lvl3" href="#c8-acceptance-test-contract-lines-813-859">C8. Acceptance-test contract — lines 813–859</a><a class="lvl3" href="#c9-core-workflow-principles-lines-861-884">C9. Core workflow principles — lines 861–884</a><a class="lvl2" href="#part-d-vendor-handoff-contract">Part D — Vendor handoff contract</a><a class="lvl3" href="#d1-ship-only-the-right-number-so-the-wrong-one-is-unconstructible">D1. Ship only the right number, so the wrong one is unconstructible</a><a class="lvl3" href="#d2-ship-the-ramp-as-data-not-as-prose">D2. Ship the ramp as data, not as prose</a><a class="lvl3" href="#d3-canaries-because-the-failure-mode-is-silent">D3. Canaries, because the failure mode is silent</a><a class="lvl3" href="#d4-timing">D4. Timing</a><a class="lvl2" href="#part-e-open">Part E — Open</a><a class="lvl2" href="#provenance">Provenance</a>
+  </nav>
+  <main><h1 id="composite-scale-decisions-and-workflow-amendment">Composite Scale Decisions and Workflow Amendment</h1>
+<p>Consolidated record of the national-absolute-scale work, 2026-09-08 to 2026-09-09.</p>
+<p><strong>Status.</strong> Part A is decided. Part C was <strong>applied to</strong> <a href="../recommended_target_workflow.md"><code>recommended_target_workflow.md</code></a> on 2026-09-09; that file now carries a revision header pointing back here. Part E lists what is still open.</p>
+<p><strong>Scope.</strong> Everything here was piloted on <strong>Heat Risk at district and block level</strong>. The decisions are intended to generalize to all 13 eligible bundles, but only Heat Risk has been measured. Sector bundles carry a change lens and will need a second ruler; that is out of scope for this record.</p>
+<hr>
+<h2 id="part-a-the-scoring-contract-decided">Part A — The scoring contract (decided)</h2>
+<h3 id="a1-one-frozen-national-ruler-per-metric-cdf">A1. One frozen national ruler, per metric, <code>cdf</code></h3>
+<p>Per-(state, level, scenario, period) min–max normalization is replaced by one frozen national ruler per metric: the <strong>exact pooled mid-rank empirical CDF</strong>. A value observed <code>c</code> times with <code>b</code> observations strictly below it scores</p>
+<pre><code>100 x (b + c/2) / n</code></pre>
+<p>The pool is every district × every slice for that metric — 784 × 7 = <strong>5,488 values</strong>. One ruler serves every state, every level and every slice.</p>
+<p>Consequences that are properties, not defects:</p>
+<ul>
+<li>The range is <strong>open</strong>: the lowest attainable score is <code>100 x (c/2)/n &gt; 0</code> and the highest is</li>
+</ul>
+<p>below 100. No unit is scored a hard 0 or 100 by rank alone. Observed span 0.06 – 98.87.</p>
+<ul>
+<li>Knots span the pooled min to max by construction, so <code>clamped_metric_count</code> is structurally 0</li>
+</ul>
+<p>for districts.</p>
+<ul>
+<li>Ties take the mid-rank of the whole tied block. This matters for zero-inflated day counts —</li>
+</ul>
+<p><code>txge35_extreme_heat_days</code> has modal value exactly 0.0.</p>
+<ul>
+<li>A score answers <strong>&quot;how unusual is this unit within the pooled national sample?&quot;</strong>, not &quot;how far</li>
+</ul>
+<p>up India&#x27;s physical range is it?&quot;.</p>
+<p>Decided against a linear p1–p99 ruler, by the user, after the evidence in Part B was presented. Do not re-open.</p>
+<h3 id="a2-headline-the-absolute-threshold-half-only">A2. Headline = the absolute-threshold half only</h3>
+<p>The Heat Risk headline is <code>composite_absolute_threshold</code>: the 9 metrics scored against absolute physical thresholds or levels, with weights renormalized <strong>0.633 → 1.000</strong> within the half.</p>
+<div class="tablewrap"><table><thead><tr><th style="text-align:left">metric</th><th style="text-align:right">configured weight</th><th style="text-align:right">share of headline</th></tr></thead><tbody><tr><td style="text-align:left"><code>txx_annual_max</code></td><td style="text-align:right">0.0833</td><td style="text-align:right">13.16%</td></tr><tr><td style="text-align:left"><code>hwa_heatwave_amplitude</code></td><td style="text-align:right">0.0833</td><td style="text-align:right">13.16%</td></tr><tr><td style="text-align:left"><code>tas_annual_mean</code></td><td style="text-align:right">0.0667</td><td style="text-align:right">10.53%</td></tr><tr><td style="text-align:left"><code>tasmax_summer_mean</code></td><td style="text-align:right">0.0667</td><td style="text-align:right">10.53%</td></tr><tr><td style="text-align:left"><code>tas_summer_mean</code></td><td style="text-align:right">0.0667</td><td style="text-align:right">10.53%</td></tr><tr><td style="text-align:left"><code>txge30_hot_days</code></td><td style="text-align:right">0.0667</td><td style="text-align:right">10.53%</td></tr><tr><td style="text-align:left"><code>txge35_extreme_heat_days</code></td><td style="text-align:right">0.0667</td><td style="text-align:right">10.53%</td></tr><tr><td style="text-align:left"><code>tasmin_tropical_nights_gt25</code></td><td style="text-align:right">0.0667</td><td style="text-align:right">10.53%</td></tr><tr><td style="text-align:left"><code>tnx_annual_max</code></td><td style="text-align:right">0.0667</td><td style="text-align:right">10.53%</td></tr></tbody></table></div>
+<p>The 5 baseline-referenced metrics — <code>tn90p_warm_nights_pct</code>, <code>hwfi_tmean_90p</code>, <code>hwfi_events_tmean_90p</code>, <code>wsdi_warm_spell_days</code>, <code>tx90p_hot_days_pct</code> — are excluded from the headline and become a separately named lens. They remain computed.</p>
+<p>The composite is a weighted mean over available columns, renormalized per row; the coverage denominator is the <strong>configured</strong> bundle weight, never the weight that happened to fit.</p>
+<h3 id="a3-fixed-0-100-domain-one-colourbar-everywhere">A3. Fixed 0–100 domain, one colourbar, everywhere</h3>
+<p>The display domain is fixed 0–100 across every slice, every bundle and every administrative level. It never rescales to the observed range of the current selection. Identical colours mean identical scores at national zoom, at state zoom, and between one selection and the next.</p>
+<p>There is <strong>one colourbar</strong>, titled level-neutrally (<code>Heat Risk score</code>, not <code>District Bundle Score</code> / <code>Block Bundle Score</code>). Under one ruler the three legend titles in the current document describe a distinction the mathematics no longer makes.</p>
+<h3 id="a4-ramp">A4. Ramp</h3>
+<p>NCL <code>WhiteBlueGreenYellowRed</code>, vendored at <code>tools/diagnostics/colormaps/</code>. Sampled at 101 stops, <strong>starting at fraction 0.045</strong> rather than 0.0 so score 0 is a faint blue-white (<code>#e2f4fd</code>) and never pure white. Missing data is <code>#d5d8dc</code> with its own legend swatch.</p>
+<p>Anchors: <code>0 #e2f4fd · 25 #4b90cb · 50 #bcd654 · 75 #eb5329 · 100 #921519</code>.</p>
+<p>Colour is a pure function of the score: <code>index = round(score)</code>, continuous, linear in score. No binning, no smoothing, no neighbour or parent effects.</p>
+<h3 id="a5-blocks-use-the-district-fitted-ruler-unchanged">A5. Blocks use the district-fitted ruler, unchanged</h3>
+<p>One ruler, fitted on the <strong>district</strong> pool, applied to blocks without refitting.</p>
+<p>Two reasons. First, cross-level comparability: a block and its parent district holding the same physical value get the same score and therefore the same colour. With separate rulers they would not, and a zoom-in would show a colour jump with no physical cause. Second, pool composition is load-bearing under a CDF — a block-pool ruler would be implicitly weighted by <strong>administrative subdivision density</strong> (Uttar Pradesh has 75 districts and 822 blocks; Ladakh has 2 and 20), which is a fact about state administration, not climate.</p>
+<p>Cost: 0.52% of block rows clamp on at least one metric. Report it; do not redesign around it.</p>
+<h3 id="a6-never-aggregate-scores-across-levels">A6. Never aggregate scores across levels</h3>
+<p>Because the CDF is nonlinear, <code>mean(CDF(x)) != CDF(mean(x))</code>. Therefore:</p>
+<ul>
+<li>Score each level directly from <strong>its own physical values</strong>.</li>
+<li>Do not disaggregate district scores down to blocks.</li>
+<li>Do not roll block scores up to districts.</li>
+<li>Expect the block layer to read hotter than its district in high-relief terrain. That is Jensen,</li>
+</ul>
+<p>it is real, and it belongs in the interface rather than being reconciled away.</p>
+<p>Recommended regression guard: <code>|district_direct − area_weighted_block_rollup| &lt; 10</code> points per district-slice. It holds today with headroom (max observed 7.11) and will catch a future data or ruler change that breaks nesting.</p>
+<h3 id="a7-state-statistic-area-weighted-mean-of-district-composite-scores">A7. State statistic = area-weighted mean of district composite scores</h3>
+<p><code>Elevated Bundle-Score Concentration (%)</code> is <strong>retired completely</strong>. The State/UT headline is the area-weighted mean of its district composite scores.</p>
+<ul>
+<li>Weight is <strong>area</strong>. It is the operator already embedded in the pipeline — a district&#x27;s physical</li>
+</ul>
+<p>value <em>is</em> the area-weighted mean of its blocks, exact to machine precision.</p>
+<ul>
+<li>It is computable from the shipped artifact alone (<code>score</code> + <code>area_m2</code>), which matters given D1.</li>
+<li>A <strong>population-weighted</strong> mean is retained as a second column, not a co-headline.</li>
+<li>Aggregate scores, do not score aggregated values. Both give nearly the same answer (median</li>
+</ul>
+<p>difference +0.00) but the value-first construction would require shipping raw metric values, reopening the door D1 closes.</p>
+<p><strong>The State mean is a statistic, never a map encoding.</strong> It appears in the ranking shortlist, the answer card, the pan-India tooltip and the export. It is never painted: no State/UT polygon is ever filled from it, at any zoom, in any view. The national map paints districts and the State view paints blocks — those are the only two fills in the product. A State choropleth would reintroduce a second spatial encoding competing with the district fill underneath it, which is precisely the layered construction (<code>State hue + district tint</code>) that this amendment removes.</p>
+<p>Label it accurately: a state at 57.8 is <em>the area-weighted average of its districts&#x27; national percentiles</em>, not &quot;the 58th percentile among states&quot;.</p>
+<h3 id="a8-coverage-is-a-build-gate-not-a-shipped-field">A8. Coverage is a build gate, not a shipped field</h3>
+<p><code>coverage_fraction</code> is not shipped. It is computed during the artifact build, and the build <strong>fails</strong> if a state falls below the floor. This preserves the protection without exporting a field that is currently constant 1.0, and it keeps the wrong computation unconstructible downstream.</p>
+<p>Re-verify per bundle before reusing this schema; only Heat Risk has been measured.</p>
+<h3 id="a9-map-encoding-and-boundary-grammar">A9. Map encoding and boundary grammar</h3>
+<pre><code>National view: districts painted from district composite scores
+               thick state boundary, thin district boundary
+    -&gt; click a state
+State view:    blocks painted from block composite scores
+               thick district boundary, thin block boundary</code></pre>
+<p>Thick stroke = the unit the previous view was painting. Thin stroke = the unit this view is painting. The same grammar repeats at both levels, which is why the legend title never changes.</p>
+<p>These are the <strong>only two fills in the product</strong>. States and union territories are drawn as a boundary at national zoom and are never filled; see A7.</p>
+<p>Strokes are <strong>one hue, two weights</strong>:</p>
+<pre><code>light: #7a8794      dark: #8e9ba8
+fine   stroke-opacity .45, ~0.45px
+coarse stroke-opacity .95, ~1.9px
+both:  vector-effect: non-scaling-stroke</code></pre>
+<p>Not the paper colour (pale districts would lose their boundaries), not black (it reads as dirt over the ramp&#x27;s hot end). Drop the fine layer entirely below ~1 screen pixel. Selection is a third stroke in the <strong>accent hue</strong>, not a fourth grey weight.</p>
+<p>Block geometry loads only after a State/UT is selected. Median state is 144 blocks / 0.56 MB; worst is Uttar Pradesh at 822 / 3.9 MB; 31.6 MB nationally, which is why the national view stays at district resolution.</p>
+<h3 id="a10-range-bracket-and-the-local-contrast-view">A10. Range bracket, and the local-contrast view</h3>
+<p>The fixed domain means some states render nearly monochrome, correctly — Ladakh&#x27;s 20 blocks span 1.8 points. Two mitigations, neither of which touches the fill:</p>
+<ol>
+<li>A <strong>bracket on the fixed colourbar</strong> marking the range present in the current view, with a</li>
+</ol>
+<p>numeric readout (&quot;observed 49.5 – 66.2, 16.7 wide&quot;).</p>
+<ol>
+<li>A <strong>local-contrast view</strong>: off by default, explicitly labelled non-comparable, never the</li>
+</ol>
+<p>landing state.</p>
+<p>Rescaling the default colourbar to the on-screen range was considered and rejected: it reintroduces per-state min–max at the legend instead of the score. At SSP5-8.5 2040-2060 a score of 66.2 would be deep red in Goa and yellow in Uttar Pradesh, and Ladakh&#x27;s 1.8-point spread would be painted across the full ramp.</p>
+<p>The local-contrast view computes its domain client-side from the visible scores. That is a <strong>view extent</strong>, not a stored normalization parameter — the distinction matters for D1 and must be written down, or someone will later precompute per-state ranges into the artifact.</p>
+<hr>
+<h2 id="part-b-evidence">Part B — Evidence</h2>
+<p>All figures from the national pilot run (<code>tools/diagnostics/heat_risk_national_ruler_pilot.py</code>, outputs under <code>docs/diagnostics/heat_risk_pilot/</code>).</p>
+<h3 id="b1-data-completeness">B1. Data completeness</h3>
+<ul>
+<li>36 states, 784 districts × 7 slices = 5,488 rows, 14/14 metrics fitted.</li>
+<li><strong>Zero data gaps.</strong> 784/784 roster districts finite in every slice; 0 missing master rows, 0</li>
+</ul>
+<p>all-NaN, 0 orphans. Coverage report: 3,626 rows, min 100.0, max 100.0, standard deviation 0.0.</p>
+<ul>
+<li>7,137 blocks across all 36 states; all 784 districts covered; median 8 blocks per district,</li>
+</ul>
+<p>range 1 to 38.</p>
+<ul>
+<li>Nothing saturates: <code>pct_score_ge_99 = 0.000</code> in every slice for both candidate rulers.</li>
+</ul>
+<h3 id="b2-ruler-choice">B2. Ruler choice</h3>
+<ul>
+<li>Rank agreement between <code>cdf</code> and linear is high but set membership is not: Spearman 0.893 –</li>
+</ul>
+<p>0.989, while worst-decile overlap falls 78% → 50% from baseline to SSP5-8.5 2060-2080.</p>
+<ul>
+<li>Mean |cdf − linear| is 17.5 points on the absolute half against 8.7 on the baseline half. The</li>
+</ul>
+<p>full composite&#x27;s 8.8 is partial cancellation, so composite figures understate how far the new headline moves.</p>
+<ul>
+<li>Worked example — <strong>Bijnor, Uttar Pradesh, SSP2-4.5 2020-2040</strong>: <code>tas_annual_mean</code> 25.10 °C</li>
+</ul>
+<p>scores <strong>75.6 linear / 21.0 CDF</strong>. Largest single disagreement nationally. Both true, different questions.</p>
+<ul>
+<li>The composite there is 35.42 → ramp stop 35 → <code>#49a773</code>.</li>
+</ul>
+<h3 id="b3-blocks-nest-exactly-at-the-physical-layer">B3. Blocks nest exactly at the physical layer</h3>
+<p>District value <strong>is</strong> the area-weighted mean of its blocks — verified on <code>tas_annual_mean</code> and <code>txge35_extreme_heat_days</code>: p95 |difference| 0.0000, max 0.087 °C and 0.0001 days.</p>
+<h3 id="b4-score-layer-nesting-jensen">B4. Score-layer nesting (Jensen)</h3>
+<p>Area-weighted mean of block composites vs the district composite computed directly:</p>
+<pre><code>median gap  -0.02      p95 |gap|  1.01      max |gap|  7.11
+|gap| &gt; 5 pts:  5 of 5,488 (0.09%)      |gap| &gt; 10 pts:  0
+mean -0.094  (one-signed: the block roll-up reads hotter)</code></pre>
+<p>Worst cases are all high-relief: Nainital (29.22 vs 36.32), Kangra (17.35 vs 22.80), Alluri Sitharama Raju (36.34 vs 41.66).</p>
+<h3 id="b5-what-block-resolution-buys">B5. What block resolution buys</h3>
+<p>Within-district spread of the <strong>block composite</strong>: median 7.2 points, p90 21.6, max 69.2.</p>
+<p>Share of within-state block variance lying <em>inside</em> districts — the part a district-resolution map cannot show — at SSP5-8.5 2040-2060. National median <strong>18.3%</strong>:</p>
+<div class="tablewrap"><table><thead><tr><th style="text-align:left">state</th><th style="text-align:right">blocks</th><th style="text-align:right">districts</th><th style="text-align:right">within-district share</th></tr></thead><tbody><tr><td style="text-align:left">Lakshadweep</td><td style="text-align:right">10</td><td style="text-align:right">1</td><td style="text-align:right">100.0%</td></tr><tr><td style="text-align:left">Ladakh</td><td style="text-align:right">20</td><td style="text-align:right">2</td><td style="text-align:right">90.8%</td></tr><tr><td style="text-align:left">Goa</td><td style="text-align:right">12</td><td style="text-align:right">2</td><td style="text-align:right">74.5%</td></tr><tr><td style="text-align:left">Andaman &amp; Nicobar</td><td style="text-align:right">9</td><td style="text-align:right">3</td><td style="text-align:right">68.6%</td></tr><tr><td style="text-align:left">Sikkim</td><td style="text-align:right">26</td><td style="text-align:right">6</td><td style="text-align:right">48.2%</td></tr><tr><td style="text-align:left">Kerala</td><td style="text-align:right">152</td><td style="text-align:right">14</td><td style="text-align:right">47.5%</td></tr><tr><td style="text-align:left">…</td><td style="text-align:right"></td><td style="text-align:right"></td><td style="text-align:right"></td></tr><tr><td style="text-align:left">West Bengal</td><td style="text-align:right">344</td><td style="text-align:right">23</td><td style="text-align:right">5.6%</td></tr><tr><td style="text-align:left">Bihar</td><td style="text-align:right">534</td><td style="text-align:right">38</td><td style="text-align:right">4.3%</td></tr><tr><td style="text-align:left">Uttar Pradesh</td><td style="text-align:right">822</td><td style="text-align:right">75</td><td style="text-align:right">3.8%</td></tr></tbody></table></div>
+<p>The argument for block fill is <strong>not</strong> resolution for its own sake. Blocks buy the most where the district roster is coarse, not where the terrain is rough — Uttarakhand is only 10.4% because its 13 districts already separate hill from Terai, while Kerala and Goa are high because 14 and 2 districts cannot resolve a coast-to-Ghats gradient. Block fill <strong>equalizes effective resolution across states</strong>, which a district-resolution state map does not.</p>
+<h3 id="b6-why-concentration-was-retired">B6. Why concentration was retired</h3>
+<p>The statistic saturates at both ends of the slice grid:</p>
+<div class="tablewrap"><table><thead><tr><th style="text-align:left">slice</th><th style="text-align:right">concentration median</th><th style="text-align:left">area-weighted mean (min – max)</th></tr></thead><tbody><tr><td style="text-align:left">historical 1990-2010</td><td style="text-align:right"><strong>0.0</strong></td><td style="text-align:left">0.4 – 58.0</td></tr><tr><td style="text-align:left">ssp245 2020-2040</td><td style="text-align:right">8.3</td><td style="text-align:left">0.5 – 68.8</td></tr><tr><td style="text-align:left">ssp245 2040-2060</td><td style="text-align:right">52.1</td><td style="text-align:left">0.7 – 77.8</td></tr><tr><td style="text-align:left">ssp585 2040-2060</td><td style="text-align:right">68.1</td><td style="text-align:left">0.9 – 83.4</td></tr><tr><td style="text-align:left">ssp585 2060-2080</td><td style="text-align:right"><strong>83.9</strong></td><td style="text-align:left">1.3 – 93.9</td></tr></tbody></table></div>
+<p>At baseline more than half of all States/UTs sit at exactly 0.0% — the slice users open first tells them nothing about most of India.</p>
+<p>The tie structure is worse. At SSP5-8.5 2040-2060, <strong>14 states share concentration 0.0 and therefore rank 23</strong>, while Goa, Delhi and Puducherry all tie at rank 1 with 100.0%:</p>
+<div class="tablewrap"><table><thead><tr><th style="text-align:left">state</th><th style="text-align:right">concentration</th><th style="text-align:right">area-wtd mean</th><th style="text-align:left">rank old → new</th></tr></thead><tbody><tr><td style="text-align:left">Goa</td><td style="text-align:right">100.0</td><td style="text-align:right">57.8</td><td style="text-align:left">1 → 18</td></tr><tr><td style="text-align:left">Delhi</td><td style="text-align:right">100.0</td><td style="text-align:right">62.8</td><td style="text-align:left">1 → 12</td></tr><tr><td style="text-align:left">Puducherry</td><td style="text-align:right">100.0</td><td style="text-align:right">66.5</td><td style="text-align:left">1 → 9</td></tr><tr><td style="text-align:left">Ladakh</td><td style="text-align:right">0.0</td><td style="text-align:right">0.9</td><td style="text-align:left">23 → 36</td></tr><tr><td style="text-align:left">Sikkim</td><td style="text-align:right">0.0</td><td style="text-align:right">1.6</td><td style="text-align:left">23 → 35</td></tr><tr><td style="text-align:left">Himachal Pradesh</td><td style="text-align:right">0.0</td><td style="text-align:right">6.9</td><td style="text-align:left">23 → 34</td></tr></tbody></table></div>
+<p>Goa ranking first nationally on the strength of two districts is exactly the artifact the small-cohort rule was written to suppress; the mean fixes it at source. Spearman between the two statistics is 0.876, so this is a real change to the shortlist, not a relabelling.</p>
+<h3 id="b7-area-vs-population-weighting">B7. Area vs population weighting</h3>
+<p>Measured across all 252 state-slices:</p>
+<ul>
+<li><strong>Ranking barely moves.</strong> Maximum rank change 5 places in every slice; the top-10 shortlist is</li>
+</ul>
+<p>identical in 6 of 7 slices (8/10 at end-century).</p>
+<ul>
+<li><strong>Bands disagree in 19 of 252 state-slices (7.5%)</strong>, and only one is substantive:</li>
+</ul>
+<p><strong>Uttarakhand</strong>, Very Low area-weighted against Low population-weighted, in 4 of 7 slices (12.61 vs 25.58 at the default). Every other disagreement is a state sitting within a few points of a band cut — Andhra Pradesh 59.1/60.1, Jharkhand 59.1/60.0, Tamil Nadu 58.6/60.2 — which is a fact about the band cuts, not the weighting.</p>
+<ul>
+<li>Largest deltas at the default slice: Uttarakhand −12.96, Himachal Pradesh −8.03, Arunachal</li>
+</ul>
+<p>Pradesh −5.61, Maharashtra +5.76, Karnataka +4.19, Rajasthan +3.43. The people-hotter side reaches −13 while the land-hotter side tops out near +6.</p>
+<ul>
+<li><code>jammu kashmir|mirpur</code> has no population row: it contributes to J&amp;K&#x27;s area-weighted mean and</li>
+</ul>
+<p>drops out of its population-weighted one. The two J&amp;K numbers are computed over different district sets.</p>
+<h3 id="b8-a-methodological-correction-recorded-deliberately">B8. A methodological correction, recorded deliberately</h3>
+<p>Scoring a state&#x27;s area-weighted <strong>physical</strong> values against the district-fitted CDF was described in discussion as a category error that would compress states toward the middle. Measured, it does not: median difference from the mean-of-scores is <strong>+0.00</strong>, range −3.65 to +1.60. It is a viable construction. The mean of district scores is preferred for the artifact reason in A7, not because the alternative is wrong.</p>
+<h3 id="b9-the-colour-ramp-was-faking-a-problem">B9. The colour ramp was faking a problem</h3>
+<p><code>YlOrRd</code> starts near-white and squashed the linear ruler&#x27;s real 40–90 range into a narrow orange band, which read as &quot;washed out&quot; and was briefly taken as evidence about the ruler. On <code>WhiteBlueGreenYellowRed</code> the same data resolves cleanly. <strong>Never read &quot;washed out&quot; as evidence about a ruler without first checking the ramp.</strong></p>
+<hr>
+<h2 id="part-c-amendment-to-recommended-target-workflow-md">Part C — Amendment to <code>recommended_target_workflow.md</code></h2>
+<p><strong>Applied 2026-09-09</strong> (257 insertions, 175 deletions). Line references below are against the <strong>pre-amendment</strong> file and are historical: the numbering has since shifted. Read this part as the migration record for what changed and why, not as an index into the current document. The District-view contract (then lines 466–504) was deliberately left in place and is now marked <code>Unresolved</code> there.</p>
+<h3 id="c1-1-opening-list-and-the-concentration-definition-lines-23-120">C1. §1 opening list and the concentration definition — lines 23–120</h3>
+<p>Replace the <code>Elevated Bundle-Score Concentration (%)</code> legend bullet (line 31) with <code>a District Bundle Score legend on a fixed 0-100 scale</code>, and the hotspot bullet (line 32) with <code>the States and union territories with the highest area-weighted mean district scores</code>.</p>
+<p>Delete the concentration formula and its surrounding rationale (lines 35–58) and replace with:</p>
+<blockquote>The national map paints <strong>districts</strong> directly from their bundle composite scores on the frozen <code>0-100</code> national scale. Because every score comes from one frozen national ruler rather than a per-State normalization, district scores are directly comparable between States, and a pan-India district map is a valid absolute comparison rather than a screening proxy. The State/UT headline statistic is the <strong>area-weighted mean of its valid district composite scores</strong>. A population-weighted mean is retained as a secondary field. Neither is a percentile among States: the number is the area-weighted average of that State&#x27;s districts&#x27; national percentiles, and must be labelled as such. The State statistic is used for ranking, the answer card, the tooltip and exports. It is <strong>not a map encoding</strong>: no State/UT polygon is filled from it at any zoom. The national map paints districts; the State view paints blocks. <code>Elevated Bundle-Score Concentration (%)</code>, the fixed <code>&gt;= 50</code> elevated-score threshold, and the prohibition on a State mean as the national value are all withdrawn. The threshold saturated at both ends of the slice grid and tied large groups of States at identical values.</blockquote>
+<p>Replace lines 106–115 (the &quot;national statistic answers&quot; block and the interstate caveat). The statistic now <em>does</em> answer an absolute comparison question; the caveat that survives is about hazard scope, not normalization:</p>
+<blockquote>The national statistic answers: within this State/UT, what is the area-weighted average bundle composite score of its districts, on the frozen national scale? It is hazard-only. It does not include exposure, vulnerability, or resilience, and it is not comparable across bundles.</blockquote>
+<p>Replace lines 117–120. District and block results are now explicitly on one scale:</p>
+<blockquote>District and block scores are produced on the same frozen national ruler and are directly comparable. The national overview uses districts; the State view uses blocks. Neither is derived from the other — each level is scored from its own physical values.</blockquote>
+<h3 id="c2-coverage-and-ranking-eligibility-lines-122-186">C2. Coverage and ranking eligibility — lines 122–186</h3>
+<p>Keep the section. Three edits:</p>
+<ul>
+<li>Delete the three-branch contract at lines 130–145 that gates <em>the concentration percentage</em>,</li>
+</ul>
+<p>and re-express the same rules as gating <strong>the State mean</strong>.</p>
+<ul>
+<li><code>coverage_fraction</code> moves from a shipped field to a <strong>build gate</strong> (A8). The build fails below</li>
+</ul>
+<p>the floor rather than the interface suppressing a value.</p>
+<ul>
+<li>Delete the <code>District view / Rank individual Block Bundle Scores</code> tier at lines 172–175 and its</li>
+</ul>
+<p>denominator sentence. Ranking is two-tier: States nationally, districts within a State. Block cohorts run 1 to 38 per district, far below the ten-unit minimum. Blocks are painted, not ranked.</p>
+<p>Keep line 180&#x27;s prohibition on State-wide and national block ranks, but restate the reason: block scores <em>are</em> now nationally comparable; the objection is cohort size and administrative unevenness, not comparability.</p>
+<p>Line 202&#x27;s <code>Coverage percentages: 1 decimal place</code> is retired with the field.</p>
+<h3 id="c3-denominator-and-provenance-lines-208-281">C3. Denominator and provenance — lines 208–281</h3>
+<p>Keep in full. Two additions to the provenance block at lines 237–247:</p>
+<pre><code>ruler_id            which frozen CDF support produced these scores
+colour_scale_id     which palette and domain the scores are rendered against
+data_snapshot_hash  the input snapshot the ruler was fitted over</code></pre>
+<p>A score without a <code>ruler_id</code> is unfalsifiable — a correctly rendered new ruler cannot be distinguished from a wrongly rendered old one.</p>
+<p>Line 262 (<code>threshold</code>), 265 (<code>coverage_fraction</code>), 266–267 (<code>n_ge_threshold</code>, <code>pct_ge_threshold</code>) leave the artifact field list. Add <code>state_mean_area_weighted</code> and <code>state_mean_population_weighted</code>.</p>
+<h3 id="c4-national-map-visual-encoding-lines-308-367">C4. National map visual encoding — lines 308–367</h3>
+<p>This section is replaced wholesale. The five-anchor green→red palette, the fixed <code>0-100%</code> concentration scale, and the <code>district tint strength = 30% + 70% x (score/100)</code> construction all go.</p>
+<blockquote>The pan-India map paints each district directly from its bundle composite score on the frozen <code>0-100</code> domain, through the vendored <code>WhiteBlueGreenYellowRed</code> table sampled at 101 stops starting at fraction 0.045 so no valid score renders as pure white. There is one continuous colourbar with fixed numeric ticks, titled <code>&lt;Bundle&gt; score</code>. The domain never rescales — not when the bundle, scenario or period changes, and not when a State is selected. Boundary weight carries the administrative level. At national zoom the State/UT boundary is the coarse stroke and the district boundary the fine stroke; at State zoom the district boundary is coarse and the block boundary fine. Both strokes use one hue — <code>#7a8794</code> light, <code>#8e9ba8</code> dark — differing only in width and opacity, with <code>vector-effect: non-scaling-stroke</code>. The fine layer is dropped below approximately one screen pixel. Selection is a third stroke in the accent hue. A bracket on the colourbar marks the score range present in the current view, with a numeric readout beside it. A <code>Local contrast</code> view may rescale the domain to the visible extent; it is off by default, explicitly labelled as not comparable across selections, and is never the landing state. State and union-territory polygons are <strong>never filled</strong>. At national zoom they contribute the coarse boundary stroke only; their headline statistic lives in the ranking, tooltip and answer card. There is one fill per view and one colourbar for both. <code>#d5d8dc</code> identifies missing composite data and carries its own legend swatch.</blockquote>
+<p>Lines 355–367 (no-data treatment, hover/selection precedence, accessibility, colour-not-sole- carrier) are retained unchanged.</p>
+<h3 id="c5-national-map-interaction-lines-369-390">C5. National map interaction — lines 369–390</h3>
+<p>The pan-India tooltip (lines 371–382) shows: State/UT name, area-weighted mean district score, population-weighted mean, national rank and the number of rank-eligible States when eligible, and any quality flag. Remove the concentration, threshold-count and coverage lines. Line 381&#x27;s prohibition on district-level tooltip content at national zoom is <strong>retained</strong> — districts are painted but not individually inspectable until a State is selected.</p>
+<p>Replace lines 384–390:</p>
+<blockquote>Clicking anywhere within a State selects and zooms to it, loads that State&#x27;s block geometry and attributes, and repaints the map from <strong>block</strong> composite scores on the same colourbar. The district boundary becomes the coarse stroke and the block boundary the fine stroke. The colourbar, its title and its domain do not change. A <code>District fill</code> toggle is available at State view for users who want the map to match the district ranking exactly; block fill is the default.</blockquote>
+<p>Expect the visual change on click to vary enormously by State — imperceptible in Uttar Pradesh (3.8% within-district variance), transformative in Goa (74.5%). Interface copy must promise the same <em>scale</em>, never the same <em>map</em>.</p>
+<h3 id="c6-visual-hierarchy-and-layout-contracts-lines-402-504">C6. Visual hierarchy and layout contracts — lines 402–504</h3>
+<p>Replace the hierarchy block at lines 402–411:</p>
+<pre><code>National view: continuous district composite-score colour
+               thick State boundary, thin district boundary
+    -&gt; select state
+State view:    continuous block composite-score colour
+               thick district boundary, thin block boundary
+               + five-band district distribution and district-level interaction</code></pre>
+<p>Line 415&#x27;s <code>district-view legend title should be Block Bundle Score</code> is deleted — there is one level-neutral title.</p>
+<p>Lines 419–437 (the five-band distribution and its interaction) are <strong>retained</strong>, with the <code>Elevated Bundle-Score Concentration / 11 of 33 valid districts &gt;= 50</code> headline example replaced by the State mean, and line 436&#x27;s instruction about the Moderate bar and the <code>&gt;= 50</code> threshold deleted along with the threshold.</p>
+<p>State-view layout contract (lines 439–460): the Headline block becomes</p>
+<pre><code>Headline
+    Area-weighted mean district score + five-band classification
+    Population-weighted mean (secondary)
+    National rank or quality explanation</code></pre>
+<p>and the Map block becomes <code>Continuous block composite-score colour + district interaction</code>.</p>
+<p>The District-view layout contract (lines 466–491) and the block-inspection paragraph (lines 497–504) are <strong>withdrawn — decided 2026-09-09</strong>. With blocks painted at State view there is no finer map to introduce: a District view would repaint the same blocks, on the same ruler, against the same colourbar, at a smaller extent. Its <code>top-10 Blocks ranked within the District</code> clause also contradicted the two-tier ranking rule, and a five-band block histogram is not viable over a median of 8 blocks. A district click is an inspection state within State view — breadcrumb <code>India &gt; State/UT</code>, panel showing the district score, band, rank within the State/UT, drivers, and its blocks&#x27; min–max range and count. District and block are independent inspection targets with an explicit precedence rule; neither adds a breadcrumb level.</p>
+<h3 id="c7-production-migration-contract-lines-772-811">C7. Production migration contract — lines 772–811</h3>
+<p>Line 775&#x27;s &quot;must not silently preserve State mean as the national value&quot; is <strong>withdrawn</strong> — the State mean is now the national value. What must not be preserved is per-State min–max normalization.</p>
+<p>The artifact field list at lines 780–799 drops <code>threshold</code>, <code>coverage_fraction</code>, <code>n_ge_threshold</code>, <code>pct_ge_threshold</code>; adds <code>state_mean_area_weighted</code>, <code>state_mean_population_weighted</code>, <code>ruler_id</code>, <code>colour_scale_id</code>, <code>data_snapshot_hash</code>.</p>
+<p>Lines 802–805 are replaced by the two-level encoding in C4/C6.</p>
+<h3 id="c8-acceptance-test-contract-lines-813-859">C8. Acceptance-test contract — lines 813–859</h3>
+<ul>
+<li>Line 819 inverts: national State ranking now uses the <strong>area-weighted State mean</strong>, not</li>
+</ul>
+<p>concentration.</p>
+<ul>
+<li>Line 822–823, 827: coverage assertions move to build-gate assertions.</li>
+<li>Line 831: the <code>&gt;= 50</code> threshold assertion is deleted; five-band assignment from full precision</li>
+</ul>
+<p>is retained.</p>
+<ul>
+<li>Line 846–847: legend-title assertions become &quot;one level-neutral title at both views&quot; and &quot;the</li>
+</ul>
+<p>same score maps to the same colour at national and State zoom, and at district and block level&quot;.</p>
+<p>Add:</p>
+<ul>
+<li>a district and a block holding the same physical value receive the same score;</li>
+<li>no State/UT polygon carries a score-derived fill at any zoom;</li>
+<li>the domain never rescales outside the labelled local-contrast view;</li>
+<li><code>|district_direct − area_weighted_block_rollup| &lt; 10</code> per district-slice;</li>
+<li>the canary geographies in D3 render as expected.</li>
+</ul>
+<h3 id="c9-core-workflow-principles-lines-861-884">C9. Core workflow principles — lines 861–884</h3>
+<ul>
+<li>Line 872 loses &quot;or concentration&quot; and &quot;with view-specific legend titles&quot;.</li>
+<li>Line 878 (&quot;National screening results are never described as absolute interstate climate-risk</li>
+</ul>
+<p>scores&quot;) is <strong>withdrawn</strong> — under a frozen national ruler they are absolute interstate comparisons. Replace with: <em>national results are absolute interstate hazard comparisons on one frozen scale, and remain hazard-only and not comparable across bundles.</em></p>
+<ul>
+<li>Line 879 (&quot;Coverage validity and denominator-based ranking eligibility remain explicit and</li>
+</ul>
+<p>separate&quot;) becomes a build-gate principle.</p>
+<ul>
+<li>Line 883 gains: block <strong>attributes</strong> load with State selection, not after a further click.</li>
+<li>Add a principle: there is exactly one score-derived fill per view — districts nationally,</li>
+</ul>
+<p>blocks within a State — and aggregate statistics are never rendered as a choropleth.</p>
+<hr>
+<h2 id="part-d-vendor-handoff-contract">Part D — Vendor handoff contract</h2>
+<p>The UI/UX vendor building <code>irt.resilience.org.in</code> receives computed values, not methodology.</p>
+<h3 id="d1-ship-only-the-right-number-so-the-wrong-one-is-unconstructible">D1. Ship only the right number, so the wrong one is unconstructible</h3>
+<p>Pre-computing the score is necessary but not sufficient. If the artifact also carries raw metric values, per-State minima and maxima, or the ruler&#x27;s knots, someone downstream will eventually normalize with them — not maliciously, but because a map looks flat in Ladakh and they &quot;fix&quot; it. The defence is that the inputs to that computation are simply absent from the file.</p>
+<p><strong>Per-row artifact carries:</strong> stable admin ID, <code>district_key</code> / <code>block_key</code>, <code>bundle_id</code>, <code>scenario</code>, <code>period</code>, <code>admin_level</code>, <code>score</code>, quality flags.</p>
+<p><strong>It does not carry:</strong> raw metric values, normalization parameters, CDF support, per-State extents. Those live in the build repo.</p>
+<p>Store full <code>float64</code> and round only at display. Do not round in the artifact — the ranking contract gives tied ranks to exact full-precision equality, and rounding manufactures ties.</p>
+<h3 id="d2-ship-the-ramp-as-data-not-as-prose">D2. Ship the ramp as data, not as prose</h3>
+<p>A score with no palette leaves a &quot;pick a colour scale&quot; step, and that step is where per-State rescaling gets reinvented. One small versioned <code>colour_scale.json</code>:</p>
+<pre><code>{
+  &quot;colour_scale_id&quot;: &quot;whbgyr-101-floor045-v1&quot;,
+  &quot;stops&quot;: [&quot;#e2f4fd&quot;, &quot;...101 hex values...&quot;],
+  &quot;domain_min&quot;: 0,
+  &quot;domain_max&quot;: 100,
+  &quot;missing&quot;: &quot;#d5d8dc&quot;,
+  &quot;rescale&quot;: &quot;forbidden&quot;
+}</code></pre>
+<p>Do <strong>not</strong> store a hex colour per row instead of the score. The vendor needs the number for tooltips, sortable tables, the band distribution, ranking and accessibility — colour cannot be the sole carrier of score. Storing colour would force them to reverse-engineer the number they were meant to be given, and would make a palette tweak a full data republish.</p>
+<h3 id="d3-canaries-because-the-failure-mode-is-silent">D3. Canaries, because the failure mode is silent</h3>
+<p>A vendor who rescales per State produces a map that looks entirely plausible. What catches it is a geography whose <em>correct</em> rendering is nearly monochrome:</p>
+<blockquote><strong>Ladakh.</strong> Its 20 blocks span under 2 points at SSP5-8.5 2040-2060. Rendered correctly, Ladakh is a single flat pale-blue field. <strong>If the deployed map shows Ladakh in more than one visually distinct colour, the ruler has been rescaled.</strong></blockquote>
+<p>Second canary in a different part of the country: <strong>Delhi</strong>, 2.6 points across 12 blocks.</p>
+<p>Pair these with a golden file — a few dozen named units × slice with expected score and expected hex — as the machine-checkable version.</p>
+<h3 id="d4-timing">D4. Timing</h3>
+<p><strong>Nothing may be handed over until the data is frozen.</strong> P-10 is unresolved: the Andhra Pradesh republish, the Lakshadweep sub-cell fill and the groundwater rewire are all in flight. Scores shipped now are scores reissued later, against which the vendor will have built caching, golden tests and screenshots. The ruler must be frozen over a stable snapshot first, and the artifact must carry <code>data_snapshot_hash</code> so a mismatch is loud rather than silent.</p>
+<hr>
+<h2 id="part-e-open">Part E — Open</h2>
+<div class="tablewrap"><table><thead><tr><th style="text-align:left">ref</th><th style="text-align:left">item</th><th style="text-align:left">why it matters</th></tr></thead><tbody><tr><td style="text-align:left">P-13</td><td style="text-align:left">Five-band cuts are near-tautological under a CDF: <code>&gt;= 80</code> reads as &quot;worse than 80% of pooled observations&quot;. Either document that plainly or set band cuts from physical values.</td><td style="text-align:left">Undecided. B7 shows band cuts already dominating the area-vs-population comparison.</td></tr><tr><td style="text-align:left">P-14</td><td style="text-align:left"><code>75</code> has changed meaning without the widget changing. Needs UI copy, not a docs change.</td><td style="text-align:left">Undecided.</td></tr><tr><td style="text-align:left">P-03</td><td style="text-align:left">The pool is 86% future-weighted; the absolute-half baseline median is 38.8 against 78.8 at SSP5-8.5 2060-2080. The baseline map will look benign.</td><td style="text-align:left">Presentation treatment undecided.</td></tr><tr><td style="text-align:left">—</td><td style="text-align:left">District view: inspection state within State view, or a level of its own.</td><td style="text-align:left"><strong>Resolved 2026-09-09</strong> — inspection state. Workflow doc amended (CHG-0379).</td></tr><tr><td style="text-align:left">P-04</td><td style="text-align:left">Freeze the 7-slice grid with its own version; the validator must refuse off-grid slices.</td><td style="text-align:left">Not done.</td></tr><tr><td style="text-align:left">P-10</td><td style="text-align:left">Data still regenerating. Blocks D4.</td><td style="text-align:left">Blocking.</td></tr><tr><td style="text-align:left">P-11</td><td style="text-align:left">A frozen CDF must carry the full 5,488-value support per metric, or accept the 21-knot grid&#x27;s up-to-4.2-point error.</td><td style="text-align:left">Not decided.</td></tr><tr><td style="text-align:left">P-16</td><td style="text-align:left">Freezing bakes in the 1990–2010 vs 1981–2010 code-baseline gap and the <code>hwa_heatwave_amplitude</code> hybrid.</td><td style="text-align:left">Known, accepted for now.</td></tr><tr><td style="text-align:left">—</td><td style="text-align:left"><code>admin_roster_version</code> has not been assigned. Counts alone are not a version.</td><td style="text-align:left">Blocks release.</td></tr><tr><td style="text-align:left">—</td><td style="text-align:left">The 12 non-Heat-Risk bundles are unmeasured. Sector bundles need a second ruler for the change lens.</td><td style="text-align:left">Out of pilot scope.</td></tr></tbody></table></div>
+<hr>
+<h2 id="provenance">Provenance</h2>
+<div class="tablewrap"><table><thead><tr><th style="text-align:left">tool</th><th style="text-align:left">produces</th></tr></thead><tbody><tr><td style="text-align:left"><code>tools/diagnostics/heat_risk_national_ruler_pilot.py</code></td><td style="text-align:left">the national run, the frozen support, all evidence tables</td></tr><tr><td style="text-align:left"><code>tools/diagnostics/build_heat_risk_frozen_map.py</code></td><td style="text-align:left">national district map, frozen settings</td></tr><tr><td style="text-align:left"><code>tools/diagnostics/build_resolution_comparison.py</code></td><td style="text-align:left">district-fill vs block-fill, UP / Kerala / Goa</td></tr><tr><td style="text-align:left"><code>tools/diagnostics/build_state_weighting_comparison.py</code></td><td style="text-align:left">area vs population State means</td></tr></tbody></table></div>
+<p>The State-weighting page paints State/UT polygons because that was the fastest way to compare two candidate weightings side by side. It is a <strong>decision aid, not a product mock</strong> — per A7 the product never fills a State polygon.</p>
+<p>Pitfall references <code>P-xx</code> are to <a href="national_absolute_scale_pitfalls.md"><code>docs/national_absolute_scale_pitfalls.md</code></a>.</p></main>
+</div>

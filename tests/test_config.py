@@ -56,24 +56,11 @@ def test_config_helper_functions() -> None:
     assert len(temp_indices) > 0
 
 
-def test_aqueduct_metrics_are_exposed_to_dashboard_variables() -> None:
-    """Aqueduct metrics should be available through the dashboard variable registry."""
+def test_aqueduct_metrics_are_fully_removed_from_dashboard_variables() -> None:
+    """Aqueduct was retired; no aq_* slug may remain in the variable registry."""
     from india_resilience_tool.config.variables import VARIABLES
 
-    for slug, label in [
-        ("aq_water_stress", "Aqueduct Water Stress"),
-        ("aq_interannual_variability", "Aqueduct Interannual Variability"),
-        ("aq_seasonal_variability", "Aqueduct Seasonal Variability"),
-        ("aq_water_depletion", "Aqueduct Water Depletion"),
-    ]:
-        cfg = VARIABLES[slug]
-        assert cfg["label"] == label
-        assert cfg["source_type"] == "external"
-        assert cfg["supports_yearly_trend"] is False
-        assert cfg["supported_scenarios"] == ["historical", "bau", "opt", "pes"]
-        assert cfg["supported_levels"] == ["district", "block", "basin", "sub_basin"]
-        assert "Aqueduct Water Risk" in cfg["domains"]
-        assert "Bio-physical Hazards" in cfg["pillars"]
+    assert not [slug for slug in VARIABLES if str(slug).startswith("aq_")]
 
 
 def test_population_metrics_are_exposed_as_static_admin_layers() -> None:
@@ -98,7 +85,9 @@ def test_population_metrics_are_exposed_as_static_admin_layers() -> None:
         assert cfg["supports_scenario_comparison"] is False
         assert cfg["units"] == units
         assert "Population Exposure" in cfg["domains"]
-        assert "Exposure" in cfg["pillars"]
+        # CHG-0273: exposure domains are unhomed from UI pillars (kept in DOMAINS
+        # for the pipeline), so the metric no longer resolves to any pillar.
+        assert cfg["pillars"] == []
 
 
 def test_groundwater_metrics_are_exposed_as_static_district_layers() -> None:
@@ -131,20 +120,19 @@ def test_groundwater_metrics_are_exposed_as_static_district_layers() -> None:
         assert cfg["units"] == units
         assert cfg["rank_higher_is_worse"] is worse_high
         assert "Groundwater Status & Availability" in cfg["domains"]
-        assert "Bio-physical Hazards" in cfg["pillars"]
+        # CHG-0273: Groundwater is unhomed from UI pillars (kept in DOMAINS for
+        # the pipeline), so the metric no longer resolves to any pillar.
+        assert cfg["pillars"] == []
 
 
-def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
-    """JRC metrics should appear as static Telangana-only admin layers."""
+def test_jrc_metrics_are_exposed_as_static_admin_layers() -> None:
+    """JRC metrics should appear as static admin layers without hard-coded state gating."""
     from india_resilience_tool.config.variables import VARIABLES
 
     for slug, label in [
         ("jrc_flood_depth_index_rp100", "Flood Severity Index (RP-100)"),
         ("jrc_flood_extent_rp100", "RP-100 Flood Extent"),
-        ("jrc_flood_depth_rp10", "RP-10 Flood Depth"),
-        ("jrc_flood_depth_rp50", "RP-50 Flood Depth"),
         ("jrc_flood_depth_rp100", "RP-100 Flood Depth"),
-        ("jrc_flood_depth_rp500", "RP-500 Flood Depth"),
     ]:
         cfg = VARIABLES[slug]
         assert cfg["label"] == label
@@ -159,46 +147,97 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
         assert cfg["supports_yearly_trend"] is False
         assert cfg["supports_baseline_comparison"] is False
         assert cfg["supports_scenario_comparison"] is False
-        assert cfg["supported_admin_states"] == ["Telangana"]
-        if slug == "jrc_flood_depth_index_rp100":
-            assert cfg["units"] == "severity class (1-5)"
-            assert cfg["display_units"] == ""
-            assert cfg["class_display_mode"] == "label_with_score"
-            assert cfg["class_labels"][1] == "VeryLow"
-        elif slug == "jrc_flood_extent_rp100":
+        assert cfg["supported_admin_states"] == []
+        if slug == "jrc_flood_extent_rp100":
             assert cfg["units"] == "fraction"
             assert cfg["display_units"] == "%"
             assert cfg["display_scale"] == 100.0
+        elif slug == "jrc_flood_depth_index_rp100":
+            assert cfg["units"] == "severity class (1-5)"
+            assert cfg.get("class_labels") is not None
         else:
             assert cfg["units"] == "m"
-        assert "Flood Inundation Depth (JRC)" in cfg["domains"]
-        assert "Bio-physical Hazards" in cfg["pillars"]
+        assert "Riverine Flood" in cfg["domains"]
+        # CHG-0273: Riverine Flood was re-homed from Bio-physical into Climate Hazards.
+        assert "Climate Hazards" in cfg["pillars"]
 
 
 def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> None:
     from india_resilience_tool.config.variables import VARIABLES
 
-    for slug, label, domain in [
-        ("composite_heat_risk", "Composite Heat Risk", "Heat Risk"),
-        ("composite_drought_risk", "Composite Drought Risk", "Drought Risk"),
+    for slug, label, domain, selection_mode, scenarios in [
+        ("composite_heat_risk", "Composite Heat Risk", "Heat Risk", "scenario_period", ["ssp245", "ssp585"]),
+        ("composite_drought_risk", "Composite Drought Risk", "Drought Risk", "scenario_period", ["ssp245", "ssp585"]),
         (
             "composite_flood_extreme_rainfall_risk",
-            "Composite Flood & Extreme Rainfall Risk",
-            "Flood & Extreme Rainfall Risk",
+            "Composite Flash Flood Risk",
+            "Extreme Rainfall | Flash Flood Risk",
+            "scenario_period",
+            ["ssp245", "ssp585"],
         ),
-        ("composite_heat_stress", "Composite Heat Stress", "Heat Stress"),
-        ("composite_cold_risk", "Composite Cold Risk", "Cold Risk"),
         (
-            "composite_agriculture_growing_conditions",
-            "Composite Agriculture & Growing Conditions",
-            "Agriculture & Growing Conditions",
+            "composite_flood_jrc_depth",
+            "Composite Riverine Flood Risk",
+            "Riverine Flood",
+            "static_snapshot",
+            ["snapshot"],
+        ),
+        ("composite_heat_stress", "Composite Heat Stress", "Heat Stress", "scenario_period", ["ssp245", "ssp585"]),
+        ("composite_cold_risk", "Composite Cold Risk", "Cold Risk", "scenario_period", ["ssp245", "ssp585"]),
+    ]:
+        cfg = VARIABLES[slug]
+        assert cfg["label"] == label
+        assert cfg["source_type"] == "derived"
+        assert cfg["selection_mode"] == selection_mode
+        assert cfg["supported_levels"] == ["district", "block"]
+        assert cfg["supported_spatial_families"] == ["admin"]
+        assert cfg["supported_statistics"] == ["mean"]
+        assert cfg["supports_yearly_trend"] is False
+        assert cfg["supports_baseline_comparison"] is False
+        assert cfg["supports_scenario_comparison"] is False
+        assert cfg["supported_scenarios"] == scenarios
+        assert cfg["units"] == "score"
+        assert domain in cfg["domains"]
+
+
+def test_sector_wise_composites_are_exposed_as_admin_derived_metrics() -> None:
+    from india_resilience_tool.config.variables import VARIABLES
+
+    for slug, label, domain, levels in [
+        ("composite_agricultural_risk", "Composite Agricultural Risk", "Agricultural Risk", ["district", "block"]),
+        ("composite_health_risk", "Composite Health Risk", "Health Risk", ["district", "block"]),
+        ("composite_industrial_risk", "Composite Industrial Risk", "Industrial Risk", ["district", "block"]),
+        (
+            "composite_investment_financial_risk",
+            "Composite Investment / Financial Risk",
+            "Investment / Financial Risk",
+            ["district", "block"],
+        ),
+        ("composite_infrastructure_risk", "Composite Infrastructure Risk", "Infrastructure Risk", ["district", "block"]),
+        (
+            "composite_asset_risk_thermal_power",
+            "Composite Asset Risk (Thermal Power Plants)",
+            "Asset Risk (Thermal Power Plants)",
+            ["district", "block"],
+        ),
+        (
+            "composite_asset_risk_hydropower",
+            "Composite Asset Risk (Hydropower Plants)",
+            "Asset Risk (Hydropower Plants)",
+            ["district", "block"],
+        ),
+        (
+            "composite_life_livelihood_loss_risk",
+            "Composite Life & Livelihood Loss Risk",
+            "Life & Livelihood Loss Risk",
+            ["district", "block"],
         ),
     ]:
         cfg = VARIABLES[slug]
         assert cfg["label"] == label
         assert cfg["source_type"] == "derived"
         assert cfg["selection_mode"] == "scenario_period"
-        assert cfg["supported_levels"] == ["district", "block"]
+        assert cfg["supported_levels"] == levels
         assert cfg["supported_spatial_families"] == ["admin"]
         assert cfg["supported_statistics"] == ["mean"]
         assert cfg["supports_yearly_trend"] is False
@@ -206,7 +245,29 @@ def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> Non
         assert cfg["supports_scenario_comparison"] is False
         assert cfg["supported_scenarios"] == ["ssp245", "ssp585"]
         assert cfg["units"] == "score"
+        assert cfg["admin_rebuild_command"] == "python -m tools.pipeline.build_proposal_bundles"
         assert domain in cfg["domains"]
+
+
+def test_r95p_interannual_variability_is_exposed_as_dashboard_derived_metric() -> None:
+    from india_resilience_tool.config.variables import VARIABLES
+
+    cfg = VARIABLES["r95p_interannual_variability"]
+    assert cfg["label"] == "Very Wet Day Precipitation Interannual Variability (R95p CV)"
+    assert cfg["source_type"] == "derived"
+    assert cfg["selection_mode"] == "scenario_period"
+    assert cfg["supported_levels"] == ["district", "block"]
+    assert cfg["supported_spatial_families"] == ["admin"]
+    assert cfg["supported_statistics"] == ["mean"]
+    assert cfg["supports_yearly_trend"] is False
+    assert cfg["supports_baseline_comparison"] is False
+    assert cfg["supports_scenario_comparison"] is False
+    assert cfg["supported_scenarios"] == ["ssp245", "ssp585"]
+    assert cfg["units"] == "ratio"
+    assert cfg["display_units"] == "ratio"
+    assert cfg["display_scale"] == 1.0
+    assert cfg["admin_rebuild_command"] == "python -m tools.pipeline.build_proposal_bundles"
+    assert "Asset Risk (Hydropower Plants)" in cfg["domains"]
 
 
 def test_current_period_display_label_is_stable() -> None:

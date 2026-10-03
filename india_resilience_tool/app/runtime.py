@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from typing import Mapping
 
+TOP_VIEW_DASHBOARD = "Dashboard"
+TOP_VIEW_DOCS = "Read the Docs"
+TOP_VIEW_OPTIONS = (TOP_VIEW_DASHBOARD, TOP_VIEW_DOCS)
+
 
 def _resolve_pre_render_view(
     session_state: Mapping[str, object],
@@ -30,6 +34,34 @@ def _resolve_pre_render_view(
     return default_view
 
 
+def _top_view_selector() -> str:
+    """Render and return the top-level app branch without mutating other state."""
+    import streamlit as st
+
+    # Seed/coerce before widget creation so no default argument is needed
+    # (avoids the double-default Session State API warning).
+    st.session_state.setdefault("irt_top_view", TOP_VIEW_DASHBOARD)
+    if st.session_state["irt_top_view"] not in TOP_VIEW_OPTIONS:
+        st.session_state["irt_top_view"] = TOP_VIEW_DASHBOARD
+
+    if hasattr(st, "segmented_control"):
+        selected = st.segmented_control(
+            "View",
+            TOP_VIEW_OPTIONS,
+            key="irt_top_view",
+            label_visibility="collapsed",
+        )
+    else:
+        selected = st.radio(
+            "View",
+            TOP_VIEW_OPTIONS,
+            key="irt_top_view",
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    return selected if selected in TOP_VIEW_OPTIONS else TOP_VIEW_DASHBOARD
+
+
 def run_app() -> None:
     """Run the Streamlit dashboard."""
     import os
@@ -43,29 +75,31 @@ def run_app() -> None:
         BLOCKS_PATH,
         DATA_DIR,
         DISTRICTS_PATH,
-        RIVER_BASIN_RECONCILIATION_PATH,
         RIVER_NETWORK_DISPLAY_PATH,
-        RIVER_REACHES_PATH,
-        RIVER_SUBBASIN_DIAGNOSTICS_PATH,
         SUBBASINS_PATH,
         resolve_processed_optimised_root,
     )
-    from india_resilience_tool.data.optimized_bundle import optimized_context_path, optimized_geometry_path
+    from india_resilience_tool.data.optimized_bundle import (
+        optimized_adm1_path,
+        optimized_context_path,
+        optimized_geometry_path,
+    )
+    from india_resilience_tool.data.adm2_loader import ensure_key_column as ensure_adm2_key_column
 
     from india_resilience_tool.app.geo_cache import (
         build_adm1_from_adm2,
+        build_adm3_geojson_by_district,
         enrich_adm2_with_state_names,
-        load_hydro_subbasin_selector_index,
+        load_local_adm1,
         load_local_adm2,
         load_local_adm3,
-        load_local_basin,
-        load_local_subbasin,
     )
     from india_resilience_tool.app.geography_controls import render_geography_and_analysis_focus
     from india_resilience_tool.app.landing_runtime import (
         build_glance_handoff_from_deep_dive,
         render_landing_page,
     )
+    from india_resilience_tool.app.views.read_the_docs_view import render_read_the_docs
     from india_resilience_tool.app.master_freshness import (
         master_needs_rebuild,
         state_profile_files_missing,
@@ -80,7 +114,6 @@ def run_app() -> None:
         apply_jump_once_flags,
         render_admin_level_selector,
         render_hover_toggle_if_portfolio,
-        render_spatial_family_selector,
     )
     from india_resilience_tool.app.sidebar_branding import render_sidebar_branding
     from india_resilience_tool.app.state import VIEW_MAP, VIEW_RANKINGS
@@ -151,16 +184,28 @@ def run_app() -> None:
     BASIN_GEOJSON = BASINS_PATH
     SUBBASIN_GEOJSON = SUBBASINS_PATH
     optimized_river_display = optimized_context_path("river_network_display.geojson", data_dir=DATA_DIR)
-    optimized_river_basin = optimized_context_path("river_basin_name_reconciliation.parquet", data_dir=DATA_DIR)
-    optimized_river_subbasin = optimized_context_path("river_subbasin_diagnostics.parquet", data_dir=DATA_DIR)
-    optimized_river_reaches = optimized_context_path("river_reaches.parquet", data_dir=DATA_DIR)
 
     RIVER_DISPLAY_GEOJSON = optimized_river_display if optimized_river_display.exists() else RIVER_NETWORK_DISPLAY_PATH
-    RIVER_BASIN_RECONCILIATION_CSV = optimized_river_basin if optimized_river_basin.exists() else RIVER_BASIN_RECONCILIATION_PATH
-    RIVER_SUBBASIN_DIAGNOSTICS_CSV = optimized_river_subbasin if optimized_river_subbasin.exists() else RIVER_SUBBASIN_DIAGNOSTICS_PATH
-    RIVER_REACHES_PARQUET = optimized_river_reaches if optimized_river_reaches.exists() else RIVER_REACHES_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
+
+    view = _top_view_selector()
+    if view == TOP_VIEW_DOCS:
+        render_read_the_docs()
+        return
+
+    def _ensure_adm2_keys(adm2_df):
+        if adm2_df is None:
+            return adm2_df
+        if "__key" not in getattr(adm2_df, "columns", []) and {"state_name", "district_name"} <= set(adm2_df.columns):
+            return ensure_adm2_key_column(
+                adm2_df,
+                state_col="state_name",
+                district_col="district_name",
+                alias_fn=alias,
+                key_col="__key",
+            )
+        return adm2_df
 
     if bool(st.session_state.get("landing_active", False)):
         if not ADM2_GEOJSON.exists():
@@ -169,17 +214,34 @@ def run_app() -> None:
             )
             st.stop()
 
-        adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
-        if "__key" not in adm2.columns and "district_name" in adm2.columns:
-            adm2["__key"] = adm2["district_name"].map(alias)
+        with perf_section("cold: load adm2 [landing]"):
+            adm2 = load_local_adm2(
+                str(ADM2_GEOJSON),
+                tolerance=SIMPLIFY_TOL_ADM2,
+                cache_version="adm2_state_v2",
+            )
+        adm2 = _ensure_adm2_keys(adm2)
 
-        adm1 = build_adm1_from_adm2(adm2)
+        with perf_section("cold: build adm1 [landing]"):
+            adm1 = build_adm1_from_adm2(adm2)
         with st.spinner("Preparing landing geography..."):
-            adm2 = enrich_adm2_with_state_names(adm2, adm1)
+            with perf_section("cold: enrich adm2 state names [landing]"):
+                adm2 = enrich_adm2_with_state_names(adm2, adm1)
+            with perf_section("cold: build adm3 by district [landing]"):
+                adm3_by_district = (
+                    build_adm3_geojson_by_district(
+                        str(ADM3_GEOJSON),
+                        tolerance=SIMPLIFY_TOL_ADM3,
+                        mtime=ADM3_GEOJSON.stat().st_mtime,
+                    )
+                    if ADM3_GEOJSON.exists()
+                    else None
+                )
 
         render_landing_page(
             adm1=adm1,
             adm2=adm2,
+            adm3_by_district=adm3_by_district,
             data_dir=DATA_DIR,
         )
         return
@@ -187,9 +249,9 @@ def run_app() -> None:
     with st.sidebar:
         render_sidebar_branding(logo_path=LOGO_PATH)
 
-        spatial_family = render_spatial_family_selector(label_visibility="collapsed")
+        spatial_family = "admin"
+        st.session_state["spatial_family"] = spatial_family
 
-        # Family-aware level selector
         admin_level = render_admin_level_selector(
             label_visibility="collapsed",
             centered=True,
@@ -197,11 +259,7 @@ def run_app() -> None:
         )
 
         # Read current analysis mode (default depends on admin level)
-        if admin_level == "sub_basin":
-            default_mode = "Single sub-basin focus"
-        elif admin_level == "basin":
-            default_mode = "Single basin focus"
-        elif admin_level == "block":
+        if admin_level == "block":
             default_mode = "Single block focus"
         else:
             default_mode = "Single district focus"
@@ -212,19 +270,13 @@ def run_app() -> None:
 
         state_placeholder = st.empty()
         metric_ui_placeholder = st.empty()
-        color_slider_placeholder = st.empty()
         st.markdown("---")
 
-        master_controls_placeholder = st.empty()
-        st.markdown("---")
-
-        with st.expander("Developer", expanded=False):
-            st.checkbox(
-                "Show performance timings",
-                key="perf_enabled",
-                value=st.session_state.get("perf_enabled", DEBUG),
-                help="Shows per-section timings for the current rerun.",
-            )
+        st.checkbox(
+            "Show performance timings",
+            key="perf_enabled",
+            help="Per-section timings for the current rerun, plus a compact 'Total ms' line above the map.",
+        )
 
         perf_panel_placeholder = st.empty()
 
@@ -389,7 +441,7 @@ def run_app() -> None:
     # Main layout: left (workspace) + right (panel: scrollable, collapsible)
     rhs_collapsed = bool(st.session_state.get("right_panel_collapsed", False))
 
-    col_weights = [5, 3] if not rhs_collapsed else [9.4, 0.6]
+    col_weights = [6, 2.4] if not rhs_collapsed else [9.4, 0.6]
     col1, col2 = st.columns(col_weights)
 
     with col1:
@@ -413,9 +465,52 @@ def run_app() -> None:
         render_perf_panel_safe()
         st.stop()
 
-    adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
-    if "__key" not in adm2.columns and "district_name" in adm2.columns:
-        adm2["__key"] = adm2["district_name"].map(alias)
+    # ADM1-first boot: if the precomputed adm1 artifact is present, load only
+    # the lightweight state polygons and defer ADM2 to the per-state shard.
+    # Fall back to the full ADM2 monolith (with a visible warning) only when
+    # the artifact has not been built yet.
+    optimized_adm1_artifact = optimized_adm1_path(data_dir=DATA_DIR)
+    if optimized_adm1_artifact.exists():
+        with perf_section("cold: load adm1 artifact [detail]"):
+            adm1 = load_local_adm1(str(optimized_adm1_artifact))
+        adm2 = None
+        _peeked_state = str(st.session_state.get("selected_state", "All") or "All").strip()
+        if _peeked_state and _peeked_state != "All":
+            _peeked_shard = optimized_geometry_path(
+                level="district",
+                state=_peeked_state,
+                data_dir=DATA_DIR,
+            )
+            if _peeked_shard.exists():
+                with perf_section(f"cold: load adm2 [shard {_peeked_state}]"):
+                    adm2 = load_local_adm2(
+                        str(_peeked_shard),
+                        tolerance=SIMPLIFY_TOL_ADM2,
+                        cache_version="adm2_state_v2",
+                    )
+                if (
+                    adm2 is not None
+                    and "__key" not in adm2.columns
+                    and "district_name" in adm2.columns
+                ):
+                    adm2 = _ensure_adm2_keys(adm2)
+    else:
+        st.caption(
+            "adm1.geojson artifact not found; loading the full ADM2 (slow first paint). "
+            "Run `python -m tools.geodata.build_adm1_geojson --overwrite` to fix."
+        )
+        with perf_section("cold: load adm2 [detail/fallback]"):
+            adm2 = load_local_adm2(
+                str(ADM2_GEOJSON),
+                tolerance=SIMPLIFY_TOL_ADM2,
+                cache_version="adm2_state_v2",
+            )
+        adm2 = _ensure_adm2_keys(adm2)
+        with perf_section("cold: build adm1 [detail/fallback]"):
+            adm1 = build_adm1_from_adm2(adm2)
+        with st.spinner("Enriching district data with state names..."):
+            with perf_section("cold: enrich adm2 state names [detail/fallback]"):
+                adm2 = enrich_adm2_with_state_names(adm2, adm1)
 
     # -------------------------
     # Metric selection ribbon (pillar → domain → metric → scenario/period/stat + map mode)
@@ -426,6 +521,7 @@ def run_app() -> None:
         data_dir=DATA_DIR,
         pilot_state=PILOT_STATE,
         resolve_processed_root_fn=resolve_processed_optimised_root,
+        prefer_optimized_runtime=True,
         attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
         master_needs_rebuild_fn=master_needs_rebuild,
         state_profile_files_missing_fn=state_profile_files_missing,
@@ -449,46 +545,32 @@ def run_app() -> None:
     map_mode = ribbon_ctx.map_mode
     metric_col = ribbon_ctx.metric_col
     _ribbon_ready = ribbon_ctx.ribbon_ready
-    rebuild_master_csv_if_needed = ribbon_ctx.rebuild_master_csv_if_needed
     _load_master_and_schema = ribbon_ctx.load_master_and_schema_fn
 
-    # -------------------------
-    # Master controls (sidebar)
-    # -------------------------
-    with master_controls_placeholder.container():
-        st.markdown("#### Master CSV controls")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            auto_check = st.button("Check / Rebuild master (auto)", key="btn_auto_check")
-        with col_b:
-            force_btn = st.button("Rebuild now", key="btn_force_rebuild")
-
-    if auto_check:
-        ok, msg = rebuild_master_csv_if_needed(force=False, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON)
-        if ok:
-            st.success("Master CSV rebuilt or already up-to-date.")
-        else:
-            st.info(f"Master CSV status: {msg}")
-
-    if force_btn:
-        ok, msg = rebuild_master_csv_if_needed(force=True, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON)
-        if ok:
-            st.success("Master CSV force-rebuilt.")
-        else:
-            st.error(f"Forced rebuild failed: {msg}")
-
-    # -------------------------
-    # Build adm1 & enrich adm2 state names
-    # -------------------------
-    adm1 = build_adm1_from_adm2(adm2)
-    with st.spinner("Enriching district data with state names..."):
-        adm2 = enrich_adm2_with_state_names(adm2, adm1)
-
     # Sync pending selections
+    _pending_selection_applied = False
     if "pending_selected_state" in st.session_state:
         st.session_state["selected_state"] = st.session_state.pop("pending_selected_state")
+        _pending_selection_applied = True
     if "pending_selected_district" in st.session_state:
         st.session_state["selected_district"] = st.session_state.pop("pending_selected_district")
+        _pending_selection_applied = True
+    if _pending_selection_applied:
+        # Let the district-option seed logic re-derive the widget option from
+        # the new canonical selection instead of overriding it (CHG-0279).
+        from india_resilience_tool.app.state import reset_district_option_state
+
+        reset_district_option_state(st.session_state)
+
+    # Reset View: bump the map key nonce so st_folium remounts, dropping its
+    # retained camera and stale click payload (CHG-0281).
+    if st.session_state.pop("map_reset_requested", False):
+        st.session_state["map_key_nonce"] = int(st.session_state.get("map_key_nonce", 0)) + 1
+
+    adm1_for_geography_controls = adm1
+    if adm2 is not None:
+        with perf_section("cold: build adm1 from loaded adm2 [sidebar]"):
+            adm1_for_geography_controls = build_adm1_from_adm2(adm2)
 
     geo_ctx = render_geography_and_analysis_focus(
         state_placeholder=state_placeholder,
@@ -498,12 +580,11 @@ def run_app() -> None:
         sel_placeholder=SEL_PLACEHOLDER,
         view_map=VIEW_MAP,
         view_rankings=VIEW_RANKINGS,
-        adm1=adm1,
+        adm1=adm1_for_geography_controls,
         adm2=adm2,
         adm3_geojson=ADM3_GEOJSON,
-        basins_geojson=BASIN_GEOJSON,
-        subbasins_geojson=SUBBASIN_GEOJSON,
         river_display_geojson=RIVER_DISPLAY_GEOJSON,
+        data_dir=DATA_DIR,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
     )
 
@@ -511,9 +592,7 @@ def run_app() -> None:
     selected_state = geo_ctx.selected_state
     selected_district = geo_ctx.selected_district
     selected_block = geo_ctx.selected_block
-    selected_basin = geo_ctx.selected_basin
-    selected_subbasin = geo_ctx.selected_subbasin
-    show_river_network = geo_ctx.show_river_network
+    overlay_states = geo_ctx.overlay_states
     gdf_state_districts = geo_ctx.gdf_state_districts
     current_view = _resolve_pre_render_view(
         st.session_state,
@@ -548,12 +627,15 @@ def run_app() -> None:
             "district": selected_district,
             "block": selected_block,
         }
-    elif _admin_level_for_zoom == "sub_basin" and selected_subbasin != "All":
-        st.session_state.pop("_pending_block_zoom", None)
-    elif _admin_level_for_zoom == "basin" and selected_basin != "All":
-        st.session_state.pop("_pending_block_zoom", None)
     elif selected_district != "All":
-        district_row = gdf_state_districts[gdf_state_districts["district_name"] == selected_district]
+        _district_mask = gdf_state_districts["district_name"] == selected_district
+        # Disambiguate duplicated district names using the effective state
+        # resolved by the geography controls (CHG-0279).
+        if selected_state != "All" and "state_name" in gdf_state_districts.columns:
+            _district_mask &= (
+                gdf_state_districts["state_name"].astype(str).map(alias) == alias(selected_state)
+            )
+        district_row = gdf_state_districts[_district_mask]
         if not district_row.empty:
             centroid = district_row.iloc[0].geometry.centroid
             st.session_state["map_center"] = [float(centroid.y), float(centroid.x)]
@@ -576,7 +658,7 @@ def run_app() -> None:
     if not _ready_for_map:
         with col1:
             st.info(
-                "Complete the selections in the **ribbon above the map** (Assessment pillar, Domain, Metric, Scenario, Period, Statistic, Map mode) "
+                "Complete the selections in the **ribbon above the map** (Domain, Metric, Scenario, Period, Statistic, Map mode) "
                 "and choose an **Analysis focus** in the sidebar to render the map."
             )
         render_perf_panel_safe()
@@ -587,12 +669,9 @@ def run_app() -> None:
 
     details_need_geometry = details_require_geometry(
         adm_level=_admin_level,
-        spatial_family=spatial_family,
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
     )
 
     runtime_adm2_geojson = ADM2_GEOJSON
@@ -604,8 +683,34 @@ def run_app() -> None:
         )
         if optimized_district_geojson.exists():
             runtime_adm2_geojson = optimized_district_geojson
-            if include_map or details_need_geometry:
-                adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+            if (include_map or details_need_geometry) and adm2 is None:
+                with perf_section(f"cold: load adm2 [shard {selected_state}]"):
+                    adm2 = load_local_adm2(
+                        str(runtime_adm2_geojson),
+                        tolerance=SIMPLIFY_TOL_ADM2,
+                        cache_version="adm2_state_v2",
+                    )
+                adm2 = _ensure_adm2_keys(adm2)
+        elif (include_map or details_need_geometry) and adm2 is None:
+            st.caption(
+                f"Optimized ADM2 shard not found for {selected_state}; loading the full ADM2 fallback."
+            )
+            with perf_section("cold: load adm2 [detail/fallback]"):
+                adm2 = load_local_adm2(
+                    str(runtime_adm2_geojson),
+                    tolerance=SIMPLIFY_TOL_ADM2,
+                    cache_version="adm2_state_v2",
+                )
+            adm2 = _ensure_adm2_keys(adm2)
+    elif (include_map or details_need_geometry) and adm2 is None:
+        st.caption("Nationwide district geometry requires the full ADM2 fallback.")
+        with perf_section("cold: load adm2 [detail/all fallback]"):
+            adm2 = load_local_adm2(
+                str(runtime_adm2_geojson),
+                tolerance=SIMPLIFY_TOL_ADM2,
+                cache_version="adm2_state_v2",
+            )
+        adm2 = _ensure_adm2_keys(adm2)
 
     runtime_adm3_geojson = ADM3_GEOJSON
     if selected_state != "All":
@@ -617,48 +722,14 @@ def run_app() -> None:
         if optimized_block_geojson.exists():
             runtime_adm3_geojson = optimized_block_geojson
 
-    runtime_basin_geojson = BASIN_GEOJSON
-    optimized_basin_geojson = optimized_geometry_path(level="basin", data_dir=DATA_DIR)
-    if optimized_basin_geojson.exists():
-        runtime_basin_geojson = optimized_basin_geojson
-
-    runtime_subbasin_geojson = SUBBASIN_GEOJSON
-    if selected_basin != "All":
-        hydro_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=DATA_DIR)
-        if hydro_index_path.exists():
-            try:
-                hydro_selector_index = load_hydro_subbasin_selector_index(str(hydro_index_path))
-            except Exception:
-                hydro_selector_index = {}
-            basin_id = str((hydro_selector_index.get("basin_ids_by_name") or {}).get(str(selected_basin).strip()) or "").strip()
-            if basin_id:
-                optimized_subbasin_geojson = optimized_geometry_path(
-                    level="sub_basin",
-                    basin_id=basin_id,
-                    data_dir=DATA_DIR,
-                )
-                if optimized_subbasin_geojson.exists():
-                    runtime_subbasin_geojson = optimized_subbasin_geojson
-
     # Load fine-grain boundaries only when the map or details panel still needs them.
     if _admin_level == "block" and (include_map or details_need_geometry):
         if not runtime_adm3_geojson.exists():
             st.error(f"ADM3 geojson not found at {runtime_adm3_geojson}. Please provide block_4326.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_adm3(str(runtime_adm3_geojson), tolerance=SIMPLIFY_TOL_ADM3)
-    elif _admin_level == "basin" and (include_map or details_need_geometry):
-        if not runtime_basin_geojson.exists():
-            st.error(f"Basin geojson not found at {runtime_basin_geojson}. Please provide basins.geojson.")
-            render_perf_panel_safe()
-            st.stop()
-        adm3 = load_local_basin(str(runtime_basin_geojson))
-    elif _admin_level == "sub_basin" and (include_map or details_need_geometry):
-        if not runtime_subbasin_geojson.exists():
-            st.error(f"Sub-basin geojson not found at {runtime_subbasin_geojson}. Please provide subbasins.geojson.")
-            render_perf_panel_safe()
-            st.stop()
-        adm3 = load_local_subbasin(str(runtime_subbasin_geojson))
+        with perf_section("cold: load adm3"):
+            adm3 = load_local_adm3(str(runtime_adm3_geojson), tolerance=SIMPLIFY_TOL_ADM3)
     else:
         adm3 = None
 
@@ -672,8 +743,12 @@ def run_app() -> None:
         render_perf_panel_safe()
         st.stop()
 
-    # Build map + rankings artifacts
-    MAP_WIDTH, MAP_HEIGHT = 780, 560
+    # Build map + rankings artifacts.
+    # When the ribbon is collapsed, the three-row ribbon (~250px) frees vertical
+    # space; grow the map to fill it so collapse actually expands the canvas.
+    MAP_WIDTH, MAP_HEIGHT = 780, 660
+    if bool(st.session_state.get("ribbon_collapsed", False)):
+        MAP_HEIGHT += 250
     pending_zoom = st.session_state.pop("_pending_block_zoom", None)
 
     artifacts = build_map_and_rankings(
@@ -694,12 +769,9 @@ def run_app() -> None:
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
-        spatial_family=spatial_family,
         include_map=include_map,
         crosswalk_overlay=st.session_state.get("crosswalk_overlay"),
-        show_river_network=show_river_network,
+        overlay_states=overlay_states,
         hover_enabled=bool(st.session_state.get("hover_enabled", True)),
         map_center=list(st.session_state["map_center"]),
         map_zoom=float(st.session_state["map_zoom"]),
@@ -708,18 +780,43 @@ def run_app() -> None:
         normalize_state_fn=normalize_name,
         adm2_geojson_path=runtime_adm2_geojson,
         adm3_geojson_path=runtime_adm3_geojson,
-        basin_geojson_path=runtime_basin_geojson,
-        subbasin_geojson_path=runtime_subbasin_geojson,
+        basin_geojson_path=BASIN_GEOJSON,
+        subbasin_geojson_path=SUBBASIN_GEOJSON,
         river_display_geojson_path=RIVER_DISPLAY_GEOJSON,
-        river_basin_reconciliation_path=RIVER_BASIN_RECONCILIATION_CSV,
-        river_subbasin_diagnostics_path=RIVER_SUBBASIN_DIAGNOSTICS_CSV,
+        data_dir=DATA_DIR,
+        selected_bundle=str(st.session_state.get("selected_bundle") or "").strip() or None,
+        load_master_and_schema_fn=_load_master_and_schema,
         simplify_tol_adm2=SIMPLIFY_TOL_ADM2,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
         map_height=MAP_HEIGHT,
-        color_slider_placeholder=color_slider_placeholder,
         perf_section=perf_section,
         render_perf_panel_safe=render_perf_panel_safe,
     )
+
+    # Optional hydro boundary overlay — draws basin/sub-basin outline on the map
+    # when a chip is clicked in the Hydrological Context card.
+    _active_hydro = st.session_state.get("active_hydro_boundary_overlay")
+    _hydro_key_suffix = ""
+    if isinstance(_active_hydro, dict):
+        try:
+            from india_resilience_tool.app.hydro_boundary_overlay import (
+                add_hydro_boundary_overlay_to_map,
+            )
+            add_hydro_boundary_overlay_to_map(
+                m=artifacts.folium_map,
+                active_overlay=_active_hydro,
+                data_dir=DATA_DIR,
+            )
+        except Exception:
+            pass
+        try:
+            import hashlib
+            import json
+            _hydro_key_suffix = hashlib.md5(
+                json.dumps(_active_hydro, sort_keys=True).encode("utf-8")
+            ).hexdigest()[:8]
+        except Exception:
+            _hydro_key_suffix = ""
 
     from india_resilience_tool.app.left_panel_runtime import render_left_panel
 
@@ -730,6 +827,7 @@ def run_app() -> None:
         map_mode=artifacts.map_mode,
         map_width=MAP_WIDTH,
         map_height=MAP_HEIGHT,
+        map_key_suffix=_hydro_key_suffix,
         perf_section=perf_section,
         variable_slug=str(VARIABLE_SLUG or ""),
         sel_scenario=sel_scenario,
@@ -738,8 +836,6 @@ def run_app() -> None:
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
         level=_admin_level,
         table_df=artifacts.table_df,
         has_baseline=artifacts.has_baseline,
@@ -750,7 +846,7 @@ def run_app() -> None:
         portfolio_remove_fn=_portfolio_remove,
         portfolio_normalize_fn=_portfolio_normalize,
         merged=artifacts.merged,
-        river_overlay_message=artifacts.river_overlay_message,
+        overlay_messages=artifacts.overlay_messages,
         blocked_message=artifacts.blocked_message,
     )
 
@@ -789,9 +885,6 @@ def run_app() -> None:
                     selected_district=selected_district,
                     selected_block=selected_block,
                     admin_level=_admin_level,
-                    spatial_family=spatial_family,
-                    selected_basin=selected_basin,
-                    selected_subbasin=selected_subbasin,
                     variables=VARIABLES,
                     variable_slug=str(VARIABLE_SLUG or ""),
                     index_group_labels=INDEX_GROUP_LABELS,
@@ -807,8 +900,6 @@ def run_app() -> None:
                     processed_root=PROCESSED_ROOT if PROCESSED_ROOT is not None else Path("."),
                     pilot_state=PILOT_STATE,
                     data_dir=DATA_DIR,
-                    river_reaches_path=RIVER_REACHES_PARQUET,
-                    river_overlay_message=artifacts.river_overlay_message,
                     logo_path=LOGO_PATH,
                     fig_size_panel=FIG_SIZE_PANEL,
                     fig_dpi_panel=FIG_DPI_PANEL,
@@ -843,7 +934,6 @@ def run_app() -> None:
     render_perf_panel_safe()
     st.markdown("---")
     st.caption(
-        "Notes: first choose an Assessment pillar (e.g. Climate Hazards, Bio-physical Hazards), "
-        "then a Domain, then a Metric within that domain. "
+        "Notes: choose a Domain, then a Metric within that domain. "
         "Details panel shows risk cards, trends, narrative, and case-study export."
     )

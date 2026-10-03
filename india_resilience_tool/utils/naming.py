@@ -28,6 +28,23 @@ NAME_ALIASES: dict[str, str] = {
     "b r ambedkar bhupalpally": "jayashankar bhupalpalli",
     "bhadradri kothagudem": "bhadradri kothagudem",
     "jogulamba gadwal": "jogulamba gadwal",
+    # Maharashtra: canonical block-boundary spellings -> district-boundary
+    # (census) spellings, so block<->district joins reconcile. Keys/values are in
+    # normalize_name form (lowercase, spaces preserved); aliasing runs before
+    # compaction. Join keys are state-prefixed, so these cannot collide cross-state.
+    "ahamadnagar": "ahmednagar",
+    "amaravati": "amravati",
+    "bid": "beed",
+    "mumbai city": "mumbai",
+    "sub urban mumbai": "mumbai suburban",
+    "raygad": "raigarh",
+    # CHG-0300: the '/' in "Pulicherla H/O Reddivaripalle" round-trips through the
+    # processed tree as '_' (hydro_fs_token) and returns as a space, while
+    # normalize_name deletes '/' outright -- so the master key said "h o" and the
+    # boundary roster said "ho", and the roster gate dropped the row. Map the
+    # round-tripped form onto the canonical one. Direction matters: do NOT add the
+    # reverse entry, or the boundary-side key changes and the vendor join breaks.
+    "pulicherla h o reddivaripalle": "pulicherla ho reddivaripalle",
 }
 
 
@@ -95,10 +112,17 @@ def safe_fs_component(s: str) -> str:
     """
     Return the legacy filesystem-safe token used by processed output folders.
 
-    This preserves the historical hydro/admin folder convention of replacing
-    spaces and slashes with underscores without changing case.
+    Replaces spaces and slashes with underscores (case preserved), then strips any
+    Windows-illegal trailing dots/spaces so the component is traversable on Win32
+    (a trailing '.' makes ``pathlib.glob``'s scandir raise ``WinError 3``). Only
+    trailing '.'/' ' are removed; interior dots and trailing underscores are kept,
+    so every token that does not already end in a dot/space is byte-identical to
+    before. A degenerate all-dot/space input falls back to "_" (never a
+    dot-terminated token).
     """
-    return str(s).strip().replace(" ", "_").replace("/", "_")
+    token = str(s).strip().replace(" ", "_").replace("/", "_")
+    cleaned = token.rstrip(" .")
+    return cleaned if cleaned else "_"
 
 
 def hydro_fs_token(s: str, *, max_length: int = 48) -> str:

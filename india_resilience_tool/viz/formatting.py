@@ -61,9 +61,31 @@ def _get_metric_class_labels(metric_slug: Optional[str]) -> dict[int, str]:
     return labels
 
 
-def _metric_uses_label_with_score(metric_slug: Optional[str]) -> bool:
+def _metric_class_display_mode(metric_slug: Optional[str]) -> Optional[str]:
+    """Return the metric's class_display_mode (e.g. 'label_with_score', 'label_only'), or None."""
     mode = str(_get_metric_cfg(metric_slug).get("class_display_mode") or "").strip().lower()
-    return mode == "label_with_score" and bool(_get_metric_class_labels(metric_slug))
+    return mode or None
+
+
+def _metric_uses_class_display(metric_slug: Optional[str]) -> bool:
+    """Return whether a metric renders as a labeled ordinal class (any class-display mode)."""
+    mode = _metric_class_display_mode(metric_slug)
+    return mode in ("label_with_score", "label_only") and bool(_get_metric_class_labels(metric_slug))
+
+
+def metric_uses_class_display(metric_slug: Optional[str]) -> bool:
+    """Public: whether a metric renders as a labeled ordinal class (any class-display mode).
+
+    Used by map/tooltip code to suppress a redundant separate risk-class row when the
+    value itself is already shown as a class label.
+    """
+    return _metric_uses_class_display(metric_slug)
+
+
+def _metric_uses_label_with_score(metric_slug: Optional[str]) -> bool:
+    return _metric_class_display_mode(metric_slug) == "label_with_score" and bool(
+        _get_metric_class_labels(metric_slug)
+    )
 
 
 def _format_metric_class_value(
@@ -83,10 +105,20 @@ def _format_metric_class_value(
         return na
 
     labels = _get_metric_class_labels(metric_slug)
+    mode = _metric_class_display_mode(metric_slug)
     rounded = int(round(xf))
     if rounded in labels and abs(xf - rounded) <= _CLASS_DISPLAY_TOLERANCE:
+        # label_only shows a bare class label (e.g. deterioration "Worsens by 1 class");
+        # label_with_score appends the numeric code (e.g. "Scarcity (3)").
+        if mode == "label_only":
+            return f"{labels[rounded]}"
         return f"{labels[rounded]} ({rounded})"
-    return f"{format_number(xf, decimals=1, thousand_sep=thousand_sep, na=na)} / 5"
+    # Between-class fallback (non-integer). label_only never hits this (its values are
+    # always integer class steps); label_with_score shows value out of the class max.
+    if mode == "label_only":
+        return format_number(xf, decimals=1, thousand_sep=thousand_sep, na=na)
+    max_code = max(labels) if labels else 5
+    return f"{format_number(xf, decimals=1, thousand_sep=thousand_sep, na=na)} / {max_code}"
 
 
 def get_metric_display_units(
@@ -95,7 +127,7 @@ def get_metric_display_units(
     units: Optional[str] = None,
 ) -> str:
     """Return the units string that should appear in the UI."""
-    if _metric_uses_label_with_score(metric_slug):
+    if _metric_uses_class_display(metric_slug):
         return ""
     display_units, _ = get_metric_display_meta(metric_slug=metric_slug, units=units)
     return display_units
@@ -257,7 +289,7 @@ def format_metric_value(
     na: str = "—",
 ) -> str:
     """Format a metric value with metric-aware decimals and optional units."""
-    if _metric_uses_label_with_score(metric_slug):
+    if _metric_uses_class_display(metric_slug):
         return _format_metric_class_value(
             x,
             metric_slug=metric_slug,
@@ -283,7 +315,7 @@ def format_metric_compact(
     na: str = "—",
 ) -> str:
     """Format a metric compactly, appending units only when needed for clarity."""
-    if _metric_uses_label_with_score(metric_slug):
+    if _metric_uses_class_display(metric_slug):
         return _format_metric_class_value(
             x,
             metric_slug=metric_slug,

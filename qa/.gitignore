@@ -1,0 +1,6 @@
+# Session state = credentials-equivalent. Never commit.
+.auth/
+# Run artifacts (screenshots, DOM dumps, console logs) are large + transient.
+runs/
+# Node noise if a local install ever happens here.
+node_modules/

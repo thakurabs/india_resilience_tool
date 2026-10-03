@@ -9,25 +9,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, NamedTuple, Optional, Sequence
+from typing import Any, Mapping, MutableMapping, Optional, Sequence
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-from india_resilience_tool.analysis.bundle_scores import (
-    BundleMetricSpec,
-    aggregate_state_bundle_scores,
-    compute_bundle_score_frame,
-    compute_metric_driver_frame,
-    normalized_metric_column,
+from india_resilience_tool.app.dashboard_bundle_runtime import dashboard_bundle_display
+from india_resilience_tool.app.glance_exports import (
+    build_glance_answer_pack_xlsx,
+    build_glance_answer_text,
+    build_glance_csv_bytes,
+    build_glance_export_frame,
+    glance_export_filename,
 )
 from india_resilience_tool.config.bundle_weights import get_bundle_weights
-from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
-from india_resilience_tool.app.geography import list_available_states_from_processed_root
+from india_resilience_tool.config.dashboard_bundles import (
+    dashboard_bundle_names,
+    get_dashboard_bundle_spec,
+)
 from india_resilience_tool.app.views.map_view import (
     build_choropleth_map_with_geojson_layer,
     extract_click_coordinates,
+    find_block_at_coordinates,
     find_district_at_coordinates,
     find_state_at_coordinates,
     render_map_view,
@@ -35,19 +39,10 @@ from india_resilience_tool.app.views.map_view import (
 from india_resilience_tool.config.constants import MAX_LAT, MAX_LON, MIN_LAT, MIN_LON
 from india_resilience_tool.config.variables import (
     VARIABLES,
-    get_metrics_for_bundle,
     get_pillar_for_domain,
 )
-from india_resilience_tool.data.master_columns import resolve_metric_column
-from india_resilience_tool.data.master_loader import (
-    load_master_csvs,
-    master_source_signature,
-    normalize_master_columns,
-    parse_master_schema,
-    resolve_preferred_master_path,
-)
 from india_resilience_tool.data.optimized_bundle import (
-    optimized_master_sources_from_metric_root,
+    optimized_glance_root,
 )
 from india_resilience_tool.utils.naming import alias, normalize_name
 from india_resilience_tool.viz.charts import (
@@ -60,9 +55,9 @@ from india_resilience_tool.viz.charts import (
 from india_resilience_tool.viz.colors import (
     apply_fillcolor_binned,
     build_vertical_binned_legend_block_html,
+    DEFAULT_CHOROPLETH_NLEVELS,
+    IRT_COMPOSITE_CMAP,
 )
-from paths import resolve_processed_optimised_root, resolve_processed_root
-
 
 LANDING_DEFAULT_BUNDLE = "Heat Risk"
 LANDING_DEFAULT_SCENARIO = "ssp585"
@@ -78,27 +73,8 @@ LANDING_MAP_REPLAY_GUARD_KEY = "landing_map_replay_guard"
 LANDING_MAP_CONTEXT_KEY = "landing_map_context"
 LANDING_MAP_INPUT_ARMED_KEY = "landing_map_input_armed"
 LANDING_TABS = ("Rankings", "Compare")
-
-LANDING_DOMAIN_DISPLAY: dict[str, str] = {
-    "Heat Risk": "Heat",
-    "Heat Stress": "Heat Stress",
-    "Cold Risk": "Cold",
-    "Agriculture & Growing Conditions": "Agriculture",
-    "Flood & Extreme Rainfall Risk": "Extreme Rainfall",
-    "Rainfall Totals & Typical Wetness": "Rainfall",
-    "Drought Risk": "Drought",
-    "Temperature Variability": "Temperature Variability",
-}
-
-LANDING_DOMAIN_ORDER: tuple[str, ...] = (
-    "Heat Risk",
-    "Drought Risk",
-    "Flood & Extreme Rainfall Risk",
-    "Heat Stress",
-    "Cold Risk",
-    "Agriculture & Growing Conditions",
-)
-LANDING_VISIBLE_DOMAINS: tuple[str, ...] = LANDING_DOMAIN_ORDER
+LANDING_BAND_FILTER_KEY = "landing_band_filter"
+LANDING_BAND_DISPLAY_ORDER = ("Very High", "High", "Moderate", "Low")
 
 LANDING_PERIOD_SHORT_LABELS: dict[str, str] = {
     "Current": "Current",
@@ -109,36 +85,25 @@ LANDING_PERIOD_SHORT_LABELS: dict[str, str] = {
 
 
 @dataclass(frozen=True)
-class LandingMetricContext:
-    """Resolved bundle-metric context used by the landing selectors and score prep."""
-
-    spec: BundleMetricSpec
-    source_signature: tuple[tuple[str, Optional[float]], ...]
-    source_paths: tuple[str, ...]
-    available_pairs: tuple[tuple[str, str], ...]
-
-
-@dataclass(frozen=True)
 class LandingDriverContext:
     """Best-effort component-metric context used only for Glance driver display."""
 
     district_scores: pd.DataFrame
-    metric_specs: list[BundleMetricSpec]
+    metric_specs: list[object]
     available: bool
     reason: Optional[str] = None
 
 
-class _ContextKeyEntry(NamedTuple):
-    """Decoded landing bundle-context cache entry."""
+@dataclass(frozen=True)
+class GlancePairContext:
+    """Persisted Glance view-model tables for one bundle/scenario/period."""
 
-    slug: str
-    label: str
-    column: str
-    weight: float
-    higher_is_worse: bool
-    source_signature: tuple[tuple[str, Optional[float]], ...]
-    source_paths: tuple[str, ...]
-    available_pairs: tuple[tuple[str, str], ...]
+    district: pd.DataFrame
+    state: pd.DataFrame
+    drivers: pd.DataFrame
+    attributes: pd.DataFrame
+    distributions: pd.DataFrame
+    block: Optional[pd.DataFrame] = None
 
 
 def _clear_landing_map_click_token(session_state: MutableMapping[str, object]) -> None:
@@ -180,6 +145,7 @@ def _landing_defaults() -> dict[str, object]:
         "landing_focus_level": "india",
         "landing_selected_state": None,
         "landing_selected_district": None,
+        "landing_selected_block": None,
         "landing_tab": LANDING_DEFAULT_TAB,
         "landing_search_selection": None,
         "landing_search_last_applied": None,
@@ -212,6 +178,7 @@ def set_landing_focus_india(session_state: MutableMapping[str, object]) -> None:
     session_state["landing_focus_level"] = "india"
     session_state["landing_selected_state"] = None
     session_state["landing_selected_district"] = None
+    session_state["landing_selected_block"] = None
 
 
 def set_landing_focus_state(
@@ -222,6 +189,7 @@ def set_landing_focus_state(
     session_state["landing_focus_level"] = "state"
     session_state["landing_selected_state"] = str(state_name).strip() or None
     session_state["landing_selected_district"] = None
+    session_state["landing_selected_block"] = None
 
 
 def set_landing_focus_district(
@@ -233,14 +201,33 @@ def set_landing_focus_district(
     session_state["landing_focus_level"] = "district"
     session_state["landing_selected_state"] = str(state_name).strip() or None
     session_state["landing_selected_district"] = str(district_name).strip() or None
+    session_state["landing_selected_block"] = None
+
+
+def set_landing_focus_block(
+    session_state: MutableMapping[str, object],
+    state_name: str,
+    district_name: str,
+    block_name: Optional[str] = None,
+) -> None:
+    """Move the landing view into block focus while preserving district context."""
+    session_state["landing_focus_level"] = "block"
+    session_state["landing_selected_state"] = str(state_name).strip() or None
+    session_state["landing_selected_district"] = str(district_name).strip() or None
+    session_state["landing_selected_block"] = str(block_name or "").strip() or None
 
 
 def apply_landing_back(session_state: MutableMapping[str, object]) -> None:
     """Reverse the landing drill-down hierarchy by one step."""
     focus_level = str(session_state.get("landing_focus_level", "india")).strip().lower()
+    if focus_level == "block":
+        session_state["landing_focus_level"] = "district"
+        session_state["landing_selected_block"] = None
+        return
     if focus_level == "district":
         session_state["landing_focus_level"] = "state"
         session_state["landing_selected_district"] = None
+        session_state["landing_selected_block"] = None
         return
     set_landing_focus_india(session_state)
 
@@ -279,15 +266,17 @@ def _landing_pending_map_transition(
     focus_level: str,
     state_name: Optional[str],
     district_name: Optional[str],
-) -> Optional[tuple[str, str, str]]:
+    block_name: Optional[str] = None,
+) -> Optional[tuple[str, str, str, str]]:
     """Return a stable token for one landing focus transition target."""
     focus_value = str(focus_level or "").strip().lower()
-    if focus_value not in {"state", "district"}:
+    if focus_value not in {"state", "district", "block"}:
         return None
     return (
         focus_value,
         alias(str(state_name or "").strip()),
         alias(str(district_name or "").strip()),
+        alias(str(block_name or "").strip()),
     )
 
 
@@ -297,22 +286,31 @@ def _queue_landing_map_transition(
     action: str,
     state_name: Optional[str],
     district_name: Optional[str],
+    block_name: Optional[str] = None,
 ) -> bool:
     """Apply one landing map click and mark the resulting rerun as pending."""
     action_value = str(action or "").strip().lower()
-    if action_value not in {"focus_state", "focus_district"}:
+    if action_value not in {"focus_state", "focus_district", "focus_block"}:
         return False
 
-    focus_level = "state" if action_value == "focus_state" else "district"
+    if action_value == "focus_state":
+        focus_level = "state"
+    elif action_value == "focus_district":
+        focus_level = "district"
+    else:
+        focus_level = "block"
     if focus_level == "state" and not state_name:
         return False
     if focus_level == "district" and (not state_name or not district_name):
+        return False
+    if focus_level == "block" and (not state_name or not district_name or not block_name):
         return False
 
     token = _landing_pending_map_transition(
         focus_level=focus_level,
         state_name=state_name,
         district_name=district_name,
+        block_name=block_name,
     )
     if token is None:
         return False
@@ -324,6 +322,9 @@ def _queue_landing_map_transition(
     if focus_level == "district" and state_name and district_name:
         set_landing_focus_district(session_state, state_name, district_name)
         return True
+    if focus_level == "block" and state_name and district_name and block_name:
+        set_landing_focus_block(session_state, state_name, district_name, block_name)
+        return True
     return False
 
 
@@ -333,21 +334,24 @@ def _consume_pending_landing_map_transition(
     focus_level: str,
     selected_state: Optional[str],
     selected_district: Optional[str],
+    selected_block: Optional[str] = None,
 ) -> bool:
     """Suppress one replayed map payload after a successful landing transition rerun."""
     pending = session_state.get(LANDING_PENDING_MAP_TRANSITION_KEY)
-    if not isinstance(pending, (tuple, list)) or len(pending) != 3:
+    if not isinstance(pending, (tuple, list)) or len(pending) not in {3, 4}:
         return False
 
     expected = _landing_pending_map_transition(
         focus_level=focus_level,
         state_name=selected_state,
         district_name=selected_district,
+        block_name=selected_block,
     )
     pending_token = (
         str(pending[0]).strip().lower(),
         alias(str(pending[1]).strip()),
         alias(str(pending[2]).strip()),
+        alias(str(pending[3]).strip()) if len(pending) == 4 else "",
     )
     if expected != pending_token:
         return False
@@ -375,14 +379,16 @@ def build_deep_dive_handoff(
     focus_level = str(landing_state.get("landing_focus_level", "india")).strip().lower()
     selected_state = str(landing_state.get("landing_selected_state") or "").strip()
     selected_district = str(landing_state.get("landing_selected_district") or "").strip()
+    selected_block = str(landing_state.get("landing_selected_block") or "").strip()
     selected_pillar = get_pillar_for_domain(bundle_domain) or "Climate Hazards"
-    pending_state = selected_state if focus_level in {"state", "district"} and selected_state else "All"
-    pending_district = selected_district if focus_level == "district" and selected_district else "All"
+    is_block_handoff = focus_level == "block" and bool(selected_block)
+    pending_state = selected_state if focus_level in {"state", "district", "block"} and selected_state else "All"
+    pending_district = selected_district if focus_level in {"district", "block"} and selected_district else "All"
     return {
         "landing_active": False,
         "spatial_family": "admin",
-        "admin_level": "district",
-        "analysis_mode": "Single district focus",
+        "admin_level": "block" if is_block_handoff else "district",
+        "analysis_mode": "Single block focus" if is_block_handoff else "Single district focus",
         "active_view": "Map view",
         "main_view_selector": "Map view",
         "selected_pillar": selected_pillar,
@@ -395,9 +401,7 @@ def build_deep_dive_handoff(
         "map_mode": "Absolute value",
         "selected_state": pending_state,
         "selected_district": pending_district,
-        "selected_block": "All",
-        "selected_basin": "All",
-        "selected_subbasin": "All",
+        "selected_block": selected_block if is_block_handoff else "All",
     }
 
 
@@ -429,11 +433,11 @@ def build_glance_handoff_from_deep_dive(
     sel_scenario = str(detailed_state.get("sel_scenario") or "").strip()
     sel_period = str(detailed_state.get("sel_period") or "").strip()
     bundle_pillar = get_pillar_for_domain(selected_bundle)
-    visible_bundles = set(_landing_bundle_domains())
+    visible_bundles = set(dashboard_bundle_names(level="district", landing_only=True))
 
     if not (
         spatial_family == "admin"
-        and admin_level == "district"
+        and admin_level in {"district", "block"}
         and selected_bundle in visible_bundles
         and bundle_pillar
         and selected_pillar == bundle_pillar
@@ -445,6 +449,7 @@ def build_glance_handoff_from_deep_dive(
 
     selected_state = str(detailed_state.get("selected_state") or "").strip()
     selected_district = str(detailed_state.get("selected_district") or "").strip()
+    selected_block = str(detailed_state.get("selected_block") or "").strip()
     landing_period = canonical_period_label(sel_period)
 
     updates.update(
@@ -460,36 +465,153 @@ def build_glance_handoff_from_deep_dive(
         updates["landing_focus_level"] = "india"
         updates["landing_selected_state"] = None
         updates["landing_selected_district"] = None
+        updates["landing_selected_block"] = None
         return updates
 
     if selected_district == "All" or not selected_district:
         updates["landing_focus_level"] = "state"
         updates["landing_selected_state"] = selected_state
         updates["landing_selected_district"] = None
+        updates["landing_selected_block"] = None
+        return updates
+
+    if admin_level == "block" and selected_block and selected_block != "All":
+        updates["landing_focus_level"] = "block"
+        updates["landing_selected_state"] = selected_state
+        updates["landing_selected_district"] = selected_district
+        updates["landing_selected_block"] = selected_block
         return updates
 
     updates["landing_focus_level"] = "district"
     updates["landing_selected_state"] = selected_state
     updates["landing_selected_district"] = selected_district
+    updates["landing_selected_block"] = None
     return updates
 
 
-def _landing_bundle_domains() -> list[str]:
+def _landing_bundle_domains(*, data_dir: Path) -> list[str]:
     """Return the supported landing bundles in a stable UX order."""
-    visible_domains = [
-        domain
-        for domain in LANDING_VISIBLE_DOMAINS
-        if get_metrics_for_bundle(domain, spatial_family="admin", level="district")
-    ]
-    ordered = [domain for domain in LANDING_DOMAIN_ORDER if domain in set(visible_domains)]
-    if ordered:
-        return ordered
-    return sorted(visible_domains)
+    return _available_glance_bundle_names(data_dir=data_dir)
+
+
+def _glance_artifact_path(
+    bundle_domain: str,
+    artifact_name: str,
+    *,
+    scenario: str,
+    period: str,
+    data_dir: Path,
+) -> Path:
+    """Return one persisted Glance artifact path for a dashboard bundle selection."""
+    spec = get_dashboard_bundle_spec(bundle_domain)
+    slug = spec.composite_slug if spec is not None else str(bundle_domain).strip()
+    return optimized_glance_root(
+        slug,
+        scenario=str(scenario).strip().lower(),
+        period=canonical_period_label(str(period).strip()),
+        data_dir=data_dir,
+    ) / artifact_name
+
+
+@st.cache_data(show_spinner=False)
+def _load_glance_artifact_cached(
+    path: str,
+    mtime: Optional[float],
+) -> pd.DataFrame:
+    """Load one persisted Glance Parquet artifact."""
+    _ = mtime
+    artifact_path = Path(path)
+    if not artifact_path.exists():
+        return pd.DataFrame()
+    return pd.read_parquet(artifact_path)
+
+
+def _load_glance_artifact(
+    bundle_domain: str,
+    artifact_name: str,
+    *,
+    scenario: str,
+    period: str,
+    data_dir: Path,
+) -> pd.DataFrame:
+    path = _glance_artifact_path(
+        bundle_domain,
+        artifact_name,
+        scenario=scenario,
+        period=period,
+        data_dir=data_dir,
+    )
+    return _load_glance_artifact_cached(str(path), path.stat().st_mtime if path.exists() else None)
+
+
+def _load_glance_pair_context(
+    bundle_domain: str,
+    *,
+    scenario: str,
+    period: str,
+    data_dir: Path,
+) -> GlancePairContext:
+    """Load all persisted Glance tables for one bundle/scenario/period."""
+    block_path = _glance_artifact_path(
+        bundle_domain,
+        "block.parquet",
+        scenario=scenario,
+        period=period,
+        data_dir=data_dir,
+    )
+    return GlancePairContext(
+        district=_load_glance_artifact(bundle_domain, "district.parquet", scenario=scenario, period=period, data_dir=data_dir),
+        state=_load_glance_artifact(bundle_domain, "state.parquet", scenario=scenario, period=period, data_dir=data_dir),
+        drivers=_load_glance_artifact(bundle_domain, "drivers.parquet", scenario=scenario, period=period, data_dir=data_dir),
+        attributes=_load_glance_artifact(bundle_domain, "attributes.parquet", scenario=scenario, period=period, data_dir=data_dir),
+        distributions=_load_glance_artifact(
+            bundle_domain,
+            "distributions.parquet",
+            scenario=scenario,
+            period=period,
+            data_dir=data_dir,
+        ),
+        block=(
+            _load_glance_artifact_cached(str(block_path), block_path.stat().st_mtime)
+            if block_path.exists()
+            else None
+        ),
+    )
+
+
+def _glance_scenario_period_options(
+    bundle_domain: str,
+    *,
+    data_dir: Path,
+) -> tuple[tuple[str, str], ...]:
+    """Return scenario-period pairs with complete persisted Glance artifacts."""
+    spec = get_dashboard_bundle_spec(bundle_domain)
+    if spec is None:
+        return ()
+    root = optimized_glance_root(spec.composite_slug, data_dir=data_dir)
+    if not root.exists():
+        return ()
+    pairs: set[tuple[str, str]] = set()
+    required = {"district.parquet", "state.parquet", "drivers.parquet", "attributes.parquet", "distributions.parquet"}
+    for scenario_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+        for period_dir in sorted(path for path in scenario_dir.iterdir() if path.is_dir()):
+            if all((period_dir / name).exists() for name in required):
+                pairs.add((scenario_dir.name, canonical_period_label(period_dir.name)))
+    return tuple(_ordered_scenario_period_pairs(pairs))
+
+
+def _available_glance_bundle_names(*, data_dir: Path) -> list[str]:
+    """Return landing bundle names gated by persisted Glance artifact presence."""
+    out: list[str] = []
+    for bundle_name in dashboard_bundle_names(level="district", landing_only=True):
+        if _glance_scenario_period_options(bundle_name, data_dir=data_dir):
+            out.append(bundle_name)
+    return out
 
 
 def _landing_bundle_display(bundle_domain: str) -> str:
     """Return the user-facing landing label for a bundle/domain."""
-    return LANDING_DOMAIN_DISPLAY.get(str(bundle_domain).strip(), str(bundle_domain).strip())
+    return dashboard_bundle_display(bundle_domain)
 
 
 def _landing_context_chip(scenario: str, period: str) -> str:
@@ -507,32 +629,23 @@ def _landing_map_label(
     period: str,
     focus_level: str,
     selected_state: Optional[str],
+    selected_district: Optional[str] = None,
 ) -> str:
     """Build the trust-critical map label for the current landing context."""
-    level_label = "State-level" if focus_level == "india" else "District-level"
+    focus = str(focus_level or "india").strip().lower()
+    if focus == "india":
+        level_label = "State-level"
+    elif focus == "block":
+        level_label = "Block-level"
+    else:
+        level_label = "District-level"
     bundle_label = _landing_bundle_display(bundle_domain)
     chip = _landing_context_chip(scenario, period)
-    if focus_level == "india" or not selected_state:
+    if focus == "india" or not selected_state:
         return f"{level_label} {bundle_label} Bundle Score • {chip}"
+    if focus == "block" and selected_district:
+        return f"{level_label} {bundle_label} Bundle Score • {selected_state} / {selected_district} • {chip}"
     return f"{level_label} {bundle_label} Bundle Score • {selected_state} • {chip}"
-
-
-def _score_band(score: object) -> str:
-    """Return a simple qualitative score band for the landing score."""
-    try:
-        value = float(score)
-    except (TypeError, ValueError):
-        return "Insufficient data"
-
-    if not np.isfinite(value):
-        return "Insufficient data"
-    if value < 25.0:
-        return "Low"
-    if value < 50.0:
-        return "Moderate"
-    if value < 75.0:
-        return "High"
-    return "Very High"
 
 
 def _format_score(score: object) -> str:
@@ -546,195 +659,12 @@ def _format_score(score: object) -> str:
     return f"{value:.1f}"
 
 
-def _standardize_admin_district_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize admin district master columns to stable landing names."""
-    out = df.copy()
-
-    rename_map: dict[str, str] = {}
-    if "state_name" not in out.columns:
-        for candidate in ("state", "STATE_UT", "shapeName_0"):
-            if candidate in out.columns:
-                rename_map[candidate] = "state_name"
-                break
-    if "district_name" not in out.columns:
-        for candidate in ("district", "DISTRICT", "shapeName", "shapeName_2"):
-            if candidate in out.columns:
-                rename_map[candidate] = "district_name"
-                break
-    if rename_map:
-        out = out.rename(columns=rename_map)
-
-    for required in ("state_name", "district_name"):
-        if required not in out.columns:
-            out[required] = ""
-
-    out["state_name"] = out["state_name"].astype("string").fillna("").str.strip()
-    out["district_name"] = out["district_name"].astype("string").fillna("").str.strip()
-    out = out[(out["state_name"] != "") & (out["district_name"] != "")]
-    return out.reset_index(drop=True)
-
-
-def _path_exists(path: Path) -> bool:
-    """Return True when a CSV path or its preferred Parquet companion exists."""
-    return resolve_preferred_master_path(path).exists()
-
-
-def _resolve_metric_master_sources(
-    metric_slug: str,
-    *,
-    data_dir: Path,
-) -> tuple[Path, ...]:
-    """Resolve district-level admin master sources for one metric slug."""
-    optimized_root = resolve_processed_optimised_root(
-        metric_slug,
-        data_dir=data_dir,
-        mode="portfolio",
-    )
-    optimized_sources: tuple[Path, ...] = ()
-    if optimized_root.exists():
-        optimized_sources = tuple(
-            path
-            for path in optimized_master_sources_from_metric_root(
-                optimized_root,
-                level="district",
-                selected_state="All",
-            )
-            if path.exists()
-        )
-    if optimized_sources:
-        return optimized_sources
-
-    legacy_root = resolve_processed_root(
-        metric_slug,
-        data_dir=data_dir,
-        mode="portfolio",
-    )
-    states = list_available_states_from_processed_root(str(legacy_root.resolve()))
-    legacy_sources = tuple(
-        legacy_root / state_name / "master_metrics_by_district.csv"
-        for state_name in states
-        if _path_exists(legacy_root / state_name / "master_metrics_by_district.csv")
-    )
-    return legacy_sources
-
-
-@st.cache_data(show_spinner=False)
-def _load_metric_scenario_period_pairs_cached(
-    metric_slug: str,
-    source_signature: tuple[tuple[str, Optional[float]], ...],
-    source_paths: tuple[str, ...],
-) -> tuple[tuple[str, str], ...]:
-    """Read one metric master and list supported future scenario-period pairs."""
-    _ = source_signature
-    if not source_paths:
-        return tuple()
-
-    df = normalize_master_columns(load_master_csvs(source_paths))
-    schema_items, _metrics, by_metric = parse_master_schema(df.columns)
-
-    metric_base = str(VARIABLES.get(metric_slug, {}).get("periods_metric_col") or metric_slug).strip()
-    items = by_metric.get(metric_base, []) or schema_items
-
-    allowed_scenarios = {"ssp245", "ssp585", "snapshot"}
-    pairs = {
-        (str(item["scenario"]).strip().lower(), canonical_period_label(str(item["period"]).strip()))
-        for item in items
-        if str(item["scenario"]).strip().lower() in allowed_scenarios
-    }
-    ordered: list[tuple[str, str]] = []
-    by_scenario: dict[str, list[str]] = {}
-    for scenario, period in pairs:
-        by_scenario.setdefault(scenario, []).append(period)
-
-    for scenario in ordered_scenario_keys(list(by_scenario.keys())):
-        for period in ordered_period_keys(by_scenario.get(scenario, [])):
-            ordered.append((scenario, period))
-    return tuple(ordered)
-
-
-@st.cache_data(show_spinner=False)
-def _load_metric_district_values_cached(
-    metric_slug: str,
-    scenario: str,
-    period: str,
-    stat: str,
-    source_signature: tuple[tuple[str, Optional[float]], ...],
-    source_paths: tuple[str, ...],
-) -> pd.DataFrame:
-    """Load one metric's district-level values for the selected scenario/period."""
-    _ = source_signature
-    if not source_paths:
-        return pd.DataFrame(columns=["state_name", "district_name", "raw_metric_value"])
-
-    df = normalize_master_columns(load_master_csvs(source_paths))
-    df = _standardize_admin_district_frame(df)
-
-    metric_base = str(VARIABLES.get(metric_slug, {}).get("periods_metric_col") or metric_slug).strip()
-    metric_col = resolve_metric_column(
-        df,
-        metric_base,
-        scenario,
-        canonical_period_label(period),
-        stat,
-    )
-
-    out = df.loc[:, ["state_name", "district_name"]].copy()
-    if metric_col and metric_col in df.columns:
-        out["raw_metric_value"] = pd.to_numeric(df[metric_col], errors="coerce")
-    else:
-        out["raw_metric_value"] = np.nan
-
-    grouped = (
-        out.groupby(["state_name", "district_name"], as_index=False, dropna=False)["raw_metric_value"]
-        .mean()
-        .reset_index(drop=True)
-    )
-    return grouped
-
-
-def _landing_metric_slugs(bundle_domain: str) -> list[str]:
-    """Return the ordered metric slugs that define one landing bundle."""
-    configured_weights = tuple(get_bundle_weights(bundle_domain))
-    available_metrics = set(
-        get_metrics_for_bundle(bundle_domain, spatial_family="admin", level="district")
-    )
-    if configured_weights:
-        ordered: list[str] = []
-        seen: set[str] = set()
-        for entry in configured_weights:
-            slug = str(entry.metric_slug).strip()
-            if slug in seen:
-                raise ValueError(f"Bundle {bundle_domain!r} repeats weighted metric slug {slug!r}.")
-            if slug not in VARIABLES:
-                raise ValueError(f"Bundle {bundle_domain!r} references unknown weighted metric slug {slug!r}.")
-            if slug not in available_metrics:
-                raise ValueError(
-                    f"Bundle {bundle_domain!r} references weighted metric slug {slug!r} "
-                    "that is not available for admin/district landing."
-                )
-            seen.add(slug)
-            ordered.append(slug)
-        return ordered
-    return get_metrics_for_bundle(bundle_domain, spatial_family="admin", level="district")
-
-
-def _bundle_metric_specs(bundle_domain: str) -> list[BundleMetricSpec]:
-    """Return normalized bundle metric specs for the landing score."""
-    configured_weights = {entry.metric_slug: entry for entry in get_bundle_weights(bundle_domain)}
-    specs: list[BundleMetricSpec] = []
-    for metric_slug in _landing_metric_slugs(bundle_domain):
-        varcfg = VARIABLES.get(metric_slug, {})
-        weight_entry = configured_weights.get(metric_slug)
-        specs.append(
-            BundleMetricSpec(
-                slug=metric_slug,
-                label=str(varcfg.get("label") or metric_slug),
-                column=metric_slug,
-                weight=float(weight_entry.weight) if weight_entry is not None else 1.0,
-                higher_is_worse=bool(varcfg.get("rank_higher_is_worse", True)),
-            )
-        )
-    return specs
+def _landing_driver_heading(bundle_domain: str) -> str:
+    """Return the appropriate Glance driver heading for one bundle."""
+    dashboard_spec = get_dashboard_bundle_spec(bundle_domain)
+    if dashboard_spec is not None and dashboard_spec.group_key == "sector_wise":
+        return "Top Rule Signals"
+    return "Metric Drivers"
 
 
 def _ordered_scenario_period_pairs(
@@ -752,191 +682,18 @@ def _ordered_scenario_period_pairs(
     return ordered
 
 
-def _collect_bundle_metric_contexts(
-    bundle_domain: str,
-    *,
-    data_dir: Path,
-) -> list[LandingMetricContext]:
-    """Resolve landing metric contexts for one bundle in stable registry order."""
-    contexts: list[LandingMetricContext] = []
-    for spec in _bundle_metric_specs(bundle_domain):
-        sources = _resolve_metric_master_sources(spec.slug, data_dir=data_dir)
-        if sources:
-            source_signature = master_source_signature(sources)
-            source_paths = tuple(str(path) for path in sources)
-            available_pairs = _load_metric_scenario_period_pairs_cached(
-                spec.slug,
-                source_signature,
-                source_paths,
-            )
-        else:
-            source_signature = ()
-            source_paths = ()
-            available_pairs = ()
-        contexts.append(
-            LandingMetricContext(
-                spec=spec,
-                source_signature=source_signature,
-                source_paths=source_paths,
-                available_pairs=available_pairs,
-            )
-        )
-    return contexts
-
-
-def _intersect_bundle_scenario_period_pairs(
-    metric_contexts: Sequence[LandingMetricContext],
-) -> list[tuple[str, str]]:
-    """
-    Return scenario-period options with full required bundle-metric coverage.
-
-    V1 contract:
-    - all bundle metrics currently resolved for the landing bundle are required
-    - only scenario-period pairs present for every required metric are selectable
-    """
-    if not metric_contexts:
-        return []
-
-    common_pairs: Optional[set[tuple[str, str]]] = None
-    for ctx in metric_contexts:
-        ctx_pairs = set(ctx.available_pairs)
-        common_pairs = ctx_pairs if common_pairs is None else (common_pairs & ctx_pairs)
-
-    return _ordered_scenario_period_pairs(common_pairs or set())
-
-
-def _bundle_context_cache_key(
-    metric_contexts: Sequence[LandingMetricContext],
-) -> tuple[tuple[object, ...], ...]:
-    """Return a stable, hashable cache key for one bundle's metric contexts."""
-    return tuple(
-        (
-            ctx.spec.slug,
-            ctx.spec.label,
-            ctx.spec.column,
-            float(ctx.spec.weight),
-            bool(ctx.spec.higher_is_worse),
-            ctx.source_signature,
-            ctx.source_paths,
-            ctx.available_pairs,
-        )
-        for ctx in metric_contexts
-    )
-
-
-def _decode_context_key_entry(entry: tuple[object, ...]) -> _ContextKeyEntry:
-    """Decode and validate one serialized landing metric-context cache entry."""
-    if len(entry) != 8:
-        raise ValueError(
-            f"Malformed landing context-key entry: expected 8 fields, got {len(entry)}"
-        )
-
-    (
-        slug,
-        label,
-        column,
-        weight,
-        higher_is_worse,
-        source_signature,
-        source_paths,
-        available_pairs,
-    ) = entry
-    return _ContextKeyEntry(
-        slug=str(slug),
-        label=str(label),
-        column=str(column),
-        weight=float(weight),
-        higher_is_worse=bool(higher_is_worse),
-        source_signature=tuple(source_signature),  # type: ignore[arg-type]
-        source_paths=tuple(str(path) for path in source_paths),  # type: ignore[arg-type]
-        available_pairs=tuple(
-            (str(pair[0]).strip(), canonical_period_label(str(pair[1]).strip()))
-            for pair in available_pairs  # type: ignore[arg-type]
-        ),
-    )
-
-
-def _metric_specs_from_context_key(
-    context_key: tuple[tuple[object, ...], ...],
-) -> list[BundleMetricSpec]:
-    """Reconstruct bundle metric specs from the serialized context cache key."""
-    specs: list[BundleMetricSpec] = []
-    for entry in context_key:
-        parsed = _decode_context_key_entry(entry)
-        specs.append(
-            BundleMetricSpec(
-                slug=parsed.slug,
-                label=parsed.label,
-                column=parsed.column,
-                weight=parsed.weight,
-                higher_is_worse=parsed.higher_is_worse,
-            )
-        )
-    return specs
-
-
-def _build_empty_bundle_context(
-    metric_specs: Sequence[BundleMetricSpec],
-) -> tuple[pd.DataFrame, pd.DataFrame, list[BundleMetricSpec]]:
-    """Return empty district/state landing score tables for a bundle."""
-    district_columns = [
-        "state_name",
-        "district_name",
-        "bundle_score",
-        "available_metric_count",
-        "__state_key",
-        "__district_key",
-        "score_band",
-        "bundle_score_display",
-        "district_rank",
-        "district_count",
-        "state_bundle_score",
-        "state_rank",
-        "state_count",
-    ] + [normalized_metric_column(spec.slug) for spec in metric_specs]
-    state_columns = [
-        "state_name",
-        "bundle_score",
-        "__state_key",
-        "score_band",
-        "bundle_score_display",
-        "state_rank",
-        "state_count",
-    ]
-    return (
-        pd.DataFrame(columns=district_columns),
-        pd.DataFrame(columns=state_columns),
-        list(metric_specs),
-    )
-
-
 def _bundle_scenario_period_options(
     bundle_domain: str,
     *,
     data_dir: Path,
 ) -> list[tuple[str, str]]:
     """Return available scenario-period pairs for one persisted landing composite."""
-    composite_spec = get_composite_metric_for_bundle(bundle_domain)
-    if composite_spec is None:
-        return []
-
-    source_paths = _resolve_metric_master_sources(composite_spec.composite_slug, data_dir=data_dir)
-    if not source_paths:
-        return []
-
-    source_signature = master_source_signature(source_paths)
-    return list(
-        _load_metric_scenario_period_pairs_cached(
-            composite_spec.composite_slug,
-            source_signature,
-            tuple(str(path) for path in source_paths),
-        )
-    )
+    return list(_glance_scenario_period_options(bundle_domain, data_dir=data_dir))
 
 
 def _sanitize_landing_context(session_state: MutableMapping[str, object], *, data_dir: Path) -> None:
     """Ensure landing bundle and scenario-period choices remain valid."""
-    bundle_domains = _landing_bundle_domains()
+    bundle_domains = _landing_bundle_domains(data_dir=data_dir)
     if not bundle_domains:
         return
 
@@ -967,129 +724,29 @@ def _sanitize_landing_context(session_state: MutableMapping[str, object], *, dat
     focus_level = str(session_state.get("landing_focus_level", "india")).strip().lower()
     selected_state = str(session_state.get("landing_selected_state") or "").strip()
     selected_district = str(session_state.get("landing_selected_district") or "").strip()
-    if focus_level not in {"india", "state", "district"}:
+    if focus_level not in {"india", "state", "district", "block"}:
         set_landing_focus_india(session_state)
     elif focus_level == "india":
         session_state["landing_selected_state"] = None
         session_state["landing_selected_district"] = None
+        session_state["landing_selected_block"] = None
     elif focus_level == "state" and not selected_state:
         set_landing_focus_india(session_state)
+    elif focus_level == "state":
+        session_state["landing_selected_district"] = None
+        session_state["landing_selected_block"] = None
     elif focus_level == "district" and (not selected_state or not selected_district):
         if selected_state:
             set_landing_focus_state(session_state, selected_state)
         else:
             set_landing_focus_india(session_state)
-
-
-
-def _assemble_bundle_context(
-    merged_frame: Optional[pd.DataFrame],
-    *,
-    metric_specs: Sequence[BundleMetricSpec],
-) -> tuple[pd.DataFrame, pd.DataFrame, list[BundleMetricSpec]]:
-    """Assemble district/state landing score tables from a merged metric frame."""
-    if merged_frame is None or merged_frame.empty:
-        return _build_empty_bundle_context(metric_specs)
-
-    district_scores = compute_bundle_score_frame(
-        merged_frame,
-        metric_specs=metric_specs,
-        id_columns=("state_name", "district_name"),
-    )
-    district_scores["__state_key"] = district_scores["state_name"].astype(str).map(alias)
-    district_scores["__district_key"] = (
-        district_scores["state_name"].astype(str).map(alias)
-        + "|"
-        + district_scores["district_name"].astype(str).map(alias)
-    )
-    district_scores["score_band"] = district_scores["bundle_score"].map(_score_band)
-    district_scores["bundle_score_display"] = district_scores["bundle_score"].map(_format_score)
-
-    state_scores = aggregate_state_bundle_scores(
-        district_scores,
-        state_col="state_name",
-        score_col="bundle_score",
-    )
-    state_scores["__state_key"] = state_scores["state_name"].astype(str).map(alias)
-    state_scores["score_band"] = state_scores["bundle_score"].map(_score_band)
-    state_scores["bundle_score_display"] = state_scores["bundle_score"].map(_format_score)
-
-    state_scores["state_rank"] = (
-        state_scores["bundle_score"]
-        .rank(method="min", ascending=False, na_option="bottom")
-        .where(state_scores["bundle_score"].notna())
-    )
-    n_states = int(pd.to_numeric(state_scores["bundle_score"], errors="coerce").notna().sum())
-    state_scores["state_count"] = n_states
-
-    district_scores["district_rank"] = (
-        district_scores.groupby("state_name", dropna=False)["bundle_score"]
-        .rank(method="min", ascending=False, na_option="bottom")
-        .where(district_scores["bundle_score"].notna())
-    )
-    district_counts = (
-        district_scores.groupby("state_name", dropna=False)["bundle_score"]
-        .transform(lambda series: int(pd.to_numeric(series, errors="coerce").notna().sum()))
-    )
-    district_scores["district_count"] = district_counts
-
-    state_lookup = state_scores[["state_name", "bundle_score", "state_rank", "state_count"]].rename(
-        columns={
-            "bundle_score": "state_bundle_score",
-            "state_rank": "state_rank",
-            "state_count": "state_count",
-        }
-    )
-    district_scores = district_scores.merge(state_lookup, on="state_name", how="left")
-    return district_scores, state_scores, list(metric_specs)
-
-
-@st.cache_data(show_spinner=False)
-def _prepare_bundle_context_cached(
-    bundle_domain: str,
-    scenario: str,
-    period: str,
-    stat: str,
-    context_key: tuple[tuple[object, ...], ...],
-) -> tuple[pd.DataFrame, pd.DataFrame, list[BundleMetricSpec]]:
-    """Load, merge, and rank one validated landing bundle context."""
-    _ = bundle_domain
-    metric_specs = _metric_specs_from_context_key(context_key)
-    if not metric_specs:
-        return _build_empty_bundle_context(metric_specs)
-
-    selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
-    parsed_entries = [_decode_context_key_entry(entry) for entry in context_key]
-    if any(selected_pair not in set(entry.available_pairs) for entry in parsed_entries):
-        return _build_empty_bundle_context(metric_specs)
-
-    merged_frame: Optional[pd.DataFrame] = None
-    for entry in parsed_entries:
-        metric_frame = _load_metric_district_values_cached(
-            entry.slug,
-            scenario,
-            period,
-            stat,
-            entry.source_signature,
-            entry.source_paths,
-        )
-        if metric_frame.empty:
-            continue
-
-        metric_frame = metric_frame.rename(columns={"raw_metric_value": entry.slug})
-        metric_frame = metric_frame[["state_name", "district_name", entry.slug]].copy()
-
-        if merged_frame is None:
-            merged_frame = metric_frame
+    elif focus_level == "district":
+        session_state["landing_selected_block"] = None
+    elif focus_level == "block" and (not selected_state or not selected_district):
+        if selected_state:
+            set_landing_focus_state(session_state, selected_state)
         else:
-            merged_frame = merged_frame.merge(
-                metric_frame,
-                on=["state_name", "district_name"],
-                how="outer",
-            )
-
-    return _assemble_bundle_context(merged_frame, metric_specs=metric_specs)
-
+            set_landing_focus_india(session_state)
 
 def _prepare_bundle_context(
     bundle_domain: str,
@@ -1098,9 +755,9 @@ def _prepare_bundle_context(
     period: str,
     stat: str,
     data_dir: Path,
-    metric_contexts: Optional[Sequence[LandingMetricContext]] = None,
+    metric_contexts: Optional[Sequence[object]] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load persisted composite metric values and assemble landing score tables."""
+    """Load persisted Glance district/state score tables."""
     _ = metric_contexts
     def _empty_context() -> tuple[pd.DataFrame, pd.DataFrame]:
         empty = pd.DataFrame(
@@ -1130,75 +787,16 @@ def _prepare_bundle_context(
         )
         return empty, state_empty
 
-    composite_spec = get_composite_metric_for_bundle(bundle_domain)
-    if composite_spec is None:
+    _ = stat
+    context = _load_glance_pair_context(
+        bundle_domain,
+        scenario=scenario,
+        period=period,
+        data_dir=data_dir,
+    )
+    if context.district.empty or context.state.empty:
         return _empty_context()
-
-    source_paths = _resolve_metric_master_sources(composite_spec.composite_slug, data_dir=data_dir)
-    if not source_paths:
-        return _empty_context()
-
-    source_signature = master_source_signature(source_paths)
-    available_pairs = set(
-        _load_metric_scenario_period_pairs_cached(
-            composite_spec.composite_slug,
-            source_signature,
-            tuple(str(path) for path in source_paths),
-        )
-    )
-    selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
-    if selected_pair not in available_pairs:
-        return _empty_context()
-
-    metric_frame = _load_metric_district_values_cached(
-        composite_spec.composite_slug,
-        scenario,
-        period,
-        stat,
-        source_signature,
-        tuple(str(path) for path in source_paths),
-    )
-    if metric_frame.empty:
-        return _empty_context()
-
-    district_scores = metric_frame.rename(columns={"raw_metric_value": "bundle_score"}).copy()
-    district_scores["__state_key"] = district_scores["state_name"].astype(str).map(alias)
-    district_scores["__district_key"] = (
-        district_scores["state_name"].astype(str).map(alias)
-        + "|"
-        + district_scores["district_name"].astype(str).map(alias)
-    )
-    district_scores["score_band"] = district_scores["bundle_score"].map(_score_band)
-    district_scores["bundle_score_display"] = district_scores["bundle_score"].map(_format_score)
-
-    state_scores = aggregate_state_bundle_scores(district_scores)
-    state_scores["__state_key"] = state_scores["state_name"].astype(str).map(alias)
-    state_scores["score_band"] = state_scores["bundle_score"].map(_score_band)
-    state_scores["bundle_score_display"] = state_scores["bundle_score"].map(_format_score)
-    state_scores["state_rank"] = (
-        state_scores["bundle_score"].rank(method="min", ascending=False, na_option="bottom")
-        .where(state_scores["bundle_score"].notna())
-    )
-    state_count = int(pd.to_numeric(state_scores["bundle_score"], errors="coerce").notna().sum())
-    state_scores["state_count"] = state_count
-
-    district_scores["district_rank"] = (
-        district_scores.groupby("state_name", dropna=False)["bundle_score"]
-        .rank(method="min", ascending=False, na_option="bottom")
-        .where(district_scores["bundle_score"].notna())
-    )
-    district_scores["district_count"] = (
-        district_scores.groupby("state_name", dropna=False)["bundle_score"]
-        .transform(lambda series: int(pd.to_numeric(series, errors="coerce").notna().sum()))
-    )
-    district_scores = district_scores.merge(
-        state_scores[["state_name", "bundle_score", "state_rank", "state_count"]].rename(
-            columns={"bundle_score": "state_bundle_score"}
-        ),
-        on="state_name",
-        how="left",
-    )
-    return district_scores, state_scores
+    return context.district.copy(), context.state.copy()
 
 
 def _prepare_driver_context(
@@ -1209,114 +807,21 @@ def _prepare_driver_context(
     stat: str,
     data_dir: Path,
 ) -> LandingDriverContext:
-    """Load component metrics for driver display without affecting composite landing behavior."""
-    try:
-        contexts = _collect_bundle_metric_contexts(bundle_domain, data_dir=data_dir)
-        if not contexts:
-            return LandingDriverContext(
-                district_scores=pd.DataFrame(),
-                metric_specs=[],
-                available=False,
-                reason="no_metric_contexts",
-            )
-
-        context_key = _bundle_context_cache_key(contexts)
-        selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
-        available_pairs = set(_intersect_bundle_scenario_period_pairs(contexts))
-        if selected_pair not in available_pairs:
-            return LandingDriverContext(
-                district_scores=pd.DataFrame(),
-                metric_specs=_metric_specs_from_context_key(context_key),
-                available=False,
-                reason="pair_unsupported",
-            )
-
-        district_scores, _state_scores, metric_specs = _prepare_bundle_context_cached(
-            bundle_domain,
-            scenario,
-            period,
-            stat,
-            context_key,
-        )
-        if not metric_specs:
-            return LandingDriverContext(
-                district_scores=district_scores,
-                metric_specs=[],
-                available=False,
-                reason="empty_metric_specs",
-            )
-        if district_scores.empty:
-            return LandingDriverContext(
-                district_scores=district_scores,
-                metric_specs=metric_specs,
-                available=False,
-                reason="empty_component_frame",
-            )
-        return LandingDriverContext(
-            district_scores=district_scores,
-            metric_specs=metric_specs,
-            available=True,
-            reason=None,
-        )
-    except Exception:
-        return LandingDriverContext(
-            district_scores=pd.DataFrame(),
-            metric_specs=[],
-            available=False,
-            reason="exception",
-        )
-
-
-def _build_distribution_frame(score_series: pd.Series) -> pd.DataFrame:
-    """Return a stable score-band distribution table for small summary charts."""
-    categories = ["Low", "Moderate", "High", "Very High"]
-    counts = {category: 0 for category in categories}
-    for value in score_series.dropna():
-        counts[_score_band(value)] = counts.get(_score_band(value), 0) + 1
-    return pd.DataFrame(
-        {
-            "Band": categories,
-            "Count": [counts.get(category, 0) for category in categories],
-        }
-    )
-
-
-def _resolve_first_valid_landing_metric(
-    bundle_domain: str,
-    *,
-    scenario: str,
-    period: str,
-    stat: str,
-    data_dir: Path,
-    metric_contexts: Optional[Sequence[LandingMetricContext]] = None,
-) -> Optional[str]:
-    """Return the first bundle metric with usable data for the current landing context."""
-    contexts = list(metric_contexts) if metric_contexts is not None else _collect_bundle_metric_contexts(
+    """Load pre-ranked persisted Glance driver rows."""
+    _ = stat
+    drivers = _load_glance_artifact(
         bundle_domain,
+        "drivers.parquet",
+        scenario=scenario,
+        period=period,
         data_dir=data_dir,
     )
-    selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
-
-    for ctx in contexts:
-        if selected_pair not in set(ctx.available_pairs):
-            continue
-
-        metric_frame = _load_metric_district_values_cached(
-            ctx.spec.slug,
-            scenario,
-            period,
-            stat,
-            ctx.source_signature,
-            ctx.source_paths,
-        )
-        raw_values = pd.to_numeric(
-            metric_frame.get("raw_metric_value", pd.Series(dtype=float)),
-            errors="coerce",
-        )
-        if raw_values.notna().any():
-            return ctx.spec.slug
-
-    return None
+    return LandingDriverContext(
+        district_scores=drivers,
+        metric_specs=[],
+        available=not drivers.empty,
+        reason=None if not drivers.empty else "empty_driver_artifact",
+    )
 
 
 def _build_landing_search_options(
@@ -1400,7 +905,7 @@ def _sort_landing_map_frame(gdf: pd.DataFrame) -> pd.DataFrame:
 
     sort_columns = [
         column
-        for column in ("__state_key", "state_name", "__district_key", "district_name", "shapeName")
+        for column in ("__state_key", "state_name", "__district_key", "district_name", "__block_key", "block_name", "shapeName")
         if column in gdf.columns
     ]
     if not sort_columns:
@@ -1453,18 +958,53 @@ def _build_district_map_frame(
     return _sort_landing_map_frame(merged)
 
 
+def _build_block_map_frame(
+    adm3_by_district: dict[str, dict],
+    block_scores: pd.DataFrame,
+    *,
+    selected_state: str,
+    selected_district: str,
+) -> pd.DataFrame:
+    """Merge block-level landing scores onto ADM3 geometry for one district."""
+    import geopandas as gpd
+
+    district_sel_key = alias(selected_state) + "|" + alias(selected_district)
+    fc = adm3_by_district.get(district_sel_key)
+    if not fc or not fc.get("features"):
+        return pd.DataFrame()
+
+    gdf = gpd.GeoDataFrame.from_features(fc["features"])
+    if gdf.empty:
+        return pd.DataFrame()
+    gdf["__state_key"] = gdf["state_name"].astype(str).map(alias)
+    gdf["__district_key"] = gdf["__state_key"] + "|" + gdf["district_name"].astype(str).map(alias)
+    gdf["__block_key"] = gdf["__district_key"] + "|" + gdf["block_name"].astype(str).map(alias)
+    merged = gdf.merge(
+        block_scores,
+        on="__block_key",
+        how="left",
+        suffixes=("", "_score"),
+    )
+    merged["state_name"] = merged["state_name"].fillna(selected_state)
+    merged["district_name"] = merged["district_name"].fillna(selected_district)
+    return _sort_landing_map_frame(merged)
+
+
 def _build_landing_map_artifacts(
     *,
     adm1: Any,
     adm2: Any,
+    adm3_by_district: Optional[dict] = None,
     state_scores: pd.DataFrame,
     district_scores: pd.DataFrame,
+    block_scores: Optional[pd.DataFrame] = None,
     bundle_domain: str,
     scenario: str,
     period: str,
     focus_level: str,
     selected_state: Optional[str],
     selected_district: Optional[str],
+    selected_block: Optional[str] = None,
 ) -> tuple[Any, Optional[str], str, pd.DataFrame]:
     """Build the landing Folium map, legend, and map label."""
     import folium
@@ -1475,6 +1015,7 @@ def _build_landing_map_artifacts(
         period=period,
         focus_level=focus_level,
         selected_state=selected_state,
+        selected_district=selected_district,
     )
 
     if focus_level == "india":
@@ -1485,23 +1026,54 @@ def _build_landing_map_artifacts(
             localize=True,
             sticky=True,
         )
-        fc = _selection_to_feature_collection(
-            display_gdf,
-            property_columns=(
-                "__state_key",
-                "state_name",
-                "shapeName",
-                "bundle_score_display",
-                "score_band",
-                "fillColor",
-            ),
-        )
         selected_state_for_fit = "All"
         selected_district_for_fit = "All"
         reference_fc = None
         layer_name = "States"
         map_center = [22.0, 82.5]
         map_zoom = 4.8
+        reference_level = None
+        reference_layer_name = None
+    elif focus_level == "block" and adm3_by_district and block_scores is not None:
+        display_gdf = _build_block_map_frame(
+            adm3_by_district,
+            block_scores,
+            selected_state=str(selected_state or ""),
+            selected_district=str(selected_district or ""),
+        )
+        tooltip = folium.features.GeoJsonTooltip(
+            fields=["block_name", "district_name", "bundle_score_display", "score_band"],
+            aliases=["Block", "District", "Bundle score", "Risk band"],
+            localize=True,
+            sticky=True,
+        )
+        selected_state_for_fit = str(selected_state or "All")
+        selected_district_for_fit = str(selected_district or "All")
+        layer_name = "Blocks"
+        reference_fc = None
+        reference_level = None
+        reference_layer_name = None
+        if not display_gdf.empty and "geometry" in display_gdf.columns:
+            try:
+                bounds = display_gdf.geometry.total_bounds
+                map_center = [float((bounds[1] + bounds[3]) / 2), float((bounds[0] + bounds[2]) / 2)]
+            except Exception:
+                map_center = [22.0, 82.5]
+        else:
+            map_center = [22.0, 82.5]
+        map_zoom = 9.0
+
+        if selected_block and not display_gdf.empty:
+            selected_row = display_gdf[
+                display_gdf["block_name"].astype(str).str.strip().map(alias) == alias(selected_block)
+            ]
+            if not selected_row.empty:
+                reference_fc = _selection_to_feature_collection(
+                    selected_row,
+                    property_columns=("block_name", "district_name", "state_name"),
+                )
+                reference_level = "block"
+                reference_layer_name = "Selected block"
     else:
         display_gdf = _build_district_map_frame(
             adm2,
@@ -1514,22 +1086,12 @@ def _build_landing_map_artifacts(
             localize=True,
             sticky=True,
         )
-        fc = _selection_to_feature_collection(
-            display_gdf,
-            property_columns=(
-                "__state_key",
-                "__district_key",
-                "district_name",
-                "state_name",
-                "bundle_score_display",
-                "score_band",
-                "fillColor",
-            ),
-        )
         selected_state_for_fit = str(selected_state or "All")
         selected_district_for_fit = "All"
         layer_name = "Districts"
         reference_fc = None
+        reference_level = None
+        reference_layer_name = None
         state_row = adm1[adm1["shapeName"].astype(str).str.strip().map(alias) == alias(selected_state or "")]
         if not state_row.empty:
             bounds = state_row.iloc[0].geometry.bounds
@@ -1547,6 +1109,8 @@ def _build_landing_map_artifacts(
                     selected_row,
                     property_columns=("district_name", "state_name"),
                 )
+                reference_level = "district"
+                reference_layer_name = "Selected district"
 
     display_gdf = display_gdf.copy()
     display_gdf["bundle_score_numeric"] = pd.to_numeric(display_gdf.get("bundle_score"), errors="coerce")
@@ -1555,17 +1119,22 @@ def _build_landing_map_artifacts(
         "bundle_score_numeric",
         0.0,
         100.0,
-        cmap_name="YlOrRd",
-        nlevels=15,
+        cmap_name=IRT_COMPOSITE_CMAP,
+        nlevels=DEFAULT_CHOROPLETH_NLEVELS,
     )
+    # Serialize once, here — after fill colors exist. The property superset below
+    # covers every focus level, so per-branch builds above would only be discarded.
     fc = _selection_to_feature_collection(
         display_gdf,
         property_columns=(
             "__state_key",
             "__district_key",
+            "__block_key",
+            "__bkey",
             "state_name",
             "shapeName",
             "district_name",
+            "block_name",
             "bundle_score_display",
             "score_band",
             "fillColor",
@@ -1581,9 +1150,9 @@ def _build_landing_map_artifacts(
             legend_title="Bundle score",
             vmin=0.0,
             vmax=100.0,
-            cmap_name="YlOrRd",
-            nlevels=15,
-            nticks=5,
+            cmap_name=IRT_COMPOSITE_CMAP,
+            nlevels=DEFAULT_CHOROPLETH_NLEVELS,
+            nticks=DEFAULT_CHOROPLETH_NLEVELS + 1,
             include_zero_tick=True,
             map_height=520,
         )
@@ -1599,8 +1168,8 @@ def _build_landing_map_artifacts(
         layer_name=layer_name,
         tooltip=tooltip,
         reference_fc=reference_fc,
-        reference_level="district" if reference_fc is not None else None,
-        reference_layer_name="Selected district" if reference_fc is not None else None,
+        reference_level=reference_level if reference_fc is not None else None,
+        reference_layer_name=reference_layer_name if reference_fc is not None else None,
     )
     return m, legend_html, map_label, display_gdf
 
@@ -1639,6 +1208,16 @@ def _district_row_has_landing_score(row: Optional[pd.Series]) -> bool:
     return bool(np.isfinite(score))
 
 
+def _block_row_has_landing_score(row: Optional[pd.Series]) -> bool:
+    """Return whether a resolved block row has a usable landing bundle score."""
+    if row is None:
+        return False
+    if "bundle_score" not in row.index:
+        return True
+    score = pd.to_numeric(pd.Series([row.get("bundle_score")]), errors="coerce").iloc[0]
+    return bool(np.isfinite(score))
+
+
 def _landing_click_payloads(returned: Optional[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Collect candidate click payload property dictionaries from the raw map return payload."""
     if not returned:
@@ -1656,7 +1235,12 @@ def _landing_click_payloads(returned: Optional[Mapping[str, Any]]) -> list[dict[
 
 def _landing_rendered_map_level(focus_level: str) -> str:
     """Return the rendered landing map level for the current focus."""
-    return "state" if str(focus_level or "india").strip().lower() == "india" else "district"
+    focus = str(focus_level or "india").strip().lower()
+    if focus == "india":
+        return "state"
+    if focus == "block":
+        return "block"
+    return "district"
 
 
 def _landing_map_context_token(
@@ -1667,7 +1251,8 @@ def _landing_map_context_token(
     focus_level: str,
     selected_state: Optional[str],
     selected_district: Optional[str],
-) -> tuple[str, str, str, str, str, str, str]:
+    selected_block: Optional[str] = None,
+) -> tuple[str, str, str, str, str, str, str, str]:
     """Return the canonical landing map context token for one rendered landing map."""
     return (
         alias(str(bundle_domain or "").strip()),
@@ -1676,6 +1261,7 @@ def _landing_map_context_token(
         str(focus_level or "india").strip().lower(),
         alias(str(selected_state or "").strip()),
         alias(str(selected_district or "").strip()),
+        alias(str(selected_block or "").strip()),
         _landing_rendered_map_level(focus_level),
     )
 
@@ -1691,7 +1277,7 @@ def _landing_map_payload_is_empty(returned: Optional[Mapping[str, Any]]) -> bool
 def _sync_landing_map_input_gate(
     session_state: MutableMapping[str, object],
     *,
-    context_token: tuple[str, str, str, str, str, str, str],
+    context_token: tuple[str, str, str, str, str, str, str, str],
     payload_is_empty: bool,
 ) -> tuple[bool, bool]:
     """
@@ -1701,8 +1287,8 @@ def _sync_landing_map_input_gate(
         `(input_armed, context_changed)` for the current render pass.
     """
     stored_context = session_state.get(LANDING_MAP_CONTEXT_KEY)
-    normalized_stored: Optional[tuple[str, str, str, str, str, str, str]]
-    if isinstance(stored_context, tuple) and len(stored_context) == 7:
+    normalized_stored: Optional[tuple[str, str, str, str, str, str, str, str]]
+    if isinstance(stored_context, tuple) and len(stored_context) == 8:
         normalized_stored = tuple(str(part) for part in stored_context)  # type: ignore[assignment]
     else:
         normalized_stored = None
@@ -1785,28 +1371,78 @@ def _resolve_district_row(
     return None
 
 
+def _resolve_block_row(
+    blocks: pd.DataFrame,
+    *,
+    block_key: Optional[str] = None,
+    state_name: Optional[str] = None,
+    district_name: Optional[str] = None,
+    block_name: Optional[str] = None,
+) -> Optional[pd.Series]:
+    """Return the canonical visible-block row for a stable key or `(state, district, block)`."""
+    if blocks is None or blocks.empty:
+        return None
+    block_frame = blocks.copy()
+    if "__state_key" not in block_frame.columns:
+        block_frame["__state_key"] = block_frame["state_name"].astype(str).map(alias)
+    if "__district_key" not in block_frame.columns:
+        block_frame["__district_key"] = (
+            block_frame["state_name"].astype(str).map(alias)
+            + "|"
+            + block_frame["district_name"].astype(str).map(alias)
+        )
+    if "__block_key" not in block_frame.columns:
+        block_frame["__block_key"] = block_frame["__district_key"].astype(str) + "|" + block_frame["block_name"].astype(str).map(alias)
+
+    if block_key:
+        matches = block_frame[block_frame["__block_key"].astype(str) == str(block_key).strip()]
+        if matches.empty and "__bkey" in block_frame.columns:
+            matches = block_frame[block_frame["__bkey"].astype(str) == str(block_key).strip()]
+        if not matches.empty:
+            return matches.iloc[0]
+
+    state_value = str(state_name or "").strip()
+    district_value = str(district_name or "").strip()
+    block_value = str(block_name or "").strip()
+    if state_value and district_value and block_value:
+        matches = block_frame[
+            (block_frame["state_name"].astype(str).map(alias) == alias(state_value))
+            & (block_frame["district_name"].astype(str).map(alias) == alias(district_value))
+            & (block_frame["block_name"].astype(str).map(alias) == alias(block_value))
+        ]
+        if not matches.empty:
+            return matches.iloc[0]
+
+    return None
+
+
 def _apply_landing_map_click(
     *,
     focus_level: str,
     returned: Optional[Mapping[str, Any]],
     clicked_state: Optional[str],
     clicked_district: Optional[str],
+    clicked_block: Optional[str] = None,
     selected_state: Optional[str],
     selected_district: Optional[str],
+    selected_block: Optional[str] = None,
     adm1: pd.DataFrame,
     adm2: pd.DataFrame,
     visible_districts: Optional[pd.DataFrame] = None,
-) -> tuple[str, Optional[str], Optional[str]]:
+    visible_blocks: Optional[pd.DataFrame] = None,
+) -> tuple[str, Optional[str], Optional[str], Optional[str]]:
     """
     Resolve a landing map click into a geography navigation action.
 
     Returns:
-        A tuple of `(action, state_name, district_name)` where `action` is one of:
-        `noop`, `focus_state`, or `focus_district`.
+        A tuple of `(action, state_name, district_name, block_name)` where
+        `action` is one of `noop`, `focus_state`, `focus_district`, or
+        `focus_block`.
     """
     focus = str(focus_level or "india").strip().lower()
     current_state = str(selected_state or "").strip() or None
     current_district = str(selected_district or "").strip() or None
+    current_block = str(selected_block or "").strip() or None
     payloads = _landing_click_payloads(returned)
 
     if focus == "india":
@@ -1831,11 +1467,72 @@ def _apply_landing_map_click(
                 resolved_state = _canonical_state_name(adm1, state_name=resolved_state)
 
         if resolved_state and _state_exists(adm2, resolved_state):
-            return "focus_state", resolved_state, None
-        return "noop", None, None
+            return "focus_state", resolved_state, None, None
+        return "noop", None, None, None
+
+    if focus == "block":
+        block_frame = visible_blocks if visible_blocks is not None else pd.DataFrame()
+        resolved_block_row: Optional[pd.Series] = None
+        had_payloads = bool(payloads)
+
+        for props in payloads:
+            block_key = props.get("__block_key") or props.get("__bkey")
+            state_label = props.get("state_name") or props.get("shapeName_0") or props.get("state")
+            district_label = props.get("district_name") or props.get("shapeName_1") or props.get("shapeName_2") or props.get("district")
+            block_label = props.get("block_name") or props.get("subdistrict_name") or props.get("adm3_name") or props.get("name")
+            resolved_block_row = _resolve_block_row(
+                block_frame,
+                block_key=str(block_key).strip() if block_key else None,
+                state_name=str(state_label).strip() if state_label else (current_state or None),
+                district_name=str(district_label).strip() if district_label else (current_district or None),
+                block_name=str(block_label).strip() if block_label else None,
+            )
+            if resolved_block_row is not None:
+                break
+
+        if resolved_block_row is None and had_payloads:
+            return "noop", None, None, None
+
+        block_click_value = str(clicked_block or "").strip()
+        if resolved_block_row is None and block_click_value:
+            resolved_block_row = _resolve_block_row(
+                block_frame,
+                state_name=clicked_state or current_state,
+                district_name=clicked_district or current_district,
+                block_name=block_click_value,
+            )
+
+        if resolved_block_row is None:
+            lat, lon = extract_click_coordinates(returned)
+            if lat is not None and lon is not None:
+                block_name, district_name, state_name = find_block_at_coordinates(block_frame, lat, lon)
+                resolved_block_row = _resolve_block_row(
+                    block_frame,
+                    state_name=state_name or current_state,
+                    district_name=district_name or current_district,
+                    block_name=block_name,
+                )
+
+        if resolved_block_row is None or not _block_row_has_landing_score(resolved_block_row):
+            return "noop", None, None, None
+        resolved_state = str(resolved_block_row.get("state_name") or "").strip() or None
+        district_name = str(resolved_block_row.get("district_name") or "").strip() or None
+        block_name = str(resolved_block_row.get("block_name") or "").strip() or None
+        if not resolved_state or not district_name or not block_name:
+            return "noop", None, None, None
+        if (
+            current_state
+            and current_district
+            and current_block
+            and alias(resolved_state) == alias(current_state)
+            and alias(district_name) == alias(current_district)
+            and alias(block_name) == alias(current_block)
+        ):
+            return "noop", None, None, None
+        return "focus_block", resolved_state, district_name, block_name
 
     if focus not in {"state", "district"}:
-        return "noop", None, None
+        return "noop", None, None, None
 
     district_frame = visible_districts if visible_districts is not None else adm2
     resolved_row: Optional[pd.Series] = None
@@ -1860,7 +1557,7 @@ def _apply_landing_map_click(
     # India-state payloads from being reinterpreted as fresh district clicks
     # after the map key changes on state drill-down.
     if resolved_row is None and had_payloads:
-        return "noop", None, None
+        return "noop", None, None, None
 
     if resolved_row is None and clicked_district:
         resolved_row = _resolve_district_row(
@@ -1880,15 +1577,15 @@ def _apply_landing_map_click(
             )
 
     if resolved_row is None:
-        return "noop", None, None
+        return "noop", None, None, None
     if not _district_row_has_landing_score(resolved_row):
-        return "noop", None, None
+        return "noop", None, None, None
     resolved_state = str(resolved_row.get("state_name") or "").strip() or None
     district_name = str(resolved_row.get("district_name") or "").strip() or None
     if not resolved_state or not district_name:
-        return "noop", None, None
+        return "noop", None, None, None
     if not _district_exists(district_frame, resolved_state, district_name):
-        return "noop", None, None
+        return "noop", None, None, None
     if (
         focus == "district"
         and current_state
@@ -1896,8 +1593,8 @@ def _apply_landing_map_click(
         and alias(resolved_state) == alias(current_state)
         and alias(district_name) == alias(current_district)
     ):
-        return "noop", None, None
-    return "focus_district", resolved_state, district_name
+        return "noop", None, None, None
+    return "focus_district", resolved_state, district_name, None
 
 
 def _render_driver_table(driver_df: pd.DataFrame, *, top_n: int = 5) -> None:
@@ -1906,12 +1603,23 @@ def _render_driver_table(driver_df: pd.DataFrame, *, top_n: int = 5) -> None:
         st.caption("No driver detail is available for this scope.")
         return
 
-    display_df = driver_df.head(top_n).copy()
-    display_df["normalized_score"] = display_df["normalized_score"].map(lambda value: f"{float(value):.1f}")
+    if "driver_score" in driver_df.columns:
+        driver_df = driver_df[pd.to_numeric(driver_df["driver_score"], errors="coerce").notna()].copy()
+        if driver_df.empty:
+            st.caption("No driver detail is available for this scope.")
+            return
+
+    sort_cols = [col for col in ("driver_rank", "driver_score") if col in driver_df.columns]
+    if sort_cols:
+        display_df = driver_df.sort_values(sort_cols, ascending=[True, False][: len(sort_cols)], kind="stable").head(top_n).copy()
+    else:
+        display_df = driver_df.head(top_n).copy()
+    if "driver_score_display" not in display_df.columns:
+        display_df["driver_score_display"] = pd.to_numeric(display_df.get("driver_score"), errors="coerce").map(_format_score)
     display_df = display_df.rename(
         columns={
-            "metric_label": "Metric driver",
-            "normalized_score": "Normalized score",
+            "driver_label": "Metric driver",
+            "driver_score_display": "Normalized score",
         }
     )
     st.dataframe(
@@ -1921,10 +1629,182 @@ def _render_driver_table(driver_df: pd.DataFrame, *, top_n: int = 5) -> None:
     )
 
 
+def _set_landing_band_filter(
+    session_state: MutableMapping[str, object],
+    *,
+    band: str,
+    scope: str,
+    bundle: str,
+    scenario: str,
+    period: str,
+    state_name: Optional[str] = None,
+    district_name: Optional[str] = None,
+) -> None:
+    """Store a Glance band filter and route the user to the Rankings tab."""
+    session_state[LANDING_BAND_FILTER_KEY] = {
+        "band": str(band),
+        "scope": str(scope),
+        "bundle": str(bundle),
+        "scenario": str(scenario),
+        "period": str(period),
+        "state_name": state_name,
+        "district_name": district_name,
+    }
+    session_state["landing_tab"] = "Rankings"
+
+
+def _get_landing_band_filter(session_state: Mapping[str, object]) -> Optional[Mapping[str, object]]:
+    """Return the stored Glance band filter if present and well-formed, else None."""
+    raw = session_state.get(LANDING_BAND_FILTER_KEY)
+    if isinstance(raw, Mapping) and raw.get("band") and raw.get("scope"):
+        return raw
+    return None
+
+
+def _clear_stale_landing_band_filter(
+    session_state: MutableMapping[str, object],
+    *,
+    bundle: str,
+    scenario: str,
+    period: str,
+    focus_level: str,
+    selected_state: Optional[str],
+    selected_district: Optional[str],
+) -> None:
+    """Drop the band filter when the active Glance context no longer matches it."""
+    band_filter = _get_landing_band_filter(session_state)
+    if band_filter is None:
+        return
+    scope = str(band_filter.get("scope"))
+    if str(band_filter.get("bundle")) != bundle:
+        session_state.pop(LANDING_BAND_FILTER_KEY, None)
+        return
+    if str(band_filter.get("scenario")) != scenario or str(band_filter.get("period")) != period:
+        session_state.pop(LANDING_BAND_FILTER_KEY, None)
+        return
+    if scope == "national":
+        valid_focus = focus_level == "india"
+    elif scope == "state":
+        valid_focus = focus_level in ("state", "district")
+    elif scope == "block":
+        valid_focus = focus_level == "block"
+    else:
+        valid_focus = False
+    if not valid_focus:
+        session_state.pop(LANDING_BAND_FILTER_KEY, None)
+        return
+    if scope in ("state", "block"):
+        if alias(str(band_filter.get("state_name") or "")) != alias(str(selected_state or "")):
+            session_state.pop(LANDING_BAND_FILTER_KEY, None)
+            return
+    if scope == "block":
+        if alias(str(band_filter.get("district_name") or "")) != alias(str(selected_district or "")):
+            session_state.pop(LANDING_BAND_FILTER_KEY, None)
+
+
+def _apply_landing_band_filter(
+    df: pd.DataFrame,
+    band_filter: Optional[Mapping[str, object]],
+    *,
+    expected_scope: str,
+    state_name: Optional[str] = None,
+    district_name: Optional[str] = None,
+) -> tuple[pd.DataFrame, Optional[str]]:
+    """Filter df by the stored band when the stored scope matches expected_scope.
+
+    Returns (filtered_df, applied_band). applied_band is None when no filter
+    was applied (no filter, scope mismatch, name mismatch, or missing column).
+    """
+    if not band_filter:
+        return df, None
+    if str(band_filter.get("scope")) != expected_scope:
+        return df, None
+    if expected_scope in ("state", "block"):
+        if alias(str(band_filter.get("state_name") or "")) != alias(str(state_name or "")):
+            return df, None
+    if expected_scope == "block":
+        if alias(str(band_filter.get("district_name") or "")) != alias(str(district_name or "")):
+            return df, None
+    band = str(band_filter.get("band") or "").strip()
+    if not band or "score_band" not in df.columns:
+        return df, None
+    filtered = df[df["score_band"].astype(str) == band].copy()
+    return filtered, band
+
+
+def _current_landing_glance_context() -> tuple[str, str, str]:
+    """Read the active Glance bundle/scenario/period triple from session state."""
+    bundle = str(st.session_state.get("landing_bundle") or LANDING_DEFAULT_BUNDLE).strip()
+    scenario = str(st.session_state.get("landing_scenario") or LANDING_DEFAULT_SCENARIO).strip()
+    period = canonical_period_label(
+        str(st.session_state.get("landing_period") or LANDING_DEFAULT_PERIOD).strip()
+    )
+    return bundle, scenario, period
+
+
+def _render_band_filter_buttons(
+    dist_df: pd.DataFrame,
+    *,
+    scope: str,
+    key_prefix: str,
+    state_name: Optional[str] = None,
+    district_name: Optional[str] = None,
+) -> None:
+    """Render one button per band present in dist_df, below a distribution chart."""
+    if dist_df is None or dist_df.empty or "band" not in dist_df.columns:
+        return
+    present = set(dist_df["band"].astype(str).tolist())
+    bands = [b for b in LANDING_BAND_DISPLAY_ORDER if b in present]
+    if not bands:
+        return
+    bundle, scenario, period = _current_landing_glance_context()
+    st.caption("Click a band to filter the Rankings table.")
+    cols = st.columns(len(bands))
+    state_token = alias(str(state_name or "NA"))
+    district_token = alias(str(district_name or "NA"))
+    for col, band in zip(cols, bands):
+        button_key = f"{key_prefix}_{state_token}_{district_token}_{band}"
+        if col.button(band, key=button_key, use_container_width=True):
+            _set_landing_band_filter(
+                st.session_state,
+                band=band,
+                scope=scope,
+                bundle=bundle,
+                scenario=scenario,
+                period=period,
+                state_name=state_name,
+                district_name=district_name,
+            )
+            if scope == "block" and state_name and district_name:
+                set_landing_focus_block(
+                    st.session_state,
+                    state_name=state_name,
+                    district_name=district_name,
+                    block_name=None,
+                )
+            st.rerun()
+
+
+def _build_block_band_distribution(block_scope_df: pd.DataFrame) -> pd.DataFrame:
+    """Return a per-band count frame for a single district's blocks, ordered VH→Low."""
+    if block_scope_df is None or block_scope_df.empty or "score_band" not in block_scope_df.columns:
+        return pd.DataFrame(columns=["band", "count"])
+    counts = (
+        block_scope_df["score_band"].astype(str).value_counts(dropna=False).to_dict()
+    )
+    rows = [
+        {"band": band, "count": int(counts.get(band, 0))}
+        for band in LANDING_BAND_DISPLAY_ORDER
+        if int(counts.get(band, 0)) > 0
+    ]
+    return pd.DataFrame(rows, columns=["band", "count"])
+
+
 def _render_national_summary(
     *,
     state_scores: pd.DataFrame,
     bundle_domain: str,
+    distributions: Optional[pd.DataFrame] = None,
 ) -> None:
     """Render the compact national drawer for the India overview."""
     finite_scores = state_scores[pd.to_numeric(state_scores.get("bundle_score"), errors="coerce").notna()].copy()
@@ -1946,16 +1826,25 @@ def _render_national_summary(
             st.write(f"{index}. {row.state_name}")
 
         st.markdown("**Score Distribution**")
-        dist_df = _build_distribution_frame(finite_scores["bundle_score"])
-        st.bar_chart(dist_df.set_index("Band"))
+        distributions = distributions if distributions is not None else pd.DataFrame()
+        dist_df = distributions[distributions.get("scope_level", pd.Series(dtype=str)).astype(str) == "national"].copy()
+        if not dist_df.empty:
+            st.bar_chart(dist_df.rename(columns={"band": "Band", "count": "Count"}).set_index("Band")["Count"])
+            _render_band_filter_buttons(
+                dist_df,
+                scope="national",
+                key_prefix="landing_band_btn_national",
+            )
 
 
 def _render_state_summary(
     *,
+    bundle_domain: str,
     state_name: str,
     district_scores: pd.DataFrame,
     state_scores: pd.DataFrame,
     driver_context: LandingDriverContext,
+    distributions: Optional[pd.DataFrame] = None,
     deep_dive_disabled: bool = False,
 ) -> None:
     """Render the expanded drawer for state focus."""
@@ -1978,25 +1867,44 @@ def _render_state_summary(
         count_value = row.get("state_count")
         if pd.notna(rank_value) and pd.notna(count_value):
             st.caption(f"State rank: {int(rank_value)} / {int(count_value)} across India")
-        st.caption(f"Risk band: {_score_band(row.get('bundle_score'))}")
+        st.caption(f"Risk band: {row.get('score_band') or 'Insufficient data'}")
 
         hotspot_df = state_scope.sort_values("bundle_score", ascending=False, kind="stable").head(5)
         st.markdown("**Top Hotspot Districts**")
         for index, hotspot_row in enumerate(hotspot_df.itertuples(index=False), start=1):
-            st.write(f"{index}. {hotspot_row.district_name}")
+            hotspot_district_name = str(hotspot_row.district_name)
+            button_label = f"{index}. {hotspot_district_name}"
+            button_key = f"landing_hotspot_district_{state_name}_{index}_{hotspot_district_name}"
+            if st.button(button_label, key=button_key, use_container_width=True):
+                set_landing_focus_district(
+                    st.session_state,
+                    state_name=state_name,
+                    district_name=hotspot_district_name,
+                )
+                st.rerun()
 
         st.markdown("**District Score Distribution**")
-        st.bar_chart(_build_distribution_frame(state_scope["bundle_score"]).set_index("Band"))
-        st.markdown("**Metric Drivers**")
+        distributions = distributions if distributions is not None else pd.DataFrame()
+        dist_df = distributions[
+            (distributions.get("scope_level", pd.Series(dtype=str)).astype(str) == "state")
+            & (distributions.get("__state_key", pd.Series(dtype=str)).astype(str) == alias(state_name))
+        ].copy()
+        if not dist_df.empty:
+            st.bar_chart(dist_df.rename(columns={"band": "Band", "count": "Count"}).set_index("Band")["Count"])
+            _render_band_filter_buttons(
+                dist_df,
+                scope="state",
+                key_prefix="landing_band_btn_state",
+                state_name=state_name,
+            )
+        st.markdown(f"**{_landing_driver_heading(bundle_domain)}**")
         driver_scope = pd.DataFrame()
         if driver_context.available and not driver_context.district_scores.empty:
             driver_scope = driver_context.district_scores[
-                driver_context.district_scores["__state_key"].astype(str) == alias(state_name)
+                (driver_context.district_scores["scope_level"].astype(str) == "state")
+                & (driver_context.district_scores["__state_key"].astype(str) == alias(state_name))
             ].copy()
-        _render_driver_table(
-            compute_metric_driver_frame(driver_scope, metric_specs=driver_context.metric_specs),
-            top_n=5,
-        )
+        _render_driver_table(driver_scope, top_n=5)
 
         if st.button(
             "Deep Dive",
@@ -2009,11 +1917,14 @@ def _render_state_summary(
 
 def _render_district_summary(
     *,
+    bundle_domain: str,
     state_name: str,
     district_name: str,
     district_scores: pd.DataFrame,
     driver_context: LandingDriverContext,
+    attributes: Optional[pd.DataFrame] = None,
     deep_dive_disabled: bool = False,
+    block_scores_available: bool = False,
 ) -> None:
     """Render the district-focus drawer with peer and driver context."""
     state_scope = district_scores[district_scores["state_name"].astype(str).map(alias) == alias(state_name)].copy()
@@ -2026,43 +1937,195 @@ def _render_district_summary(
             return
 
         row = district_row.iloc[0]
-        st.metric(
-            label=f"{_landing_bundle_display(str(st.session_state.get('landing_bundle') or LANDING_DEFAULT_BUNDLE))} bundle score",
-            value=_format_score(row.get("bundle_score")),
+
+        # Primary card: use raw ordinal class + label when available.
+        non_attr = [e for e in get_bundle_weights(bundle_domain) if not e.is_attribute]
+        primary_slug = non_attr[0].metric_slug if len(non_attr) == 1 else None
+        primary_class_labels: dict = (
+            VARIABLES.get(primary_slug or "", {}).get("class_labels") or {}
         )
-        st.caption(f"Risk band: {_score_band(row.get('bundle_score'))}")
+        raw_primary = None if not primary_slug else pd.to_numeric(
+            pd.Series([row.get(primary_slug)]), errors="coerce"
+        ).iloc[0]
+
+        if primary_class_labels and raw_primary is not None and np.isfinite(raw_primary):
+            cls = int(round(raw_primary))
+            class_label = primary_class_labels.get(cls, str(cls))
+            primary_label = str(VARIABLES.get(primary_slug, {}).get("label") or primary_slug)
+            st.metric(label=primary_label, value=f"{cls} — {class_label}")
+        else:
+            st.metric(
+                label=f"{_landing_bundle_display(str(st.session_state.get('landing_bundle') or LANDING_DEFAULT_BUNDLE))} bundle score",
+                value=_format_score(row.get("bundle_score")),
+            )
+
+        st.caption(f"Risk band: {row.get('score_band') or 'Insufficient data'}")
 
         rank_value = row.get("district_rank")
         count_value = row.get("district_count")
         if pd.notna(rank_value) and pd.notna(count_value):
             st.caption(f"Rank within {state_name}: {int(rank_value)} / {int(count_value)}")
 
-        state_mean = pd.to_numeric(state_scope["bundle_score"], errors="coerce").dropna().mean()
-        if np.isfinite(state_mean):
-            district_score = pd.to_numeric(pd.Series([row.get("bundle_score")]), errors="coerce").iloc[0]
-            if np.isfinite(district_score):
-                delta = float(district_score) - float(state_mean)
-                st.caption(
-                    f"Compared with the {state_name} average: {delta:+.1f} points "
-                    f"(state average {state_mean:.1f})"
-                )
+        state_mean = pd.to_numeric(pd.Series([row.get("state_mean_score")]), errors="coerce").iloc[0]
+        delta_display = row.get("delta_vs_state_mean_display")
+        if np.isfinite(state_mean) and delta_display:
+            st.caption(
+                f"Compared with the {state_name} average: {delta_display} points "
+                f"(state average {state_mean:.1f})"
+            )
 
-        st.markdown("**Metric Drivers**")
+        # Inline attribute captions (e.g. raw depth and extent for JRC flood).
+        district_key = f"{alias(state_name)}|{alias(district_name)}"
+        attributes = attributes if attributes is not None else pd.DataFrame()
+        attr_scope = attributes[attributes.get("__district_key", pd.Series(dtype=str)).astype(str) == district_key].copy()
+        if not attr_scope.empty and "sort_order" in attr_scope.columns:
+            attr_scope = attr_scope.sort_values("sort_order", kind="stable")
+        for attr_row in attr_scope.itertuples(index=False):
+            label = str(getattr(attr_row, "attribute_label", "") or getattr(attr_row, "attribute_slug", ""))
+            display = str(getattr(attr_row, "attribute_display", "") or "")
+            if label and display:
+                st.caption(f"{label}: {display}")
+
+        st.markdown(f"**{_landing_driver_heading(bundle_domain)}**")
         driver_scope = pd.DataFrame()
         if driver_context.available and not driver_context.district_scores.empty:
-            district_key = f"{alias(state_name)}|{alias(district_name)}"
             driver_scope = driver_context.district_scores[
-                driver_context.district_scores["__district_key"].astype(str) == district_key
+                (driver_context.district_scores["scope_level"].astype(str) == "district")
+                & (driver_context.district_scores["__district_key"].astype(str) == district_key)
             ].copy()
-        driver_df = compute_metric_driver_frame(driver_scope, metric_specs=driver_context.metric_specs)
-        if driver_df.empty:
+        if driver_scope.empty:
             st.caption("No driver detail is available for this district.")
         else:
-            _render_driver_table(driver_df, top_n=5)
+            _render_driver_table(driver_scope, top_n=5)
 
         if st.button(
             "Deep Dive",
             key="landing_deep_dive_district",
+            use_container_width=True,
+            disabled=deep_dive_disabled,
+        ):
+            _enter_deep_dive(st.session_state)
+
+        if block_scores_available:
+            if st.button("View Blocks", key="landing_view_blocks_district", use_container_width=True):
+                set_landing_focus_block(
+                    st.session_state,
+                    state_name=state_name,
+                    district_name=district_name,
+                    block_name=None,
+                )
+                st.rerun()
+
+
+def _render_block_summary(
+    *,
+    bundle_domain: str,
+    state_name: str,
+    district_name: str,
+    block_name: Optional[str],
+    block_scores: pd.DataFrame,
+    driver_context: LandingDriverContext,
+    deep_dive_disabled: bool = False,
+) -> None:
+    """Render the block-focus drawer."""
+    district_key = f"{alias(state_name)}|{alias(district_name)}"
+    district_scope = block_scores[
+        (block_scores["state_name"].astype(str).map(alias) == alias(state_name))
+        & (block_scores["district_name"].astype(str).map(alias) == alias(district_name))
+    ].copy()
+    selected_block = str(block_name or "").strip()
+
+    with st.container(border=True):
+        if not selected_block:
+            st.markdown(f"#### {district_name} Blocks")
+            if district_scope.empty:
+                st.info("Block-level landing data is not available for this district.")
+                return
+            count_value = district_scope["block_name"].dropna().astype(str).nunique()
+            st.metric(label="Blocks with landing scores", value=str(count_value))
+            dist_score_display = district_scope["district_bundle_score_display"].dropna().astype(str).head(1)
+            if not dist_score_display.empty:
+                st.caption(f"Parent district ({district_name}) score: {dist_score_display.iloc[0]}")
+            hotspot_df = district_scope.sort_values("bundle_score", ascending=False, kind="stable").head(5)
+            st.markdown("**Top Hotspot Blocks**")
+            for index, hotspot_row in enumerate(hotspot_df.itertuples(index=False), start=1):
+                hotspot_block_name = str(hotspot_row.block_name)
+                button_label = f"{index}. {hotspot_block_name}"
+                button_key = (
+                    f"landing_hotspot_block_{state_name}_{district_name}_{index}_{hotspot_block_name}"
+                )
+                if st.button(button_label, key=button_key, use_container_width=True):
+                    set_landing_focus_block(
+                        st.session_state,
+                        state_name=state_name,
+                        district_name=district_name,
+                        block_name=hotspot_block_name,
+                    )
+                    st.rerun()
+
+            block_dist = _build_block_band_distribution(district_scope)
+            if not block_dist.empty:
+                st.markdown("**Block Score Distribution**")
+                st.bar_chart(
+                    block_dist.rename(columns={"band": "Band", "count": "Count"}).set_index("Band")["Count"]
+                )
+                _render_band_filter_buttons(
+                    block_dist,
+                    scope="block",
+                    key_prefix="landing_band_btn_block",
+                    state_name=state_name,
+                    district_name=district_name,
+                )
+            return
+
+        block_key = district_key + "|" + alias(selected_block)
+        block_row = block_scores[block_scores["__block_key"].astype(str) == block_key]
+        st.markdown(f"#### {selected_block} Block")
+        if block_row.empty:
+            st.info("Block-level landing data is not available.")
+            return
+
+        row = block_row.iloc[0]
+        st.metric(
+            label=f"{_landing_bundle_display(str(st.session_state.get('landing_bundle') or LANDING_DEFAULT_BUNDLE))} bundle score",
+            value=_format_score(row.get("bundle_score")),
+        )
+        st.caption(f"Risk band: {row.get('score_band') or 'Insufficient data'}")
+
+        rank_d = row.get("block_rank_within_district")
+        count_d = row.get("block_count_within_district")
+        if pd.notna(rank_d) and pd.notna(count_d):
+            st.caption(f"Rank within {district_name}: {int(rank_d)} / {int(count_d)}")
+        rank_s = row.get("block_rank_within_state")
+        count_s = row.get("block_count_within_state")
+        if pd.notna(rank_s) and pd.notna(count_s):
+            st.caption(f"Rank within {state_name}: {int(rank_s)} / {int(count_s)}")
+        dist_score_display = row.get("district_bundle_score_display")
+        if dist_score_display:
+            st.caption(f"Parent district ({district_name}) score: {dist_score_display}")
+
+        driver_scope = pd.DataFrame()
+        driver_heading = _landing_driver_heading(bundle_domain)
+        if driver_context.available and not driver_context.district_scores.empty:
+            drivers = driver_context.district_scores
+            if "__block_key" in drivers.columns and "scope_level" in drivers.columns:
+                driver_scope = drivers[
+                    (drivers["scope_level"].astype(str) == "block")
+                    & (drivers["__block_key"].astype(str) == block_key)
+                ].copy()
+            if driver_scope.empty and "scope_level" in drivers.columns:
+                driver_scope = drivers[
+                    (drivers["scope_level"].astype(str) == "district")
+                    & (drivers["__district_key"].astype(str) == district_key)
+                ].copy()
+                if not driver_scope.empty:
+                    driver_heading = f"Parent District {_landing_driver_heading(bundle_domain)}"
+        st.markdown(f"**{driver_heading}**")
+        _render_driver_table(driver_scope, top_n=5)
+
+        if st.button(
+            "Deep Dive",
+            key="landing_deep_dive_block",
             use_container_width=True,
             disabled=deep_dive_disabled,
         ):
@@ -2076,14 +2139,42 @@ def _render_landing_rankings(
     selected_district: Optional[str],
     state_scores: pd.DataFrame,
     district_scores: pd.DataFrame,
-) -> None:
+    block_scores: Optional[pd.DataFrame] = None,
+    selected_block: Optional[str] = None,
+) -> pd.DataFrame:
     """Render context-sensitive landing rankings."""
-    if focus_level == "india":
-        scope_df = state_scores.sort_values("bundle_score", ascending=False, kind="stable").copy()
-        scope_df["Rank"] = scope_df["bundle_score"].rank(method="min", ascending=False, na_option="bottom")
-        display_df = scope_df.rename(
+    visible_rows = _compute_visible_ranking_rows(
+        focus_level=focus_level,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        selected_block=selected_block,
+        state_scores=state_scores,
+        district_scores=district_scores,
+        block_scores=block_scores,
+        band_filter=_get_landing_band_filter(st.session_state),
+    )
+    applied_band = (
+        str(visible_rows["active_band_filter"].dropna().head(1).iloc[0])
+        if not visible_rows.empty and visible_rows["active_band_filter"].dropna().any()
+        else None
+    )
+    unit_scope = (
+        str(visible_rows["unit_scope"].dropna().head(1).iloc[0])
+        if not visible_rows.empty and "unit_scope" in visible_rows.columns
+        else ("state" if focus_level == "india" else ("block" if focus_level == "block" else "district"))
+    )
+    _render_band_filter_status(applied_band, len(visible_rows), level_noun=unit_scope)
+    if visible_rows.empty:
+        st.dataframe(pd.DataFrame(), hide_index=True, use_container_width=True)
+        return visible_rows
+    _render_selected_focus_summary(visible_rows)
+    display_df = visible_rows.copy()
+    display_df["Current focus"] = display_df["is_current_focus"].map(lambda value: "Selected" if bool(value) else "")
+    if unit_scope == "state":
+        display_df = display_df.rename(
             columns={
-                "state_name": "State",
+                "rank": "Rank",
+                "unit_name": "State",
                 "bundle_score_display": "Bundle score",
                 "score_band": "Risk band",
             }
@@ -2093,19 +2184,26 @@ def _render_landing_rankings(
             hide_index=True,
             use_container_width=True,
         )
-        return
-
-    scope_df = district_scores[
-        district_scores["state_name"].astype(str).map(alias) == alias(selected_state or "")
-    ].sort_values("bundle_score", ascending=False, kind="stable")
-    scope_df = scope_df.copy()
-    scope_df["Current focus"] = scope_df["district_name"].map(
-        lambda value: "Selected" if selected_district and alias(str(value)) == alias(selected_district) else ""
-    )
-    display_df = scope_df.rename(
+        return visible_rows
+    if unit_scope == "block":
+        display_df = display_df.rename(
+            columns={
+                "rank": "Rank",
+                "unit_name": "Block",
+                "bundle_score_display": "Bundle score",
+                "score_band": "Risk band",
+            }
+        )
+        st.dataframe(
+            display_df[["Rank", "Block", "Bundle score", "Risk band", "Current focus"]],
+            hide_index=True,
+            use_container_width=True,
+        )
+        return visible_rows
+    display_df = display_df.rename(
         columns={
-            "district_rank": "Rank",
-            "district_name": "District",
+            "rank": "Rank",
+            "unit_name": "District",
             "bundle_score_display": "Bundle score",
             "score_band": "Risk band",
         }
@@ -2115,6 +2213,330 @@ def _render_landing_rankings(
         hide_index=True,
         use_container_width=True,
     )
+    return visible_rows
+
+
+def _ranking_scalar(value: object, *, fallback: str = "") -> str:
+    if pd.isna(value):
+        return fallback
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return str(value).strip() or fallback
+    return str(int(numeric)) if numeric.is_integer() else f"{numeric:g}"
+
+
+def _ranking_text(value: object, *, fallback: str = "") -> str:
+    if pd.isna(value):
+        return fallback
+    text = str(value).strip()
+    return text or fallback
+
+
+def _render_selected_focus_summary(visible_rows: pd.DataFrame) -> None:
+    """Render a compact selected-row summary without changing table order."""
+    if visible_rows.empty or "is_current_focus" not in visible_rows.columns:
+        return
+    focus_mask = visible_rows["is_current_focus"].fillna(False).astype(bool)
+    focus_rows = visible_rows[focus_mask].sort_values("rank", kind="stable")
+    if focus_rows.empty:
+        return
+    focus = focus_rows.iloc[0]
+    unit_scope = _ranking_text(focus.get("unit_scope"), fallback="unit").lower()
+    unit_label = {"district": "district", "block": "block", "state": "state"}.get(unit_scope, "unit")
+    unit_name = _ranking_text(focus.get("unit_name"))
+    rank = _ranking_scalar(focus.get("rank"), fallback="unranked")
+    comparison_count = _ranking_scalar(focus.get("comparison_count"), fallback=str(len(visible_rows)))
+    score = _ranking_text(focus.get("bundle_score_display")) or _ranking_text(focus.get("bundle_score"))
+    band = _ranking_text(focus.get("score_band"))
+    score_text = f", score {score}" if score else ""
+    band_text = f", {band} risk band" if band else ""
+    st.caption(
+        f"Selected {unit_label}: {unit_name.upper()} - rank {rank} / {comparison_count}"
+        f"{score_text}{band_text}"
+    )
+
+
+def _compute_visible_ranking_rows(
+    *,
+    focus_level: str,
+    selected_state: Optional[str],
+    selected_district: Optional[str],
+    selected_block: Optional[str],
+    state_scores: pd.DataFrame,
+    district_scores: pd.DataFrame,
+    block_scores: Optional[pd.DataFrame] = None,
+    band_filter: Optional[Mapping[str, object]] = None,
+) -> pd.DataFrame:
+    """Return the exact Glance ranking rows visible for the active scope."""
+    focus = str(focus_level or "india").strip().lower()
+    rank_warning = ""
+    if focus == "india":
+        scope_df = state_scores.sort_values("bundle_score", ascending=False, kind="stable").copy()
+        scope_df, applied_band = _apply_landing_band_filter(scope_df, band_filter, expected_scope="national")
+        unit_scope = "state"
+        rank_col = "state_rank"
+        count_col = "state_count"
+        unit_col = "state_name"
+        parent_state = ""
+        parent_district = ""
+        comparison_group = "India"
+    elif focus == "block" and block_scores is not None:
+        scope_df = block_scores[
+            (block_scores["state_name"].astype(str).map(alias) == alias(selected_state or ""))
+            & (block_scores["district_name"].astype(str).map(alias) == alias(selected_district or ""))
+        ].sort_values("bundle_score", ascending=False, kind="stable").copy()
+        scope_df, applied_band = _apply_landing_band_filter(
+            scope_df,
+            band_filter,
+            expected_scope="block",
+            state_name=selected_state,
+            district_name=selected_district,
+        )
+        unit_scope = "block"
+        rank_col = "block_rank_within_district"
+        count_col = "block_count_within_district"
+        unit_col = "block_name"
+        parent_state = selected_state or ""
+        parent_district = selected_district or ""
+        comparison_group = selected_district or ""
+    else:
+        scope_df = district_scores[
+            district_scores["state_name"].astype(str).map(alias) == alias(selected_state or "")
+        ].sort_values("bundle_score", ascending=False, kind="stable").copy()
+        scope_df, applied_band = _apply_landing_band_filter(
+            scope_df,
+            band_filter,
+            expected_scope="state",
+            state_name=selected_state,
+        )
+        unit_scope = "district"
+        rank_col = "district_rank"
+        count_col = "district_count"
+        unit_col = "district_name"
+        parent_state = selected_state or ""
+        parent_district = ""
+        comparison_group = selected_state or ""
+    if scope_df.empty:
+        return pd.DataFrame(
+            columns=[
+                "unit_scope",
+                "rank",
+                "unit_name",
+                "unit_type",
+                "parent_state",
+                "parent_district",
+                "is_current_focus",
+                "comparison_group",
+                "comparison_count",
+                "active_band_filter",
+                "rank_warning",
+            ]
+        )
+    if rank_col in scope_df.columns:
+        rank_values = pd.to_numeric(scope_df[rank_col], errors="coerce")
+    else:
+        rank_values = pd.Series([np.nan] * len(scope_df), index=scope_df.index)
+    if rank_values.isna().any():
+        rank_warning = f"{rank_col} was missing for at least one row; rank fallback used visible score order."
+        fallback = scope_df["bundle_score"].rank(method="min", ascending=False, na_option="bottom")
+        rank_values = rank_values.fillna(fallback)
+    scope_df["unit_scope"] = unit_scope
+    scope_df["rank"] = rank_values.astype("Int64")
+    scope_df["unit_name"] = scope_df[unit_col].astype(str)
+    scope_df["unit_type"] = unit_scope
+    scope_df["parent_state"] = parent_state if parent_state else scope_df.get("state_name", "")
+    scope_df["parent_district"] = parent_district if parent_district else scope_df.get("district_name", "")
+    if unit_scope == "block":
+        scope_df["is_current_focus"] = scope_df[unit_col].map(
+            lambda value: bool(selected_block and alias(str(value)) == alias(selected_block))
+        )
+    elif unit_scope == "district":
+        scope_df["is_current_focus"] = scope_df[unit_col].map(
+            lambda value: bool(selected_district and alias(str(value)) == alias(selected_district))
+        )
+    else:
+        scope_df["is_current_focus"] = False
+    scope_df["comparison_group"] = comparison_group
+    if count_col in scope_df.columns:
+        scope_df["comparison_count"] = pd.to_numeric(scope_df[count_col], errors="coerce").astype("Int64")
+    else:
+        scope_df["comparison_count"] = len(scope_df)
+    scope_df["active_band_filter"] = applied_band or ""
+    scope_df["rank_warning"] = rank_warning
+    return scope_df.sort_values(["rank", "unit_name"], kind="stable").reset_index(drop=True)
+
+
+def _render_glance_answer_export_panel(
+    *,
+    visible_rows: pd.DataFrame,
+    drivers: pd.DataFrame,
+    bundle_domain: str,
+    scenario: str,
+    period: str,
+    focus_level: str,
+    selected_state: Optional[str],
+    selected_district: Optional[str],
+) -> None:
+    """Render Glance answer and export controls from the visible rankings frame."""
+    st.markdown("#### Answer & Export")
+    if visible_rows.empty:
+        st.caption("No visible ranking rows are available to export for the current selection.")
+        st.button("Generate copyable answer", key="landing_glance_answer_disabled", disabled=True)
+        st.download_button("Download ranking CSV", data=b"", file_name="irt_glance_empty.csv", disabled=True, key="landing_glance_csv_disabled")
+        st.download_button("Download answer pack", data=b"", file_name="irt_glance_empty.xlsx", disabled=True, key="landing_glance_xlsx_disabled")
+        return
+    export_frame, driver_note = build_glance_export_frame(visible_rows, drivers)
+    unit_scope = str(visible_rows["unit_scope"].iloc[0])
+    active_band = str(visible_rows["active_band_filter"].iloc[0] or "")
+    geography = selected_district if unit_scope == "block" else selected_state if unit_scope == "district" else "India"
+    geography = geography or "India"
+    bundle_label = _landing_bundle_display(bundle_domain)
+    scenario_label = SCENARIO_DISPLAY.get(str(scenario).strip().lower(), str(scenario))
+    period_label = period_display_label(canonical_period_label(period))
+    answer_text = build_glance_answer_text(
+        export_frame,
+        bundle_label=bundle_label,
+        scenario_label=scenario_label,
+        period_label=period_label,
+        geography_label=geography,
+        is_projection=str(scenario).strip().lower() != "snapshot",
+        driver_note=driver_note,
+    )
+    current_focus_token = ""
+    if "is_current_focus" in export_frame.columns:
+        focus_rows = export_frame[export_frame["is_current_focus"].fillna(False).astype(bool)]
+        if not focus_rows.empty:
+            focus = focus_rows.sort_values("rank", kind="stable").head(1).iloc[0]
+            focus_parts = [
+                focus.get("unit_name", ""),
+                focus.get("rank", ""),
+                focus.get("comparison_count", ""),
+                focus.get("bundle_score_display", ""),
+                focus.get("score_band", ""),
+                focus.get("top_driver_1", ""),
+                focus.get("top_driver_2", ""),
+                focus.get("top_driver_3", ""),
+            ]
+            current_focus_token = "|".join(alias(part) for part in focus_parts)
+    answer_context_token = "|".join(
+        [
+            alias(bundle_domain),
+            alias(scenario),
+            alias(period),
+            alias(focus_level),
+            alias(unit_scope),
+            alias(geography),
+            alias(active_band),
+            str(len(export_frame)),
+            str(export_frame["unit_name"].astype(str).tolist()[:3]),
+            current_focus_token,
+        ]
+    )
+    if st.session_state.get("landing_glance_answer_context_token") != answer_context_token:
+        st.session_state["landing_glance_answer_context_token"] = answer_context_token
+        st.session_state["landing_glance_answer_text"] = answer_text
+        st.session_state["landing_glance_answer_text_area"] = answer_text
+    if st.button("Generate copyable answer", key="landing_glance_generate_answer", use_container_width=True):
+        st.session_state["landing_glance_answer_text"] = answer_text
+        st.session_state["landing_glance_answer_text_area"] = answer_text
+    st.text_area(
+        "Copyable answer",
+        value=str(st.session_state.get("landing_glance_answer_text_area") or answer_text),
+        key="landing_glance_answer_text_area",
+        height=120,
+    )
+    metadata = {
+        "bundle": bundle_domain,
+        "scenario": scenario,
+        "period": period,
+        "geography": geography,
+        "focus_level": focus_level,
+        "unit_scope": unit_scope,
+        "active_band_filter": active_band,
+        "score_direction": "Higher bundle score indicates higher hazard signal.",
+        "missing_data_rule": "Missing values remain blank; persisted ranks are used when available.",
+        "source_artifacts": "state.parquet, district.parquet, block.parquet when available, drivers.parquet",
+        "driver_source_artifact": "drivers.parquet",
+        "rank_warning": str(visible_rows["rank_warning"].dropna().head(1).iloc[0] or ""),
+    }
+    csv_name = glance_export_filename(
+        kind="csv",
+        bundle_slug=bundle_domain,
+        unit_scope=unit_scope,
+        scenario=scenario,
+        period=period,
+        geography=geography,
+        band_filter=active_band or None,
+    )
+    xlsx_name = glance_export_filename(
+        kind="xlsx",
+        bundle_slug=bundle_domain,
+        unit_scope=unit_scope,
+        scenario=scenario,
+        period=period,
+        geography=geography,
+        band_filter=active_band or None,
+    )
+    export_cols = st.columns(2)
+    with export_cols[0]:
+        st.download_button(
+            "Download ranking CSV",
+            data=build_glance_csv_bytes(export_frame),
+            file_name=csv_name,
+            mime="text/csv",
+            key="landing_glance_csv_download",
+            use_container_width=True,
+        )
+    answer_pack_bytes: bytes | None = None
+    answer_pack_unavailable = False
+    try:
+        answer_pack_bytes = build_glance_answer_pack_xlsx(
+            answer_text=answer_text,
+            export_frame=export_frame,
+            metadata=metadata,
+            driver_note=driver_note,
+        )
+    except ModuleNotFoundError as exc:
+        if str(getattr(exc, "name", "")).strip() != "openpyxl":
+            raise
+        answer_pack_unavailable = True
+    with export_cols[1]:
+        if answer_pack_unavailable:
+            st.download_button(
+                "Download answer pack",
+                data=b"",
+                file_name=xlsx_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="landing_glance_xlsx_download",
+                use_container_width=True,
+                disabled=True,
+            )
+        else:
+            st.download_button(
+                "Download answer pack",
+                data=answer_pack_bytes or b"",
+                file_name=xlsx_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="landing_glance_xlsx_download",
+                use_container_width=True,
+            )
+
+
+def _render_band_filter_status(applied_band: Optional[str], row_count: int, *, level_noun: str) -> None:
+    """Show the active band filter, row count, and a Clear button."""
+    if not applied_band:
+        return
+    plural = f"{level_noun}s"
+    if row_count == 0:
+        st.caption(
+            f"Filtered to **{applied_band}** risk band — no {plural} fall in this band for the current selection."
+        )
+    else:
+        st.caption(f"Filtered to **{applied_band}** risk band — {row_count} {plural if row_count != 1 else level_noun}.")
+    if st.button("Clear filter", key="landing_band_filter_clear"):
+        st.session_state.pop(LANDING_BAND_FILTER_KEY, None)
+        st.rerun()
 
 
 def _sanitize_compare_selection(
@@ -2145,6 +2567,8 @@ def _render_landing_compare(
     selected_district: Optional[str],
     state_scores: pd.DataFrame,
     district_scores: pd.DataFrame,
+    block_scores: Optional[pd.DataFrame] = None,
+    selected_block: Optional[str] = None,
 ) -> None:
     """Render the lightweight landing compare view for the current geography scope."""
     if focus_level == "india":
@@ -2152,6 +2576,17 @@ def _render_landing_compare(
         unit_column = "state_name"
         unit_label = "states"
         defaults = scope_df["state_name"].head(3).tolist()
+        context_mean = pd.to_numeric(scope_df["bundle_score"], errors="coerce").dropna().mean()
+    elif focus_level == "block" and block_scores is not None:
+        scope_df = block_scores[
+            (block_scores["state_name"].astype(str).map(alias) == alias(selected_state or ""))
+            & (block_scores["district_name"].astype(str).map(alias) == alias(selected_district or ""))
+        ].sort_values("bundle_score", ascending=False, kind="stable").copy()
+        unit_column = "block_name"
+        unit_label = "blocks"
+        defaults = scope_df["block_name"].head(3).tolist()
+        if selected_block and selected_block not in defaults:
+            defaults = [selected_block] + defaults[:2]
         context_mean = pd.to_numeric(scope_df["bundle_score"], errors="coerce").dropna().mean()
     else:
         scope_df = district_scores[
@@ -2202,6 +2637,23 @@ def _render_landing_compare(
             hide_index=True,
             use_container_width=True,
         )
+    elif focus_level == "block" and block_scores is not None:
+        compare_df["Current focus"] = compare_df["block_name"].map(
+            lambda value: "Selected" if selected_block and alias(str(value)) == alias(selected_block) else ""
+        )
+        display_df = compare_df.rename(
+            columns={
+                "block_name": "Block",
+                "bundle_score_display": "Bundle score",
+                "score_band": "Risk band",
+                "delta_vs_scope_mean": f"vs {selected_district} mean",
+            }
+        )
+        st.dataframe(
+            display_df[["Block", "Bundle score", "Risk band", f"vs {selected_district} mean", "Current focus"]],
+            hide_index=True,
+            use_container_width=True,
+        )
     else:
         compare_df["Current focus"] = compare_df["district_name"].map(
             lambda value: "Selected" if selected_district and alias(str(value)) == alias(selected_district) else ""
@@ -2226,15 +2678,15 @@ def _enter_deep_dive(
 ) -> None:
     """Apply the landing -> detailed workflow handoff and rerun the app."""
     bundle_domain = str(session_state.get("landing_bundle") or LANDING_DEFAULT_BUNDLE).strip()
-    composite_spec = get_composite_metric_for_bundle(bundle_domain)
-    if composite_spec is None:
+    dashboard_spec = get_dashboard_bundle_spec(bundle_domain)
+    if dashboard_spec is None:
         st.warning("Deep Dive is unavailable because this Glance bundle has no configured composite metric.")
         return
 
     handoff = build_deep_dive_handoff(
         session_state,
         bundle_domain=bundle_domain,
-        metric_slug=composite_spec.composite_slug,
+        metric_slug=dashboard_spec.composite_slug,
     )
     for key, value in handoff.items():
         session_state[key] = value
@@ -2245,6 +2697,7 @@ def render_landing_page(
     *,
     adm1: Any,
     adm2: Any,
+    adm3_by_district: Optional[dict] = None,
     data_dir: Path,
 ) -> None:
     """Render the climate-hazard landing / discovery surface."""
@@ -2258,7 +2711,8 @@ def render_landing_page(
     focus_level = str(st.session_state.get("landing_focus_level", "india")).strip().lower()
     selected_state = str(st.session_state.get("landing_selected_state") or "").strip() or None
     selected_district = str(st.session_state.get("landing_selected_district") or "").strip() or None
-    bundle_options = _landing_bundle_domains()
+    selected_block = str(st.session_state.get("landing_selected_block") or "").strip() or None
+    bundle_options = _landing_bundle_domains(data_dir=data_dir)
     if not bundle_options:
         st.error("No Glance bundles are available for the landing experience.")
         return
@@ -2278,9 +2732,26 @@ def render_landing_page(
         stat=LANDING_SCORE_STAT,
         data_dir=data_dir,
     )
+    glance_context = _load_glance_pair_context(
+        bundle_domain,
+        scenario=scenario,
+        period=period,
+        data_dir=data_dir,
+    )
+    block_scores = glance_context.block
+    block_available = block_scores is not None and not block_scores.empty
     search_options = _build_landing_search_options(state_scores, district_scores)
     if str(st.session_state.get("landing_tab") or LANDING_DEFAULT_TAB) not in LANDING_TABS:
         st.session_state["landing_tab"] = LANDING_DEFAULT_TAB
+    _clear_stale_landing_band_filter(
+        st.session_state,
+        bundle=bundle_domain,
+        scenario=scenario,
+        period=period,
+        focus_level=focus_level,
+        selected_state=selected_state,
+        selected_district=selected_district,
+    )
     if bool(st.session_state.get("landing_search_reset_pending", False)):
         st.session_state["landing_search_selection"] = None
         st.session_state["landing_search_last_applied"] = None
@@ -2370,6 +2841,33 @@ def render_landing_page(
             set_landing_focus_state(st.session_state, selected_state)
             st.rerun()
 
+    if focus_level == "block" and selected_state and selected_district:
+        district_exists = adm2[
+            (adm2["state_name"].astype(str).map(alias) == alias(selected_state))
+            & (adm2["district_name"].astype(str).map(alias) == alias(selected_district))
+        ]
+        if district_exists.empty:
+            _clear_landing_pending_map_transition(st.session_state)
+            set_landing_focus_state(st.session_state, selected_state)
+            st.rerun()
+        if not block_available or adm3_by_district is None:
+            _clear_landing_pending_map_transition(st.session_state)
+            set_landing_focus_district(st.session_state, selected_state, selected_district)
+            st.rerun()
+        district_block_scope = block_scores[
+            (block_scores["state_name"].astype(str).map(alias) == alias(selected_state))
+            & (block_scores["district_name"].astype(str).map(alias) == alias(selected_district))
+        ]
+        if district_block_scope.empty:
+            _clear_landing_pending_map_transition(st.session_state)
+            set_landing_focus_district(st.session_state, selected_state, selected_district)
+            st.rerun()
+        if selected_block and not (
+            district_block_scope["block_name"].astype(str).map(alias) == alias(selected_block)
+        ).any():
+            st.session_state["landing_selected_block"] = None
+            selected_block = None
+
     map_col, drawer_col = st.columns([4.2, 1.8])
     with map_col:
         action_cols = st.columns([0.9, 1.0, 4.6])
@@ -2390,22 +2888,26 @@ def render_landing_page(
                 st.rerun()
         with action_cols[2]:
             st.markdown(
-                f"**{_landing_map_label(bundle_domain=bundle_domain, scenario=scenario, period=period, focus_level=focus_level, selected_state=selected_state)}**"
+                f"**{_landing_map_label(bundle_domain=bundle_domain, scenario=scenario, period=period, focus_level=focus_level, selected_state=selected_state, selected_district=selected_district)}**"
             )
 
         landing_map, legend_html, _map_label, visible_map_gdf = _build_landing_map_artifacts(
             adm1=adm1,
             adm2=adm2,
+            adm3_by_district=adm3_by_district if focus_level == "block" else None,
             state_scores=state_scores,
             district_scores=district_scores,
+            block_scores=block_scores if focus_level == "block" else None,
             bundle_domain=bundle_domain,
             scenario=scenario,
             period=period,
             focus_level=focus_level,
             selected_state=selected_state,
             selected_district=selected_district,
+            selected_block=selected_block,
         )
 
+        map_level = "state" if focus_level == "india" else ("block" if focus_level == "block" else "district")
         returned, clicked_district, clicked_state = render_map_view(
             m=landing_map,
             variable_slug=f"landing_{alias(bundle_domain)}",
@@ -2415,18 +2917,18 @@ def render_landing_page(
             sel_stat=LANDING_SCORE_STAT,
             selected_state=selected_state or "All",
             selected_district=selected_district or "All",
-            selected_block="All",
-            selected_basin="All",
-            selected_subbasin="All",
+            selected_block=selected_block or "All",
             map_width=780,
             map_height=520,
             legend_block_html=legend_html,
-            level="state" if focus_level == "india" else "district",
+            level=map_level,
             perf_section=None,
         )
+        clicked_block = str(st.session_state.get("clicked_block") or "").strip() or None
         raw_returned = returned
         raw_clicked_district = clicked_district
         raw_clicked_state = clicked_state
+        raw_clicked_block = clicked_block
         raw_payload_is_empty = _landing_map_payload_is_empty(raw_returned)
         map_context_token = _landing_map_context_token(
             bundle_domain=bundle_domain,
@@ -2435,6 +2937,7 @@ def render_landing_page(
             focus_level=focus_level,
             selected_state=selected_state,
             selected_district=selected_district,
+            selected_block=selected_block,
         )
         map_input_armed, map_context_changed = _sync_landing_map_input_gate(
             st.session_state,
@@ -2447,28 +2950,34 @@ def render_landing_page(
             focus_level=focus_level,
             selected_state=selected_state,
             selected_district=selected_district,
+            selected_block=selected_block,
         ):
             returned = {}
             clicked_district = None
             clicked_state = None
+            clicked_block = None
         if not map_input_armed:
             returned = {}
             clicked_district = None
             clicked_state = None
-        click_action, next_state, next_district = _apply_landing_map_click(
+            clicked_block = None
+        click_action, next_state, next_district, next_block = _apply_landing_map_click(
             focus_level=focus_level,
             returned=returned,
             clicked_state=clicked_state,
             clicked_district=clicked_district,
+            clicked_block=clicked_block,
             selected_state=selected_state,
             selected_district=selected_district,
+            selected_block=selected_block,
             adm1=adm1,
             adm2=adm2,
             visible_districts=visible_map_gdf if focus_level in {"state", "district"} else None,
+            visible_blocks=visible_map_gdf if focus_level == "block" else None,
         )
         rerun_reason = (
             "landing_map_click_transition"
-            if click_action in {"focus_state", "focus_district"}
+            if click_action in {"focus_state", "focus_district", "focus_block"}
             else None
         )
         if bool(st.session_state.get("perf_enabled", False)):
@@ -2480,11 +2989,14 @@ def render_landing_page(
                         "raw_returned": raw_returned,
                         "clicked_state": clicked_state,
                         "clicked_district": clicked_district,
+                        "clicked_block": clicked_block,
                         "raw_clicked_state": raw_clicked_state,
                         "raw_clicked_district": raw_clicked_district,
+                        "raw_clicked_block": raw_clicked_block,
                         "click_action": click_action,
                         "next_state": next_state,
                         "next_district": next_district,
+                        "next_block": next_block,
                         "pending_transition": st.session_state.get(LANDING_PENDING_MAP_TRANSITION_KEY),
                         "map_context_token": map_context_token,
                         "map_context_changed": map_context_changed,
@@ -2498,6 +3010,7 @@ def render_landing_page(
             action=click_action,
             state_name=next_state,
             district_name=next_district,
+            block_name=next_block,
         ):
             st.rerun()
         if click_action == "noop" and raw_payload_is_empty:
@@ -2508,20 +3021,45 @@ def render_landing_page(
             _render_national_summary(
                 state_scores=state_scores,
                 bundle_domain=bundle_domain,
+                distributions=glance_context.distributions,
             )
         elif focus_level == "state" and selected_state:
                 _render_state_summary(
+                    bundle_domain=bundle_domain,
                     state_name=selected_state,
                     district_scores=district_scores,
                     state_scores=state_scores,
                     driver_context=driver_context,
+                    distributions=glance_context.distributions,
                     deep_dive_disabled=not scenario_options,
                 )
         elif focus_level == "district" and selected_state and selected_district:
                 _render_district_summary(
+                    bundle_domain=bundle_domain,
                     state_name=selected_state,
                     district_name=selected_district,
                     district_scores=district_scores,
+                    driver_context=driver_context,
+                    attributes=glance_context.attributes,
+                    deep_dive_disabled=not scenario_options,
+                    block_scores_available=(
+                        block_available
+                        and adm3_by_district is not None
+                        and bool(
+                            (
+                                (block_scores["state_name"].astype(str).map(alias) == alias(selected_state))
+                                & (block_scores["district_name"].astype(str).map(alias) == alias(selected_district))
+                            ).any()
+                        )
+                    ),
+                )
+        elif focus_level == "block" and selected_state and selected_district and block_scores is not None:
+                _render_block_summary(
+                    bundle_domain=bundle_domain,
+                    state_name=selected_state,
+                    district_name=selected_district,
+                    block_name=selected_block,
+                    block_scores=block_scores,
                     driver_context=driver_context,
                     deep_dive_disabled=not scenario_options,
                 )
@@ -2540,17 +3078,32 @@ def render_landing_page(
             focus_level=focus_level,
             selected_state=selected_state,
             selected_district=selected_district,
+            selected_block=selected_block,
             state_scores=state_scores,
             district_scores=district_scores,
+            block_scores=block_scores,
         )
     else:
-        _render_landing_rankings(
+        visible_ranking_rows = _render_landing_rankings(
             focus_level=focus_level,
             selected_state=selected_state,
             selected_district=selected_district,
+            selected_block=selected_block,
             state_scores=state_scores,
             district_scores=district_scores,
+            block_scores=block_scores,
         )
+        if visible_ranking_rows is not None:
+            _render_glance_answer_export_panel(
+                visible_rows=visible_ranking_rows,
+                drivers=glance_context.drivers,
+                bundle_domain=bundle_domain,
+                scenario=scenario,
+                period=period,
+                focus_level=focus_level,
+                selected_state=selected_state,
+                selected_district=selected_district,
+            )
 
     method_note = (
         "Method note: landing bundle scores are weighted averages of normalized hazard metrics "

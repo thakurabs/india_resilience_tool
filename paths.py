@@ -64,8 +64,6 @@ class PathsConfig:
     subbasins_path: Path
     river_network_path: Path
     river_network_display_path: Path
-    river_basin_reconciliation_path: Path
-    river_subbasin_diagnostics_path: Path
     river_reaches_path: Path
     river_nodes_path: Path
     river_adjacency_path: Path
@@ -117,8 +115,6 @@ def get_paths_config() -> PathsConfig:
         subbasins_path=data_dir / "subbasins.geojson",
         river_network_path=data_dir / "river_network.parquet",
         river_network_display_path=data_dir / "river_network_display.geojson",
-        river_basin_reconciliation_path=data_dir / "river_basin_name_reconciliation.csv",
-        river_subbasin_diagnostics_path=data_dir / "river_subbasin_diagnostics.csv",
         river_reaches_path=data_dir / "river_reaches.parquet",
         river_nodes_path=data_dir / "river_nodes.parquet",
         river_adjacency_path=data_dir / "river_adjacency.parquet",
@@ -305,9 +301,7 @@ BLOCKS_PATH: Path = _CFG.blocks_path  # NEW
 BASINS_PATH: Path = _CFG.basins_path
 SUBBASINS_PATH: Path = _CFG.subbasins_path
 RIVER_NETWORK_DISPLAY_PATH: Path = _CFG.river_network_display_path
-RIVER_BASIN_RECONCILIATION_PATH: Path = _CFG.river_basin_reconciliation_path
 RIVER_NETWORK_PATH: Path = _CFG.river_network_path
-RIVER_SUBBASIN_DIAGNOSTICS_PATH: Path = _CFG.river_subbasin_diagnostics_path
 RIVER_REACHES_PATH: Path = _CFG.river_reaches_path
 RIVER_NODES_PATH: Path = _CFG.river_nodes_path
 RIVER_ADJACENCY_PATH: Path = _CFG.river_adjacency_path

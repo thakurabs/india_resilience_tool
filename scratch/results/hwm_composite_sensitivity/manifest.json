@@ -1,0 +1,15 @@
+{
+  "data_dir": "D:\\projects\\irt_data",
+  "summary_csv": "scratch\\results\\hwm_composite_sensitivity\\hwm_composite_sensitivity_summary.csv",
+  "within_state_csv": "scratch\\results\\hwm_composite_sensitivity\\hwm_composite_sensitivity_within_state_rows.csv",
+  "national_pooled_csv": "scratch\\results\\hwm_composite_sensitivity\\hwm_composite_sensitivity_national_pooled_rows.csv",
+  "summary_md": "scratch\\results\\hwm_composite_sensitivity\\hwm_composite_sensitivity_summary.md",
+  "scenario": "ssp585",
+  "period": "2040-2060",
+  "stat": "mean",
+  "seed": 20260715,
+  "baseline_rows": 781,
+  "states_scored": 35,
+  "max_abs_diff": 0.0,
+  "nan_aligned": true
+}

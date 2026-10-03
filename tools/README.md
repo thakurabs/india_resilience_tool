@@ -40,18 +40,72 @@ python -m tools.runs.prepare_dashboard aqueduct
 ```
 
 ```bash
-python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --plan-only
+python -m tools.runs.prepare_dashboard jrc-flood-depth --state Maharashtra --source-manifest D:/projects/irt_data/jrc_raw_new/source_manifest.json --rp100-only --plan-only
 ```
+
+Targeted Riverine Flood refresh for one state, including district + block composite publish:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra
+```
+
+> **`jrc-flood-depth` blocks-geojson behavior (CHG-0065).** The JRC builder only
+> *reads* the canonical blocks GeoJSON, so the plan schedules the `blocks-geojson`
+> step only when that file is **missing** or when `--overwrite` is passed:
+> - **No `--overwrite`, canonical blocks present (normal case):** `blocks-geojson`
+>   is skipped — the plan is just builder → optimized → audit, and runs cleanly.
+> - **`--overwrite`:** `blocks-geojson` runs and **rebuilds the pipeline-wide
+>   canonical blocks GeoJSON** (`blocks_4326.geojson`, all 36 states) + its QA CSVs
+>   as a side-effect. The rebuild is deterministic from the source shapefile, so
+>   content is normally unchanged, but it is a broader blast radius than a JRC run
+>   needs — prefer the no-`--overwrite` form unless you specifically intend to
+>   regenerate canonical boundaries.
+> - **Fresh machine, canonical blocks absent:** `blocks-geojson` runs first
+>   (required) regardless of `--overwrite`.
 
 ```bash
 python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 ```
 
+Targeted dashboard climate refresh for active thematic + sector-wise admin bundles:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all
+```
+
+Each executed stage writes an auditable stdout/stderr log under
+`processed_optimised/logs/dashboard_climate_refresh/<state>/<timestamp>/` by
+default; pass `-LogRoot <path>` to store logs elsewhere.
+
+Scoping and recompute control:
+- `-Bundle "<canonical name>" [-Bundle "<another>"]` limits the whole run
+  (compute → masters → composites/proposals → optimized → audit) to the source
+  metrics and composites of the named dashboard bundle(s) from
+  `india_resilience_tool/config/dashboard_bundles.py`. Names are
+  case/whitespace-insensitive; unknown names fail fast and list the valid set.
+  `Riverine Flood` is rejected (use the JRC flood-depth workflow instead).
+- Compute is incremental by default: it passes `--skip-existing`, so an unchanged
+  re-run recomputes nothing. Use `-Overwrite` to force a full recompute of the
+  in-scope metrics, or `-OverwriteMetrics slug1 slug2` to force just a subset
+  (the two are mutually exclusive; every slug must be in scope).
+- Masters are rebuilt freshness-aware: the runner probes each in-scope metric's
+  compute completion markers and only rebuilds masters that are missing, stale, or
+  force-overwritten; fresh masters are skipped (`--skip-existing`). If a metric has
+  no markers, or when `-SkipCompute` is used (the on-disk source may have changed
+  without a fresh marker), it additionally checks raw `*_periods.csv` mtimes.
+- Bundle-scoped runs write a distinct, scope-tagged parity report
+  (`..._dashboard_climate_bundle_<names>.json`) so they cannot overwrite the
+  full-scope report; full-scope runs keep the `..._dashboard_climate.json` name.
+- `-Workers` is opt-in. When omitted, compute and master builders pick their own
+  machine-aware defaults; pass `-Workers N` (N ≥ 1) to override.
+- The single `processed_optimised` build runs with `--skip-audit`; parity is
+  verified once by the dedicated strict audit stage (no longer audited twice).
+
 By default the runner is non-destructive and dashboard-oriented:
 - climate runs default to `--level all`
 - climate runs resolve live metrics per requested level
-- admin climate runs now build persisted district/block composite masters for the 6 visible Glance bundles after climate master generation and before optimized refresh
-- JRC `jrc-flood-depth --overwrite` refreshes only the JRC masters/QA and updates optimized outputs in place without wiping unrelated bundle contents
+- admin climate runs now build persisted district/block composite masters for the 6 thematic dashboard bundles after climate master generation and before optimized refresh
+- JRC `jrc-flood-depth --overwrite` refreshes the JRC masters/QA and updates optimized outputs in place without wiping unrelated bundle contents — **but** see the `--overwrite` caveat below: it also forces a rebuild of the pipeline-wide canonical blocks GeoJSON
 - the reused `jrc_flood_depth_index_rp100` slug now represents the RP-100 Flood Severity Index derived from RP-100 depth plus RP-100 extent, so operators must rebuild JRC outputs after pulling that methodology change
 - climate compute uses validated completion markers and `--skip-existing` by default unless `--overwrite` is supplied
 - climate `--overwrite` now clears the selected compute marker/output slice before rebuilding, including stale hydro alias trees for the selected scope
@@ -62,22 +116,60 @@ By default the runner is non-destructive and dashboard-oriented:
 
 For the full command catalog, see [`../docs/command_catalog.md`](../docs/command_catalog.md).
 
+## Documentation assets
+
+| Script | Purpose | Run |
+|---|---|---|
+| `tools/docs/build_technical_note_html.py` | Build the committed self-contained Technical Guidance Note HTML asset for the dashboard `Read the Docs` view. It validates the exact 16-figure manifest, inlines figures and vendored KaTeX, and writes `india_resilience_tool/app/assets/read_the_docs.html`. | `python -m tools.docs.build_technical_note_html --help` |
+
 ## Pipeline
 
 | Script | Purpose | Run |
 |---|---|---|
-| `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers, optional `--skip-existing`, and targeted `--overwrite` cleanup for the selected slice | `python -m tools.pipeline.compute_indices_multiprocess --help` |
+| `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers (P/PET compute and ensemble markers require the current aridity methodology version), source-inventory prewarm, optional `--skip-existing`, targeted `--overwrite` cleanup, and an immediate bootstrap banner before the heavy runtime imports | `python -m tools.pipeline.compute_indices_multiprocess --help` |
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
+| `tools/pipeline/build_spatial_weights.py` | Build private Heat Risk v2 sparse area-overlap caches under `IRT_DATA_DIR/processed/_internal/spatial_weights/` from a boundary layer and climate grid sample; resolves defaults from the effective `--data-dir`, skips valid caches, and requires `--overwrite` to replace stale ones | `python -m tools.pipeline.build_spatial_weights --help` |
 | `tools/pipeline/build_master_metrics.py` | Build admin and hydro master CSVs plus summary sidecars; hydro levels auto-use `processed/{metric}/hydro/` | `python -m tools.pipeline.build_master_metrics --help` |
-| `tools/pipeline/build_composite_metrics.py` | Build persisted district/block composite masters for the 6 visible Glance bundles under `processed/<composite_slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}` | `python -m tools.pipeline.build_composite_metrics --help` |
+| `tools/pipeline/build_composite_metrics.py` | Build persisted district/block composite masters for the 6 thematic dashboard bundles under `processed/<composite_slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}` | `python -m tools.pipeline.build_composite_metrics --help` |
+| `tools/pipeline/fit_frozen_ruler.py` | Fit and commit one bundle's frozen national CDF ruler into `india_resilience_tool/config/frozen_rulers/<slug>/cdf_<version>/` (`cdf_support.parquet`, `ruler_spec.parquet`, `ruler.json`, `golden_canaries.csv`) and write `processed_optimised/colour_scale.json`. The ordered grid is discovered from, and validated across, the component-master schemas. Coverage gates are evidence-backed per bundle unless explicitly overridden with `--coverage-gate`. Refuses to overwrite a published version directory; supports `--dry-run` | `python -m tools.pipeline.fit_frozen_ruler --bundle "Riverine Flood" --out-version v1 --dry-run` |
+| `tools/pipeline/build_proposal_bundles.py` | Build persisted district/block proposal climate-risk bundle masters plus the `r95p_interannual_variability` helper masters under `processed/<slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}`; the dashboard surfaces these as grouped `Sector-wise - ...` bundles, including district and block views for `Life & Livelihood Loss Risk` when its persisted block proposal bundle master is present | `python -m tools.pipeline.build_proposal_bundles --help` |
+| `tools/pipeline/build_glance_view_model.py` | Build persisted Glance view-model Parquet artifacts for landing runtime under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal operators get this through `tools.optimized.build_processed_optimised` | `python -m tools.pipeline.build_glance_view_model --help` |
+| `tools/optimized/build_state_values.py` | Precompute the dashboard's **area-weighted state headline value** per `(metric, scenario, period, stat)` into `processed_optimised/metrics/<slug>/state_values/admin/<level>/all_states.parquet` (tidy long: `state, metric, scenario, period, stat, value, n_units`). Builds the merged frame via the single canonical path `data.merge.get_or_build_merged_for_index_cached` fed by the Streamlit-free boundary loaders with the same bbox + `min_area` constants the app uses, so value/baseline are parity with the live KPI by construction; the all-states table additionally enables a real Position-in-India rank. Admin-only (`--level district\|block\|all`), repeatable `--metric`/`--state`, `--dry-run`, and `--strict` (fail on missing shards/areas/join misses). `prepare_dashboard` runs this automatically after the optimized build and before the parity audit; the audit flags a missing file as a **non-fatal warning** (the app falls back to live computation) | `python -m tools.optimized.build_state_values --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
+| `tools/runs/refresh_dashboard_climate_bundles.ps1` | Windows/PowerShell operator script that computes only active thematic and sector-wise dashboard climate source metrics for district and/or block, then rebuilds masters, composites, proposal bundles, `processed_optimised`, precomputed area-weighted state headline values, and strict parity reports. Supports `-Bundle` scoping to named dashboard bundles, incremental `--skip-existing` compute by default with opt-in `-Overwrite`/`-OverwriteMetrics`, freshness-aware (marker-driven) master rebuilds, opt-in `-Workers`, and a single (non-duplicated) strict parity audit. **Per-bundle execution (C2):** the compute→master→composite stages run bundle-by-bundle with fail isolation (one bundle failing does not abort the rest), then a single union optimized+audit pass runs over the bundles that succeeded; shared source metrics are computed/mastered exactly once via a per-level slug-state cache. On a bundle failure the bundle's not-yet-built source slugs are *tainted* and their half-written master outputs deleted so a later bundle force-rebuilds them. **Partial-publish policy:** if any bundle fails, optimized+audit is **skipped by default** (the runtime keeps its last-good state) and the script exits non-zero; pass `-AllowPartialPublish` to publish the succeeded subset and emit a `*_partial_run.json` manifest. Reports keep their established name for full-scope all-success runs and use a deterministic tokenized name (`*_scope-<token>.json`) for any subset/partial run. **Compute-failure surfacing (CHG-0059):** the compute CLI exits 0 on per-task failures (only ensemble failures hard-fail), so the runner parses each compute step's `Computation: …Failed: N` summary line and surfaces per-task failures as a WARNING, a `COMPUTE WARNINGS` block in the run summary, and a report-derived `*_compute_failures.json` sidecar (written even when publish is skipped) — without blocking publish by default. Pass `-FailOnComputeError` to escalate any bundle with compute failures to a bundle failure (taint + skip publish + non-zero exit). **State values (CHG-0176):** after each level's `processed_optimised` build and before its strict audit, the runner precomputes the area-weighted state headline values (`build_state_values`, same per-level metric scope as the audit, no `--strict`, and no `--state` so the single `all_states.parquet` per metric/level is refreshed across all present states rather than clobbered to one). This satisfies the audit's `precomputed_state_values_missing` presence check, which `--strict` escalates to a hard failure; pass `-SkipStateValues` to opt out. **Freshness probe (W2):** the master-freshness `*_periods.csv` fallback (used under `-SkipCompute` / no-marker slugs) walks the periods trees with `os.scandir` + per-slug early-exit across a bounded thread pool — set `IRT_FRESHNESS_WORKERS` to override the worker count (default `min(32, cpu*2)`), and `IRT_FRESHNESS_TIMING=1` to print per-slug work time plus the parallel wall time. The set of slugs reported stale is identical to the prior serial walk | `powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all` / `... -Bundle "Heat Stress" -PlanOnly` |
+| `tools/runs/refresh_dashboard_riverine_flood_bundle.ps1` | Windows/PowerShell operator script that refreshes the dashboard-ready Riverine Flood bundle for one state end to end: state-scoped strict RP-100 JRC flood-depth masters via `prepare_dashboard jrc-flood-depth`, district + block `composite_flood_jrc_depth` masters, state-scoped `processed_optimised` artifacts for `composite_flood_jrc_depth`, `jrc_flood_depth_index_rp100`, `jrc_flood_extent_rp100`, and `jrc_flood_depth_rp100`, and a scoped strict parity audit. Defaults `-SourceManifest` to `D:/projects/irt_data/jrc_raw_new/source_manifest.json`; legacy `-JrcDir` / `-SourceDir` remains available for unversioned source-dir runs. Supports `-PlanOnly`, optional builder-path overrides (`-QaDir`, `-OverlayDir`, `-DistrictsPath`, `-BlocksPath`), and `-IncludeSharedAdmin` when the operator intentionally wants shared admin artifacts refreshed alongside the state-scoped run | `powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra` / `... -PlanOnly` |
+| `tools/runs/rebuild_jrc_rp100_national.ps1` | Windows/PowerShell operator script that drives `refresh_dashboard_riverine_flood_bundle.ps1` across every state not yet built against the strict RP-100 source manifest, for the Flag C remediation national rebuild (`docs/jrc_rp100_flag_c_remediation_plan.md`). State selection is **derived, not hardcoded**: a state counts as already-strict when its per-state `jrc_flood_depth/<state>/qa/run_summary.csv` reports a `strict_rp100` `metric_kind` **and** a non-empty `source_manifest`; `-States` overrides the derived list and `-IncludeStrict` forces all 36. Writes a per-state CSV log (`index,state,status,elapsed_sec,started_utc,detail`) after every state so an interrupted run keeps its history, and continues past a failed state rather than aborting (failures are listed at the end; exit code 1). Supports `-PlanOnly`, `-Repo`, `-DataDir`, `-SourceManifest`, `-LogPath`. **Caveat:** detection reads the JRC master `run_summary` only and cannot see whether a state's downstream composite / `processed_optimised` artifacts completed — a state interrupted after masters but before its optimized build looks strict and is skipped; re-run those explicitly via `-States`. **Publishes in place with `-Overwrite` and has no rollback** (plan §8 staging was not implemented); stop the Streamlit app first, since it serves from the files this rebuilds and its caches do not detect swapped files | `powershell -ExecutionPolicy Bypass -File tools/runs/rebuild_jrc_rp100_national.ps1 -PlanOnly` / `... -States "Karnataka","Kerala"` |
 
 ## Diagnostics
 
 | Script | Purpose | Run |
 |---|---|---|
+| `tools/diagnostics/heat_risk_national_ruler_pilot.py` | **Read-only** national-absolute-scale pilot (CHG-0346, hardened CHG-0349..0360). Scores the thematic Heat Risk composite for all Indian districts against two candidate *frozen national rulers* — `linear` (pooled p1..p99, clipped; preserves magnitude) and `cdf` (the **exact** pooled empirical mid-rank CDF, one knot per distinct value; preserves rank only) — in place of the production per-state min-max. The 21-knot quantile grid is kept only as a measured approximation of the exact CDF, with its max/mean score error reported per metric. **District level only** (no `--level` flag; block identifiers and aggregation are out of scope). The pool for each of the 14 metrics is all districts x 7 scenario/period slices (`historical/1990-2010` + {ssp245,ssp585} x {2020-2040,2040-2060,2060-2080}). The **canonical district roster and areas** are read from `processed_optimised/geometry/admin/district/` property tables with stdlib `json`, so coverage is measured against a fixed expected universe and state means are area-weighted without geopandas; the run **fails** unless `--allow-missing-geometry` is passed when the roster is absent, when any explicitly requested `--states` value has no geometry shard, or when any retained district lacks a finite `area_m2 > 0`. Component masters are read from `processed/<slug>/<state>/master_metrics_by_district.csv`. Writes ONLY under `--out-dir` (default `docs/diagnostics/heat_risk_pilot`): `district_scores.csv`, `state_scores.csv` (area-weighted vs unweighted), `slice_summary.csv`, `metric_ruler_spec.csv`, `cdf_support.csv`, `metric_fit_report.csv`, `coverage_report.csv` (state x metric x slice + national totals), `roster_reconciliation.csv` (always written, empty in degraded mode; statuses `roster_and_master` / `roster_master_no_finite_value` / `roster_no_master_row` / `master_not_in_roster`), `summary.md`, and `maps/*.png`. geopandas + matplotlib are needed only to render maps; `--no-maps` skips that step and changes no table. Touches no config, no composite master and nothing under `IRT_DATA_DIR`. Evidence for pitfalls P-01..P-09 and P-12 in `docs/national_absolute_scale_pitfalls.md`. Pilot-grade: national coverage is still in flux. | `python -m tools.diagnostics.heat_risk_national_ruler_pilot --help` |
+| `tools/diagnostics/build_banding_explorer.py` | **Read-only** aesthetics exploration (CHG-0531): renders the national choropleth in **five band colours** instead of the frozen 101-stop ramp, so the banding decision can be judged by eye. Derives nothing — it parses the payload already embedded in `irt_target_prototype.html`, so district scores, State means (`state_stats`) and the band cuts (20/40/60/80) cannot drift from the prototype. Offers three palettes (`frozen5` = the published ramp sampled at band midpoints, `ylordrd`, `muted`) x two fill rules (`state-hue` = State mean picks the band, districts ramp across their State's own min-max; `district-band` = the district's own national band picks the hue, intensity shows position within that band) x a ramp on/off toggle that collapses either rule to a flat 5-colour map. Intensity interpolates in OKLab between a band's derived floor and its full colour, so hue never drifts and no fill uses opacity. States with fewer than 3 scored districts or under 2.0 score points of spread are pinned to flat intensity and named in the caption, because a min-max ramp over Delhi's 1.5-point spread manufactures a full-range gradient out of nothing. **`state-hue` is a per-State min-max rescale — the operation `colour_scale.json` marks `rescale: forbidden` — and is diagnostic only; it must never become the published fill.** Writes `docs/diagnostics/heat_risk_pilot/banding_explorer.html` | `python -m tools.diagnostics.build_banding_explorer --dry-run` |
+| `tools/diagnostics/wbgt_method_validation.py` | **Read-only w.r.t. the archive** Stage A validation of the proposed Tier-2 outdoor-WBGT method (CHG-0538), run *before* any NEX-GDDP-CMIP6 download. Drives both sides of the comparison from the **same** hourly ARCO-ERA5 point series (`gs://gcp-public-data-arco-era5`, anonymous, no CDS registration), so climate-model error cancels and only method error remains: truth = hourly Liljegren (2008) WBGT via `thermofeel` reduced to a daily maximum; candidate = the same hours collapsed to the daily aggregates CMIP6 actually ships (tasmax, mean hurs, mean sfcWind, mean rsds) then run through the shipping `wbgt_shade_stull_cell_c` plus a CarbonPlan-style additive sun adjustment, with daily-mean rsds disaggregated to a peak value by top-of-atmosphere solar geometry and scaled by `--peak-lag-factor` (0.75). Six sites spanning India's heat regimes (Kochi, Kolkata, Bikaner, Lucknow, Hyderabad, Shimla). **Acceptance, fixed before any result was inspected: median |bias| < 1.0 C and RMSE < 1.5 C in every regime** — exit code 1 if any site misses. `--self-test` checks the Stull worked example, WBGT bracketing, solar geometry and adjustment-domain clipping with no network; `--dry-run` exercises the whole chain on synthetic forcing with a clearly-labelled stand-in reference and **produces no scientific result**. Needs `gcsfs`, `zarr` and `thermofeel` for a real run (none are geo/PROJ packages). Writes ONLY under `--out-dir` (default `docs/diagnostics/wbgt_method_validation`): `*_daily.csv`, `*_summary.csv`, `*_summary.md`. Touches no config, no master and nothing under `IRT_DATA_DIR`. | `python -m tools.diagnostics.wbgt_method_validation --self-test` |
+| `tools/diagnostics/wbgt_deployed_vs_reference.py` | **Read-only, network-only** comparison of IRT's *deployed* WBGT formulations against the two methods Lemke & Kjellstrom (2012) recommend — Liljegren (2008) for outdoor, Bernard et al. (1999) for indoor (CHG-0546). Every column is driven from one common hourly ERA5 point series (Open-Meteo archive API, no key, ~1 s per site-year) so climate-model error cancels and only method error remains. Its distinguishing feature is that it **decomposes IRT's error into a formula term and an aggregation term**: each shipped formula is scored twice, once applied hourly then reduced to a daily max (formula error alone) and once applied to daily-*mean* `tas`/`hurs`, which is what the pipeline actually receives (formula + aggregation error). Bernard's psychrometric wet bulb is solved by vectorised bisection on the bracket [Td, Ta] rather than the reference implementation's Brent minimisation, which makes it unconditionally convergent over a multi-year hourly series; `--self-test` pins it against saturation, bracketing, residual-at-root and Stull agreement with no network. Six sites spanning India's heat regimes. Writes only under `--out-dir` (default `docs/diagnostics/wbgt_deployed_vs_reference`): `README.md`, `scores.csv`, `daily_series.parquet`, `run_metadata.json`, plus a per-year parquet cache under `--cache-dir` (default `scratch/`, git-ignored). Touches no config, no master and nothing under `IRT_DATA_DIR`. | `python -m tools.diagnostics.wbgt_deployed_vs_reference --self-test` |
+| `tools/diagnostics/wbgt_tier2_probe.py` | **Read-only, offline** test of whether the proposed Tier-2 sun adjustment actually fixes the outdoor WBGT metric (CHG-0553). Stage A (`wbgt_method_validation.py`, CHG-0538) was built for this and never ran because ARCO-ERA5 cost days per site; this script runs the same chain against the 6 sites x 10 years of hourly ERA5 already cached by `wbgt_deployed_vs_reference.py`, so it needs no network and no download. It imports `daily_peak_rsds_from_mean` and `sun_adjustment_c` from the Stage A harness and the formulas, daily frame and scorer from the deployed-vs-reference harness, so nothing is re-transcribed. The point of the file is that it scores the chain in **four variants against one reference** (hourly Liljegren, then the daily max), each removing one more input approximation: on daily-mean inputs as today's pipeline would deliver it; as Stage A specified it (tasmax-driven shade); with the true hourly rsds maximum instead of the top-of-atmosphere disaggregation; and a ceiling with hourly shade reduced to a daily max. Reading the four downward prices each error source separately. Alongside bias, RMSE, r and the p99 tail bias it reports the **mean uplift** the adjustment contributes, because a candidate can land on the right mean by adding the right amount of heat to the wrong shade value — the failure mode already found in sWBGT (CHG-0544, CHG-0550). Acceptance is Stage A's pre-registered bar (median |bias| < 1.0 C and RMSE < 1.5 C in every regime), imported rather than restated so it cannot be quietly retuned. `--dry-run` prints the read and write plan and computes nothing. The probe was extended in CHG-0554 with three further variants that price the CarbonPlan port: `rh_at_tasmax` (humidity re-expressed at `tasmax` at fixed vapour pressure, reaching CarbonPlan's treatment through `hurs` rather than their `huss` + synthesised `ps`, which NEX does not publish), `cp_three_term` (their full three-term ISO form via thermofeel, carried as a measured identity check rather than a rival -- with `tmrt = tas` thermofeel returns `BGT = Ta`, so their form collapses to IRT's two-term one) and `wind_frozen` (wind held at CarbonPlan's fixed 0.5 m/s, which prices the `sfcWind` download). Writes only under `--out-dir` (default `docs/diagnostics/wbgt_tier2_probe`): `README.md`, `per_site.csv`, `per_site_diagnostics.csv`. | `python -m tools.diagnostics.wbgt_tier2_probe --dry-run` |
+| `tools/diagnostics/wbgt_carbonplan_crosscheck.py` | **Read-only** cross-check of IRT's published WBGT >= 32 C day counts against CarbonPlan `extreme-heat` v1.0 (CHG-0544), which is built on the same NEX-GDDP-CMIP6 archive. Compares **distribution shape** — the full quantile curve, zero fraction, skew and a two-sample KS test — rather than means, because two distributions can share a mean and disagree at every location. Reads IRT's district masters from `processed_optimised` and CarbonPlan's public CSVs (no auth). It deliberately does **not** emit a per-place spatial correlation: CarbonPlan keys regions by CIL `hierid` with no published coordinates and 592 district-level prefixes against IRT's 784 LGD districts, so a name join would manufacture its own answer; the report names the unblocker (CIL impact-region geometry, joined point-in-polygon). Two differences are stated rather than corrected for: the historical window (CarbonPlan 1985-2014, pinned from `notebooks/09_summarize.ipynb`; IRT 1990-2010) and the driver (`tasmax` with RH at `tasmax` vs daily-mean `tas`/`hurs`). Writes only under `--out-dir` (default `docs/diagnostics/wbgt_carbonplan_crosscheck`): `README.md`, `distribution_stats.json`. | `python -m tools.diagnostics.wbgt_carbonplan_crosscheck --dry-run` |
+| `tools/diagnostics/wbgt_era5_grid_download.py` | **Network-only** Copernicus CDS fetch of one hourly ERA5 single-level day over a lat/lon box, supplying the gridded driver for `wbgt_era5_grid_compare.py` (CHG-0550). Requests the seven variables the four WBGT methods need between them: `2m_temperature`, `2m_dewpoint_temperature`, `surface_pressure`, `10m_u_component_of_wind`, `10m_v_component_of_wind`, `surface_solar_radiation_downwards` and `total_sky_direct_solar_radiation_at_surface`. ERA5 publishes no 2 m relative humidity, so RH is derived downstream from Ta and Td. Defaults to **two** consecutive UTC days, not one: IST is UTC+05:30, so a single UTC day cuts through the local afternoon and would clip the daily peak that the whole comparison is about. Raises rather than silently over-requesting if the span crosses a month boundary, because CDS expands year x month x day as a cross product. A request mixing instantaneous and accumulated variables is split server-side and returns a zip named `.nc`, which the script unpacks. Needs `cdsapi` and a `~/.cdsapirc` CDS key. `--dry-run` prints the request, the cell count and a size estimate and submits nothing. Writes only under `--out-dir` (default `scratch/wbgt_era5_grid`, git-ignored). Touches no config, no master and nothing under `IRT_DATA_DIR`. | `python -m tools.diagnostics.wbgt_era5_grid_download --dry-run` |
+| `tools/diagnostics/wbgt_era5_grid_compare.py` | **Read-only** gridded counterpart to `wbgt_deployed_vs_reference.py` (CHG-0550): the same four methods — IRT shade (Stull), IRT sWBGT, Bernard (1999) indoor and Liljegren (2008) outdoor — scored per 0.25 deg cell over a CDS ERA5 day instead of at six points, with every method driven by one common hourly series so driver error cancels. It imports the formulas, the bisection Bernard solver and the solar geometry from the existing harnesses rather than re-transcribing them. Each method is reduced over the **local** IST day three ways: mean of the hourly series, max of the hourly series, and — for the two IRT methods only — the formula evaluated on daily-*mean* Ta and RH, which is what `heat_stress_gridfirst` actually ships. Partial local days are dropped rather than reduced. The `peak vs peak` rows isolate formula error; the `AS DEPLOYED` rows add aggregation error; the reported min/max bias spread is the quantity that matters for a frozen national CDF ruler, since a uniform offset barely moves ranks while a spatially varying one reorders districts. Reports the Liljegren NaN rate, which is the only signal that the unit conventions were right — `surface_pressure` Pa to hPa, `ssrd`/`fdir` J/m2 accumulated over the preceding hour to W/m2, and `fdir` passed as a 0-1 fraction of `ssrd`. `--dry-run` prints the input and output plan and reads nothing. Writes only under `--out-dir` (default `docs/diagnostics/wbgt_era5_grid`): `per_cell.csv`, `README.md`. | `python -m tools.diagnostics.wbgt_era5_grid_compare --dry-run` |
+| `tools/diagnostics/wbgt_era5_grid_maps.py` | **Read-only** renderer for the gridded WBGT comparison (CHG-0551, layout revised CHG-0552): reads the `per_cell.csv` written by `wbgt_era5_grid_compare.py` and draws five PNG figures. Every field figure is a 2x2 laid out candidate-beside-reference — IRT in the left column, the reference method in the right, day mean on the top row and day max below — so reading across a row is method error at a fixed aggregation and reading down a column is aggregation error at a fixed method. `shade.png` is IRT shade vs Bernard indoor, `outdoor.png` is IRT sWBGT vs Liljegren, and `deployed.png` puts the two AS-DEPLOYED IRT fields (the formulas on daily-mean inputs, which is what `heat_stress_gridfirst` ships) beside the day-max reference each should be graded against. All three share one colour scale so the level gap between the shade and outdoor families stays readable across figures. `bias.png` maps four IRT-minus-reference biases on a shared symmetric diverging scale — shade mean and max on the top row, outdoor mean and max on the bottom; the shade panels come out near-blank against the outdoor panels, which is the finding, so each panel is annotated with its own mean and per-cell range. `drivers.png` maps Ta day-mean, Ta day-max, the max-minus-mean diurnal swing and day-mean RH, and adds a scatter of that swing against the as-deployed shade bias. State outlines are an optional overlay read from `DATA_DIR/states_4326.geojson`; a missing layer degrades to no outline rather than failing the run. Raises if `per_cell.csv` holds more than one complete local day rather than averaging across days. Deletes `fields.png` from the superseded layout on each run. `--dry-run` prints the read, delete and write plan and renders nothing. Writes only under `--out-dir` (default `docs/diagnostics/wbgt_era5_grid`). | `python -m tools.diagnostics.wbgt_era5_grid_maps --dry-run` |
+| `tools/diagnostics/wbgt_outdoor_feasibility.py` | **Read-only, offline** milestone-1 feasibility test of whether DAILY climate inputs can support a daily-maximum **open-sky** WBGT, using the physical Liljegren (2008) solver plus a within-day reconstruction (CHG-0603). This is Step 3 of `docs/diagnostics/wbgt_reconciliation/README.md` with the retired linear sun adjustment kept only as a labelled baseline. Its frozen contract is `docs/diagnostics/wbgt_outdoor_feasibility/SPEC.md`, written before any candidate score was computed. Both sides are driven from the six-site hourly ERA5 parquet cache already on disk (`scratch/wbgt_deployed_vs_reference_cache`, 1990-2014), so no network and no download: the reference is the actual hourly series through Liljegren reduced to a daily max, while a candidate first collapses those hours to the six daily fields NEX ships (`tas`, `tasmin`, `tasmax`, `hurs`, `rsds`, `sfcWind`) and then reconstructs hourly drivers from **those alone** plus static site data. Leakage is blocked by construction: `DailyInputs` rejects any hourly column and `reconstruct_hourly` takes no hourly weather argument, both asserted in `tests/test_wbgt_outdoor_feasibility.py`. It carries **two reference identities** — `legacy` reproduces the shipped harness bit-for-bit (verified against the committed `daily_series.parquet`, max difference 0) and `audited` moves `cossza` to the midpoint of the radiation averaging interval, because Open-Meteo documents `shortwave_radiation` as the mean of the preceding hour while temperature and wind are instantaneous. Wind is passed at **10 m** and NOT pre-converted: `thermofeel.calculate_wbgt_liljegren` applies the KNMI 0.62 m/s floor and the Liljegren 10 m -> 2 m stability profile itself, so a log-law conversion would double-count; `wind_scaling="brode"` is retained as a measured sensitivity instead. Three predeclared candidates (constant vapour pressure; a mean-preserving diurnal wind shape; constant relative humidity) are scored beside four clearly-labelled **oracle** ablations that reconstruct one driver group at a time, so temperature/humidity, radiation, wind and pressure error are priced separately. Radiation is a top-of-atmosphere interval-mean shape rescaled to conserve the daily `rsds` to 1e-9 relative with exact night-time zeros, split direct/diffuse by Erbs et al. (1982); temperature is Parton and Logan (1981) from `tasmin`/`tasmax`, and the residual against the supplied daily-mean `tas` is reported rather than forced away; pressure is ISA barometric from site elevation because NEX publishes no `ps`. The daily maximum is always taken **after** WBGT is evaluated at each reconstructed hour, and a day with any invalid hour becomes NaN rather than a zero exceedance. Two gates are applied, both fixed in advance: the legacy daily bar (median absolute daily error < 1.0 C, RMSE < 1.5 C, per site) and a **separate** count-acceptance policy with a 5 days/year rare-event floor and a `max(20%, 2 days/year)` band, since daily accuracy does not license threshold counts. Reports quantile differences and the conditional error on the reference's hottest 1 % as distinct statistics, and uses a 1000-draw year-block bootstrap so daily samples are never treated as independent. `--stage inventory` audits the two local NEX trees read-only in three separately reported tiers (files present / metadata and calendar compatible / valid sampled six-site data) and computes the required-variable roster from disk rather than reusing the 21-model or 19-model figures. `--self-test` checks every numerical contract offline; `--dry-run` prints the plan and preflight and writes nothing; `--resume` reuses provenance-stamped per-site caches; `--workers` is bounded at 4. Refuses to start if `--out-dir` or `--work-dir` resolves inside `irt_data`, `processed_optimised` or a shade release stage. Writes only under `--out-dir` (default `docs/diagnostics/wbgt_outdoor_feasibility`) and `--work-dir` (default `scratch/wbgt_outdoor_feasibility`, git-ignored). | `python -m tools.diagnostics.wbgt_outdoor_feasibility --self-test` |
+| `tools/diagnostics/wbgt_outdoor_selection.py` | **Read-only, offline** milestone-2 **method selection** for the physically reconstructed open-sky WBGT (CHG-0609): it picks a within-day wind treatment, prices the remaining threshold-count error, and answers whether a bounded three-state staged pilot is justified. Its frozen contract is `docs/diagnostics/wbgt_outdoor_selection/SPEC.md`, written before any new candidate score existed. It **imports** milestone 1's reference identities, candidates C1/C2, scoring and both gates from `wbgt_outdoor_feasibility` rather than restating them, so the carried-forward bars cannot drift; `tests/test_wbgt_outdoor_selection.py` asserts that no gate constant is re-declared here. Milestone 1's evidence directory is treated as immutable and the write guard refuses to target it. Two new candidates differ from C1 in the within-day wind shape and nothing else: **W1** scales C2's mean-preserving cos-zenith shape by an amplitude `clip(0.03*DTR, 0.10, 0.80)`, a **declared assumption rather than a published coefficient** (the standard disaggregation treatments — MTCLIM, `metsim`, and the CarbonPlan chain built on it — hold wind constant all day), with the slope pinned so W1 reproduces C2's already-declared amplitude at a 13⅓ °C DTR and therefore tuned to nothing; **W2** applies a normalised site-month hourly profile derived from a strictly disjoint earlier calibration period (1990-2004 → 2005-2014 forward, the reverse direction kept as `W2rev` and **excluded from selection**), rescaled per local day so the supplied daily mean is preserved exactly. Both are non-negative and mean-preserving by construction, and clipping, daily-mean conservation and exposure to `thermofeel`'s internal 0.62 m/s floor are reported per candidate instead of silently absorbed. A labelled **oracle** A5 supplies the actual hourly wind to C1's other drivers — the complement of milestone 1's A3 — so wind may be called the sole cause only if both agree; A6 is declared identical to A5 by construction and the reason is recorded rather than the column quietly omitted. A third reference identity **R3** moves every instantaneous driver onto the radiation interval midpoint by linear interpolation, **labelled an approximation**, scoped to the two sites carrying the count failures, and used only to ask whether the decision is sensitive — never to pick the reference that makes a candidate pass. The **CarbonPlan comparator** is reproduced from notebooks 07 and 08 at pinned revision `f662b372`: its adjustment coefficients are **refit locally from the 16 Kong & Huber (2022) Figure S12 points** rather than transcribed, and every deviation (TOA-shape instead of `metsim.shortwave`, no QDM shade correction, `hurs` instead of `huss`+synthesised `ps`) is emitted with the series, so the result is reported as *CarbonPlan-style*, never an exact reproduction. Annual counts are evaluated over years complete in **both** series, because a candidate missing an uncalibrated month would otherwise have those days counted as non-exceedances; the per-series year counts are reported so the shrinkage is visible, and individual complete-year errors are tabulated so a mean-level pass built on cancelling years cannot hide. Selection applies the predeclared rule (daily gate, then count gate and year-level uncertainty, then deployability, then simplicity, never per-site or per-threshold) and names a **best development candidate** rather than a pass when no candidate clears every gate. `--stage nex` compares the selected candidate on local NEX `ACCESS-CM2`/`MRI-ESM2-0` 1990-1999 against the ERA5-driven reference for the same years as a **distribution and annual-count** comparison only — no same-date RMSE or correlation is computed anywhere, and a test asserts their absence — plus one source-day sensitivity that re-groups the cached ERA5 into the **inferred** NEX UTC day without relabelling any timestamp. The conditional QDM trial runs only if a trigger frozen in the spec before any NEX score was seen actually fires, reuses the audited `wbgt_qdm_bias_correction` implementation, refuses overlapping train/test years, and reports NaN and extrapolation behaviour and the preservation of future-minus-historical quantile changes. `--self-test` checks 13 contracts offline; `--dry-run` prints the plan and writes nothing; `--resume` reuses per-site caches; `--workers` defaults to **1** and is bounded at 4 because the national shade build owns the disk. Refuses to start if `--out-dir` or `--work-dir` resolves inside `irt_data`, `processed_optimised`, a shade release stage, or milestone 1's evidence. Writes only under `--out-dir` (default `docs/diagnostics/wbgt_outdoor_selection`) and `--work-dir` (default `scratch/wbgt_outdoor_selection`, git-ignored). | `python -m tools.diagnostics.wbgt_outdoor_selection --self-test` |
+| `tools/diagnostics/wbgt_outdoor_humidity.py` | **Read-only, offline** milestone-3 **humidity-consistency experiment** for the physically reconstructed open-sky WBGT (CHG-0615): one new humidity formulation, run under the two already-defined wind treatments, scored against both existing references, ending in a pilot decision. Its frozen contract is `docs/diagnostics/wbgt_outdoor_humidity/SPEC.md`, written before any candidate score existed. Milestones 1 and 2 are **imported**, not restated -- the reference identities, both gates, `score_pair`, `count_gate`, the Parton-Logan temperature reconstruction, the Erbs radiation split, the ISA pressure, W1's DTR wind shape and R3's midpoint interpolation all come from `wbgt_outdoor_feasibility` and `wbgt_outdoor_selection`, and `tests/test_wbgt_outdoor_humidity.py` asserts that no gate constant and not even W1's slope is re-declared here, so nothing can drift while a preferred candidate is sought. Both predecessors' evidence directories are immutable and the write guard refuses to target them, `irt_data`, `processed`, `processed_optimised` or any shade stage. **The premise:** milestone 1's humidity invariant holds the daily vapour pressure `e_old = (hurs/100) es(tas)` constant through the day, which does not reproduce the supplied daily `hurs` when the reconstructed hourly RH is averaged over the reconstructed hourly temperatures, because `mean_h[1/es(T_h)] != 1/es(mean_h T_h)`. The new formulation instead solves, per valid complete day, for the one non-negative daily vapour pressure `e*` satisfying `mean_h[clip(100 e*/es(T_h), 0, 100)] = hurs` -- an **input-consistency constraint**, explicitly *not* a claim that the actual hourly humidity has been recovered. The constraint is non-decreasing in `e`, so it is solved without any fit: closed form `e* = (hurs/100)/mean_h[1/es(T_h)]` wherever no hour saturates, otherwise monotone bisection on the provably valid bracket `[0, max_h es(T_h)]`, since `f(0) <= 0` and `f(max es) >= 0`. Tolerances are declared before scoring (residual <= 1e-6 percentage points, 200-iteration guard) and the endpoints are exact rather than approximated: `hurs == 0` gives `e* = 0`, `hurs == 100` gives the **minimum** `e` saturating every sampled hour, and `hurs` outside [0, 100] is invalid input that is never coerced. A missing hour invalidates the whole day rather than shortening the hour set the solve runs over; non-convergence yields an explicit invalid day with a reason, never a fallback value; and an invalid day is NaN at every hour so its daily maximum is NaN -- missing data can never become a zero exceedance. Terminology is kept honest in the outputs: `e*` is the fitted daily humidity parameter, the **effective** hourly vapour pressure is `min(e*, es(T_h))` wherever RH clips at 100 %, and the tool therefore never claims the effective vapour pressure stays constant at saturated hours. Leakage stays structural: the candidate reads only `DailyInputs` plus static site data and solar geometry, and actual hourly humidity, dew point and WBGT are used **only** for scoring and diagnosis. Four candidates and nothing else -- A/B (existing humidity with C1 constant and W1 DTR wind, bit-identical to milestone 2's C1/W1) and C/D (input-consistent humidity, same two winds) -- with temperature, radiation, pressure, solver, day grouping, completeness and calendar held fixed by computing the base reconstruction once and reusing it. **A and B are proved, not assumed, to be unchanged:** before the full run the tool recomputes one site-window and compares A and B day for day against milestone 2's committed `daily_series.parquet`, writing `old_candidate_reproduction.json`; a non-zero difference is reported as a defect to investigate, never as an improvement. Caches carry a full signature bundle -- humidity formulation with its tolerance and iteration limit, wind treatment with W1's coefficients, the `thermofeel` version, both reference signatures, every gate constant, the thresholds and the day/completeness rules -- and a cache is reused only on an exact match, so a matching reference signature alone is never sufficient. **Reference treatment R3 is extended from milestone 2's two sites to all six**, computed rather than inferred, and every candidate series is computed once and scored against each reference so candidate timing never depends on the reference. Each site-window-threshold pair is then classified `ROBUST PASS` / `ROBUST FAIL` / `REFERENCE-SENSITIVE` / `NOT EVALUATED` on **common valid dates and common complete years**, with the per-reference absolute errors, gate tolerances and signed gate margins kept visible beside the class and every excluded year listed, because a classification alone is not evidence; a reference-sensitive pair is neither a pass nor a fail and a rare-event pair is never converted into one. Humidity diagnostics report the mean and maximum daily-RH residual, invalid days and solver failures with reasons, the saturated-hour fraction against the old method's clip fraction, the signed `e*` shift, and -- for diagnosis only -- the reconstructed RH and effective-vapour-pressure bias against the cached hourly observations, including at the **actual temperature peak** and at the **reference WBGT peak**, which are distinct hours reported separately. Old-versus-new uncertainty is a **paired** year-block resample: whole years drawn with replacement, both candidates evaluated on the same drawn years, the interval taken on the difference, and temporal sampling uncertainty reported separately from reference-method uncertainty rather than combined. Selection follows the predeclared rule -- daily gate, then the input-consistency constraint, then robust count performance, then a **no-material-deterioration screen** that blocks the new humidity if any `ROBUST PASS` pair becomes `ROBUST FAIL`, then understandability under both references, then simplicity -- with one global method for all sites and thresholds and W1 explicitly **not** retained automatically. `--stage nex` reuses milestone 2's cached `ACCESS-CM2`/`MRI-ESM2-0` 1990-1999 sample to report the raw distribution and annual-count change of C and D relative to A and B, per model before any ensemble summary; it computes no same-date NEX-versus-ERA5 RMSE or correlation, fits no QDM, reads no new model inventory and runs no national scan, and if the cached sample is absent it states the limitation instead of expanding scope. `--self-test` checks 13 numerical and isolation contracts offline with no cache and no NEX access; `--dry-run` preflights and writes nothing; `--resume` reuses signature-matched per-site caches and recomputes stale ones; `--workers` defaults to **1** and is bounded at 4 because the national shade build owns the disk. Writes only under `--out-dir` (default `docs/diagnostics/wbgt_outdoor_humidity`) and `--work-dir` (default `scratch/wbgt_outdoor_humidity`, git-ignored). | `python -m tools.diagnostics.wbgt_outdoor_humidity --self-test` |
+| `tools/diagnostics/wbgt_outdoor_pilot.py` | **Read-only against sources, offline** milestone-4 **engineering pilot** for the reconstructed open-sky WBGT (CHG-0620): it runs the *frozen* milestone-2 W1 method (retained as milestone 3's candidate B) on actual NASA NEX files over real climate cells in Kerala, Rajasthan and Himachal Pradesh, and aggregates to districts and blocks. It asks an **engineering** question -- does the input path work, does it reproduce W1, are the admin aggregates correct, what does it cost -- and deliberately not a scientific one; `ENGINEERING PASS` is never permission to publish. Its frozen contract is `docs/diagnostics/wbgt_outdoor_pilot/SPEC.md`, written before any result existed. The science is **imported, never restated**: the Parton-Logan temperature reconstruction, the TOA/Erbs radiation split, the constant-vapour-pressure humidity, the ISA pressure and the Liljegren solver come from `wbgt_outdoor_feasibility`, and W1's DTR wind comes from `wbgt_outdoor_selection`; `tests/test_wbgt_outdoor_pilot.py` asserts that not even W1's slope or any gate constant is re-declared here. The rejected milestone-3 input-consistent humidity is **not** used, no coefficient is tuned and no bias correction is applied. **Parity is proved before scaling:** on a real pilot cell the tool reproduces `wbgt_outdoor_selection.nex_candidate_daily_max` to `max abs diff 0.000e+00 C` over 367 days for both W1 and C1, and single-cell, chunked (sizes 1/3/4) and resumed runs are **bit-identical** with exactly equal threshold counts; a parity failure stops the run before full-state execution rather than proceeding with a caveat. Hours are built only for the target year, which is a 3x solver saving justified by a measured equivalence to the full three-year span, and the first and last target days are tested explicitly because they are the days whose reconstruction reads the adjacent year -- the runner loads 31 December of Y-1 and 1 January of Y+1 for exactly that reason and rejects a year whose padding is absent. Computation is strictly **grid-first**: daily inputs -> reconstructed within-day drivers -> Liljegren WBGT at every reconstructed hour -> daily maximum per cell -> annual statistics per cell -> area-weighted district/block values, with only intersecting cells computed and hourly intermediates held for one cell at a time; a companion test asserts that cell-first and polygon-first genuinely disagree, so the pipeline cannot silently degrade into averaging weather before the nonlinear step. Inputs are verified and never repaired: units, calendar, duplicate and missing dates are checked for all six variables across the target and both padding years, a units or calendar mismatch is an **error rather than a conversion**, all six must share identical `lat`/`lon` (no silent regrid), and physically invalid cell-days -- `hurs` above 100 %, negative `rsds`/`sfcWind`, or `tasmin > tasmax` -- are marked invalid rather than clipped or reordered. `rsds` and `sfcWind` are routed to the v2 acquisition tree and enter numerically, not as provenance. Under the frozen complete-365 policy one invalid day costs the whole cell-year, and the run **reports that cost** in `cell_invalidity.csv` rather than absorbing it. Aggregation uses the production `build_area_weights`/`aggregate_cell_values` intersection-area path, reporting valid and total intersected area, valid-area fraction and valid/invalid cell counts per unit; **nothing is filled spatially** (sub-cell IDW is disabled), a unit without valid support is retained as NaN with a reason, and an exceedance count is labelled *area-weighted mean annual cell exceedance days* -- not the days every or any location exceeded the threshold, nor the days the polygon-average did. Block-to-district re-aggregation is weighted by **valid** intersected area, never whole-block area. Because no DEM or `orog` field exists locally, every cell runs at sea level under the declared `elev-sea-level-constant-no-dem` convention, which is part of the method signature and the cache key so an elevation-aware run can never reuse these caches; the resulting error is measured (0.250 C between 0 m and 2276 m at fixed drivers), not assumed negligible. Ranking sensitivity is predeclared and diagnostic-only, reporting W1 vs C1 (method) and ACCESS-CM2 vs MRI-ESM2-0 (model) **separately**, with rank stability explicitly not claimed as rank accuracy. Every manifest carries the full limitation set, including that all thresholds remain diagnostic-only on NEX and that daily time-boundary semantics remain inferred. `--dry-run` preflights and computes nothing; `--sample-cells` runs the small-cell benchmark; `--resume` reuses a cell grid only when the method signature, model, scenario, year, grid id, input file identities, boundary hash and elevation convention **all** match; `--overwrite` is off by default; `--workers` defaults to **1** because the national shade build owns the disk. Writes only under `--out-dir` (default `docs/diagnostics/wbgt_outdoor_pilot`) and `--work-dir` (default `scratch/wbgt_outdoor_pilot`, git-ignored); the write guard resolves symlinks and refuses `irt_data`, `processed`, `processed_optimised`, any shade stage and all three predecessor evidence directories. | `python -m tools.diagnostics.wbgt_outdoor_pilot --dry-run` |
+| `tools/diagnostics/wbgt_outdoor_pilot_qc.py` | **Read-only against sources, one small download** milestone-4b **input-quality, elevation, coverage and geometry follow-up** to the engineering pilot (CHG-0625). It closes the two conditions milestone 4 named. (1) **`hurs` above 100 %**: it reads the actual `hurs` records undecoded and decoded and establishes that decoding, fill handling and coordinate/time alignment are all correct, that NEX publishes **no** `valid_range` for the variable, and that the excess reaches 103.6 % (ACCESS-CM2) and 106.8 % (MRI-ESM2-0) nationally — so it adopts **no numeric allowance ceiling** and instead clips every finite value above 100 % to 100 % as an *experimental physical-bound treatment, explicitly not accepted source repair*, flagging each corrected day and recording the maximum correction. Source files are never modified and the complete-365 rule still applies afterwards, so a flagged corrected day stays distinguishable from an unresolved invalid one. (2) **Elevation**: it acquires three GMTED2010 30 arc-second *mean* tiles (USGS, public domain, ~50 MB, sha256 recorded), area-averages them onto each 0.25° climate cell with a cos-latitude weight, keeps negative elevations rather than clipping them, and makes a missing elevation an **explicit failure** rather than a silent sea-level substitution; the ISA pressure formulation is unchanged, only its input. It then runs the frozen W1 method four ways — strict/sea-level (= milestone 4), RH-treated, elevation-aware, and both — compares them on each run's own support *and* on the common valid cells so value change is never read as coverage change, classifies every admin unit `meets_screen` / `partial_coverage` / `no_valid_coverage` against a screen whose denominator is now defined, and tests the district/block relationship **geometrically** (gaps, children outside parents, block overlaps, declared tolerances) because aggregation equality proves consistency under the tested support, not tiling. Writes only under `--out-dir` (default `docs/diagnostics/wbgt_outdoor_pilot_qc`) and `--work-dir` (default `scratch/wbgt_outdoor_pilot_qc`); its write guard additionally refuses milestone 4's own evidence and cache. Every output is DIAGNOSTIC-ONLY. | `python -m tools.diagnostics.wbgt_outdoor_pilot_qc --dry-run` |
+| `tools/diagnostics/heat_stress_gridfirst_parity.py` | Non-destructive comparison of legacy polygon-mean-first vs Heat Stress v2 grid-first CSV extracts, reporting per-metric deltas, rank shifts, and top movers | `python -m tools.diagnostics.heat_stress_gridfirst_parity --help` |
+| `tools/diagnostics/audit_thematic_bundle_completeness.py` | Non-destructive audit of the 6 thematic dashboard bundles against `docs/bundle_calculation_audit.md`, checking processed component masters, persisted composite masters, and scenario/period pair parity for the selected states/levels | `python -m tools.diagnostics.audit_thematic_bundle_completeness --help` |
 | `tools/diagnostics/spi_diagnostic.py` | Sanity checks for SPI outputs (distribution/mean/std) | `python -m tools.diagnostics.spi_diagnostic --help` |
+| `tools/diagnostics/profile_drought_fullpass.py` | Read-only full-pass drought profiler (CHG-0111 gate): runs all 7 gridfirst drought slugs for one (model, scenario), reporting the cube-rebuild redundancy factor, the within-drought split (cube load+resample vs SPI gamma-fit vs grid aggregation), and projected dedup ceilings for a monthly-cube cache (CHG-0108) and a per-scale SPI-grid cache (CHG-0109). Loads NetCDFs only; writes nothing. | `python -m tools.diagnostics.profile_drought_fullpass --help` |
+| `tools/diagnostics/audit_compute_consumption.py` | Read-only registry introspection (Front 0): for every computed `PIPELINE_SLUGS` slug, reports which scored bundles consume it (thematic `LANDING_BUNDLE_WEIGHTS` + sectoral `PROPOSAL_BUNDLES`) and which active dashboard domains (`DOMAINS`/`PILLAR_DOMAINS`) list it. Classifies each as `scored` / `browsable_only` (served individually, no composite) / `orphan` (no bundle, no domain) to flag compute we can drop before optimizing. No data/IO. | `python -m tools.diagnostics.audit_compute_consumption --help` |
 | `tools/diagnostics/debug_build_master.py` | Debug helper for master build issues | `python -m tools.diagnostics.debug_build_master --help` |
+| `tools/diagnostics/verify_states_geojson.py` | Verify `states_4326.geojson` is consistent with `districts_4326.geojson` | `python -m tools.diagnostics.verify_states_geojson` |
+| `tools/diagnostics/verify_districts_blocks_geojson.py` | Sanity + parity checks for `districts_4326.geojson` and `blocks_4326.geojson` | `python -m tools.diagnostics.verify_districts_blocks_geojson districts` / `... blocks --sample 50` |
+| `tools/diagnostics/verify_admin_join_consistency.py` | Cross-level join consistency for all three boundary layers: (1) naming — block→district→state mapping + `state_lgd_code`↔`state_name` agreement; (2) geometry — per-unit IoU/residual of children-dissolve vs parent polygon (EPSG:6933). Optional `--figures-dir` renders example district/state nesting maps, an area-parity scatter, and an IoU-band chart. Reads `{states,districts,blocks}_4326.geojson` from `--geojson-dir` (default: IRT data dir); only writes figures. Exit 1 if any unit's IoU < `--min-iou` (default 0.999). | `python -m tools.diagnostics.verify_admin_join_consistency --help` |
+| `tools/diagnostics/roster_audit.py` | Canonical-roster audit + boundary-migration housekeeping (CHG-0089), keyed off the published per-state geometry shard. **Audit** (default, read-only): stale published masters, raw orphan dirs across BOTH the periods and `ensembles/` source subtrees, and a **completeness gate** (`canonical ⊆ published` over master **and** yearly_ensemble keys; exit 1 if any keeper is short). **`--quarantine-processed`**: move old-named raw dirs (periods + ensembles) → `processed/_stale_prelgd_bak/`, with a district file-level new-name interlock (hard-stop if a renamed unit lacks new-named periods/ensembles). **`--prune-optimised`**: move deferred-stale published masters → out-of-bundle `_stale_optimised_prelgd_bak/`, with a keeper-component guard. Apply modes default to `--dry-run` and write a JSON move-manifest. `--state`/`--level {district,block,all}`/`--keepers`. | `python -m tools.diagnostics.roster_audit --help` |
+| `tools/diagnostics/migrate_trailing_dot_dirs.py` | Migrate processed dirs/files whose name component ends in a Windows-illegal trailing dot/space (e.g. block `Parali_V_.` -> `Parali_V_`), which Win32 cannot address (`WinError 3` aborts the optimized build; single-level globs silently skip the unit). Renames the offending directory **and** the descendant files that carry the old token as a stem prefix (`Parali_V_._periods.csv` -> `Parali_V__periods.csv`). **Dry-run by default** (needs `--apply`); idempotent; **collision-guarded** (refuses to merge when the sanitized target already exists, exits non-zero). On native Windows uses the `\\?\` extended-length prefix to address the dotted source; simplest to run from the WSL view where the dotted name is already addressable. `--root`/`--state`/`--verbose`. Pairs with the `safe_fs_component` hardening in `india_resilience_tool/utils/naming.py`. | `python -m tools.diagnostics.migrate_trailing_dot_dirs --help` |
+| `tools/diagnostics/profile_prepare_dashboard.py` | End-to-end per-stage wall-clock timer for a real `prepare_dashboard` run (CHG-0097). Monkeypatches the orchestrator's single `execute_plan` chokepoint, then calls `prepare_dashboard.main` **unchanged** so it inherits the real arg parsing/plan building/readiness gating. Times each `PlannedCommand` and classifies it into canonical stages (`01_load+compute`, `02_exposure_context`, `03_admin_aggregation`, `04_bundle_assembly`, `05_optimized_publish`, …); reports **sum-of-stages**, **true wall**, and **unattributed** overhead (readiness scans + interpreter startup). Wrapper flags `--profile-json`/`--profile-csv`; all other args forward to `prepare_dashboard` (a leading `--` separator is stripped before forwarding). **NOT read-only — drives the real pipeline and writes processed outputs**; for a true cold-path number pass `--overwrite` against a disposable `IRT_DATA_DIR` copy, or use `--plan-only`/`--dry-run` (write-free, no timing). | `python -m tools.diagnostics.profile_prepare_dashboard climate-hazards --level district --models CanESM5 --scenarios historical --plan-only` |
 
 ## Geo / data acquisition / prep
 
@@ -85,7 +177,10 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 |---|---|---|
 | `tools/geodata/convert_blocks_shp_to_geojson.py` | Convert block boundaries shapefile → GeoJSON | `python -m tools.geodata.convert_blocks_shp_to_geojson --help` |
 | `tools/geodata/inspect_block_shapefile.py` | Inspect boundary shapefile/GeoJSON structure | `python -m tools.geodata.inspect_block_shapefile --help` |
-| `tools/geodata/build_blocks_geojson.py` | Rebuild the canonical `blocks_4326.geojson` from the source block shapefile with label QA | `python -m tools.geodata.build_blocks_geojson --help` |
+| `tools/geodata/build_admin_boundaries_from_lgd.py` | **Single source of truth** for the admin hierarchy: derive `blocks_4326.geojson`, `districts_4326.geojson`, and `states_4326.geojson` from one bharatlas `LGD_Blocks` shapefile so all three nest exactly by construction (districts = dissolve of blocks by name; states = dissolve of districts). Canonical Title-Case state names; ADM3-loader-identical district/block label repair. Backs up existing outputs to `.bak-<timestamp>` on `--overwrite` | `python -m tools.geodata.build_admin_boundaries_from_lgd --help` |
+| `tools/geodata/build_blocks_geojson.py` | _(Superseded by `build_admin_boundaries_from_lgd.py`)_ Rebuild only `blocks_4326.geojson` from the legacy `Block_GH_WUP` source block shapefile with label QA | `python -m tools.geodata.build_blocks_geojson --help` |
+| `tools/geodata/build_adm1_geojson.py` | Build the compact optimized ADM1 state-polygons artifact for fast dashboard boot | `python -m tools.geodata.build_adm1_geojson --help` |
+| `tools/geodata/build_states_geojson.py` | Build full-fidelity `states_4326.geojson` by dissolving `districts_4326.geojson` (unsimplified, shareable companion to district boundaries; not used at runtime) | `python -m tools.geodata.build_states_geojson --help` |
 | `tools/geodata/build_district_subbasin_crosswalk.py` | Build the canonical district ↔ sub-basin crosswalk CSV from district and sub-basin GeoJSONs | `python -m tools.geodata.build_district_subbasin_crosswalk --help` |
 | `tools/geodata/build_block_subbasin_crosswalk.py` | Build the canonical block ↔ sub-basin crosswalk CSV from block and sub-basin GeoJSONs | `python -m tools.geodata.build_block_subbasin_crosswalk --help` |
 | `tools/geodata/build_district_basin_crosswalk.py` | Build the canonical district ↔ basin crosswalk CSV from district and basin GeoJSONs | `python -m tools.geodata.build_district_basin_crosswalk --help` |
@@ -96,11 +191,16 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_aqueduct_admin_masters.py` | Build district and block master CSVs for the onboarded Aqueduct metrics under `processed/{metric_slug}/{state}/master_metrics_by_{district,block}.csv` | `python -m tools.geodata.build_aqueduct_admin_masters --help` |
 | `tools/geodata/build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs for area-weighted transfer | `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` |
 | `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for the onboarded Aqueduct hydro metrics under `processed/{metric_slug}/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
-| `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
+| `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) and the display-only population overlay PNG/metadata from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
+| `tools/geodata/build_lulc_admin_masters.py` | Build district and block agricultural LULC exposure masters (`lulc_agri_area_km2`, `lulc_agri_share_pct`) and the display-only binary agricultural LULC overlay PNG/metadata from `LULC_2_Agri.tif` | `python -m tools.geodata.build_lulc_admin_masters --help` |
+| `tools/geodata/build_worldpop_agesex_admin_masters.py` | Build district and block age-structure masters (`population_age_65plus_count`/`_share_pct`, `population_age_under5_count`/`_share_pct`) by summing the WorldPop 2025 age-sex bands. Shares are State/UT-level proportions by construction (see notes) | `python -m tools.geodata.build_worldpop_agesex_admin_masters --help` |
+| `tools/geodata/build_lgrip_admin_masters.py` | Build district and block cropland masters (`lgrip_cropland_*`, `lgrip_irrigated_*`, `lgrip_rainfed_*`) from LGRIP30 V001 via a generated no-resample VRT over the 12 India tiles | `python -m tools.geodata.build_lgrip_admin_masters --help` |
+| `tools/geodata/build_gsw_admin_masters.py` | Build district and block inland surface-water masters (`surface_water_{permanent,seasonal}_{area_km2,share_pct}`) from JRC Global Surface Water v1.4 occurrence, with marine water removed by a connectivity mask | `python -m tools.geodata.build_gsw_admin_masters --help` |
 | `tools/geodata/build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook with district-alias QA outputs | `python -m tools.geodata.build_groundwater_district_masters --help` |
-| `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth masters using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 flood-index and flood-extent masters and stable QA CSVs | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
-| `tools/optimized/build_processed_optimised.py` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree plus canonical geometry/context files, with exact pre-scan task counting, deterministic parallel yearly processing, level filtering, nested terminal progress bars, and a post-build parity audit | `python -m tools.optimized.build_processed_optimised --help` |
-| `tools/optimized/audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the dashboard-visible legacy processed contract, with optional level filtering, and emit `parity_report.json` | `python -m tools.optimized.audit_processed_optimised_parity --help` |
+| `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build per-state (`--state`, default Telangana) district/block JRC flood-depth masters. Strict RP-100 mode uses `--source-manifest <source_manifest.json> --rp100-only` with explicit aligned 3-arc-second depth/coverage rasters, publishes depth/extent/severity only for RP-100, treats covered `-9999` as dry support, and emits full/partial/none source-coverage QA. Legacy four-return-period builds require `--source-dir ... --allow-unversioned-source --assume-units m` and retain unresolved RP-10/50/500 provenance semantics. | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
+| `tools/geodata/build_water_availability_district_masters.py` | Build district per-capita water-scarcity masters from the NITI Aayog ICED *Per Capita Water Availability 2025 & 2050* workbook. Encodes the 4 ordinal classes to integer codes 1..4 (higher worse), reconciles source `(state, district)` onto the canonical district layer via curated state/district aliases + worst-class collision aggregation, left-joins the full canonical roster (NaN where no source), computes a 2050−2025 deterioration delta, and writes masters for `water_scarcity_percapita`, `water_scarcity_percapita_2050`, `water_scarcity_deterioration_2050`. Fail-fast on unmatched/invalid/duplicate/2050-improves (`--allow-unmatched` opt-in); reports `source_rows_resolved` and `canonical_rows_with_source` separately. `--dry-run`/`--overwrite`. Usually driven by the `prepare_dashboard water-availability` subcommand. | `python -m tools.geodata.build_water_availability_district_masters --help` |
+| `tools/optimized/build_processed_optimised.py` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree plus canonical geometry/context files, including persisted Glance view models, exact pre-scan task counting, deterministic parallel yearly processing, level filtering, nested terminal progress bars, and a post-build parity audit. Artifact version 5 distinguishes fitted and published frozen-ruler grids; for Heat Risk both contain the historical baseline plus six future pairs. **Yearly-loader backend:** the parallel yearly-model/ensemble reads run on a `ProcessPoolExecutor` by default; set `IRT_YEARLY_EXECUTOR=thread` (opt-in) to use a thread pool with per-worker adaptive chunking — safe because these workers read CSVs only (no geospatial/pyproj calls) — which removes Windows spawn overhead and lets small single-state jobs fan out. A single-chunk job always runs serially in-process (no pool spawn) regardless of backend. Output is byte-identical across backends. | `python -m tools.optimized.build_processed_optimised --help` |
+| `tools/optimized/audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the dashboard-visible legacy processed contract, with optional level filtering, and emit `parity_report.json`; frozen-composite masters and State values fail when any ruler-declared publication slice is absent | `python -m tools.optimized.audit_processed_optimised_parity --help` |
 | `tools/geodata/validate_aqueduct_workflow.py` | Validate the Aqueduct cleanup, crosswalk, coverage, sensitivity, and master-value workflow and write per-metric validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/` | `python -m tools.geodata.validate_aqueduct_workflow --help` |
 | `tools/geodata/clean_river_network.py` | Clean the Survey of India river shapefile into canonical river artifacts (`river_network.parquet`, display GeoJSON, QA CSV) | `python -m tools.geodata.clean_river_network --help` |
 | `tools/geodata/build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV used by hydro river overlays | `python -m tools.geodata.build_river_basin_reconciliation --help` |
@@ -108,10 +208,187 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_river_topology.py` | Build topology-ready river reaches, nodes, adjacency, and QA artifacts from the canonical river parquet | `python -m tools.geodata.build_river_topology --help` |
 | `tools/subbasin_shp_explore.py` | Inspect, optionally repair, and export canonical basin/sub-basin GeoJSONs from `waterbasin_goi.shp` | `python -m tools.subbasin_shp_explore --help` |
 | `tools/data_acquisition/download_era5_daily_stats_structured.py` | Download/structure ERA5 daily stats | `python -m tools.data_acquisition.download_era5_daily_stats_structured --help` |
-| `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | Download NEX India subset from S3 | `python -m tools.data_acquisition.nex_india_subset_download_s3_v1 --help` |
+| `tools/data_acquisition/prepare_jrc_rp100_source.py` | Prepare and finalize a JRC v2.1.2 RP-100 source inventory/manifest from a local `tile_extents.geojson` or explicit tile filename list; default mode selects India-intersecting tiles with the one-native-pixel buffer, while `--finalize` validates downloaded `RP100/*.tif` files, writes aligned depth and tile-coverage VRTs, and replaces the planned manifest with a validated strict source manifest | `python -m tools.data_acquisition.prepare_jrc_rp100_source --help` |
+| `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | Download NEX India subset from S3 (serial; retained as a fallback) | `python -m tools.data_acquisition.nex_india_subset_download_s3_v1 --help` |
+| `tools/data_acquisition/nex_india_subset_download_s3_v2.py` | Parallel pan-India NEX-GDDP-CMIP6 downloader: scope-cached S3 listing, ThreadPoolExecutor, atomic writes, classified retries, `--verify` quarantine, year × experiment intersection. Outputs to `${out_dir}/${member_dir}/${exp}/${var}/${model}/${year}.nc` (default `member_dir=r1i1p1f1_panIndia`). | `python -m tools.data_acquisition.nex_india_subset_download_s3_v2 --help` |
+| `tools/data_acquisition/nex_wbgt_ncss.py` | Acquire NASA NEX-GDDP-CMIP6 **v2.0** `rsds` and `sfcWind` India subsets for the outdoor WBGT, via NASA's THREDDS NetcdfSubset service. `plan` / `download` / `verify` subcommands over a durable plan + manifest; catalog-discovered grid labels (`gn`/`gr`/`gr1`); explicit v2.0 selection; per-response validation (Content-Length, NetCDF magic, full variable read, member/version identity, timestamp coverage against the local `tasmax` contract, grid trim to 128x120); atomic publication with a recorded SHA-256. Writes to `${out_root}/${member}/${experiment}/${variable}/${model}/${year}.nc`. | `python -m tools.data_acquisition.nex_wbgt_ncss --help` |
 | `tools/data_prep/prepare_reanalysis_for_pipeline.py` | Prepare ERA5/IMD inputs for pipeline | `python -m tools.data_prep.prepare_reanalysis_for_pipeline --help` |
 | `tools/data_prep/organize_era5_legacy_nc_files.py` | Reorganize legacy ERA5 NetCDF layout | `python -m tools.data_prep.organize_era5_legacy_nc_files --help` |
 | `tools/data_prep/derive_hurs_from_era5_tas_tdps.py` | Derive humidity inputs from ERA5 fields | `python -m tools.data_prep.derive_hurs_from_era5_tas_tdps --help` |
+
+`tools/data_acquisition/nex_india_subset_download_s3_v2.py` notes:
+- Output layout: `${out_dir}/${member_dir}/${experiment}/${variable}/${model}/${year}.nc` (default `member_dir=r1i1p1f1_panIndia`).
+- Default `--workers 8`; default `--open-mode download-first` (safer; `direct` additionally requires `s3fs` + `fsspec`).
+- `--skip-existing` (default) skips non-empty files. `--verify` opens existing files; corrupt ones are moved to `*.bad` unless `--delete-bad-existing` is set.
+- `--years 1990-2010,2050` is intersected with each experiment's policy range (`historical` 1951–2014; `ssp*` 2015–2100).
+- Exit codes: `0` = clean; `1` = at least one task failed (or a scope had duplicate-year keys, e.g. `gn`/`gr1` mixed); `2` = no failures but a corrupt local file was quarantined with no S3 key to replace it.
+- Atomic writes via unique `.tmp` + `os.replace`; safe on POSIX and NTFS. Temp source NetCDFs are cleaned on every path (success, failure, partial).
+
+PowerShell + conda example (Windows operator):
+```powershell
+conda activate irt
+$env:IRT_DATA_DIR = "D:\projects\irt_data_pan_india"
+python -m tools.data_acquisition.nex_india_subset_download_s3_v2 `
+    --out-dir $env:IRT_DATA_DIR `
+    --workers 8
+```
+
+WSL/bash example:
+```bash
+IRT_DATA_DIR=/mnt/d/projects/irt_data_pan_india \
+  python -m tools.data_acquisition.nex_india_subset_download_s3_v2 --workers 8
+```
+
+Scale advisory: pan-India × 5 variables × 3 experiments × all available CMIP6 models × full policy year range is a multi-hour, large-disk run even after bbox subsetting. Probe scale first with a small dry-run:
+```bash
+python -m tools.data_acquisition.nex_india_subset_download_s3_v2 \
+    --variables pr --models GFDL-ESM4 --years 2000-2001 --dry-run
+```
+Windows tip: if HDF5 writes get flaky under parallelism, fall back to `--workers 2`.
+
+**Important — output is not yet consumed by the compute pipeline.** Outputs land under `${out_dir}/r1i1p1f1_panIndia/`. The compute pipeline (`tools/pipeline/compute_indices_multiprocess.py` etc., resolved via `india_resilience_tool/config/paths.py`) currently reads `${out_dir}/r1i1p1f1/`. Until a separate staging or pipeline-config change lands, `_v2` downloads do not feed the compute pipeline. `_v1.py` and `download_pan_india_raw.sh` are unchanged and remain in service for the existing serial workflow.
+
+`tools/data_acquisition/nex_wbgt_ncss.py` notes:
+
+Acquires the two daily weather variables the outdoor WBGT still lacks. It does **not** change the
+WBGT calculation, publish a metric, touch the existing `irt_data/r1i1p1f1` archive, or re-download
+temperature or humidity.
+
+- **Source:** NASA THREDDS NCSS, `https://ds.nccs.nasa.gov/thredds/ncss/grid/AMES/NEX/GDDP-CMIP6/`.
+  Dataset paths are discovered from the sibling `/thredds/catalog/.../catalog.xml`, never
+  hardcoded: THREDDS filenames carry a `_v2.0` suffix the S3 keys lack, and the grid label varies
+  by model (`gn`, `gr`, `gr1`).
+- **Coverage:** 21 models x 143 years x 2 variables = **6,006 files** (historical 1990-2010,
+  ssp245 and ssp585 2020-2080). The roster is the intersection of the locally held `tas`, `tasmax`
+  and `hurs`; `plan` re-verifies it against the archive and reports any discrepancy rather than
+  silently expanding or shrinking it.
+- **Spatial request:** `south=6 north=38 west=68 east=98`, `horizStride=1`. NCSS answers with
+  129 x 121 cells; the extra northern row and eastern column are **trimmed by coordinate match**,
+  never regridded or interpolated, down to the existing 128 x 120 IRT grid.
+- **Time request:** `time=all`, which is calendar-agnostic. The roster spans four CMIP6 calendars
+  (`365_day` 11 models, `proleptic_gregorian` 7, `standard` 2, `360_day` 1 = KACE-1-0-G), so a
+  Gregorian 31 December would be an invented date for some sources. `--time-selector explicit`
+  falls back to the source-derived first/last dates.
+- **Expected timestamps** come from the local `tasmax` file for the same model-year, because the
+  acquired data has to line up with the temperature it will be combined with. A response that
+  disagrees is a **flagged source/data exception**, never something to interpolate over.
+- **Validation before publication** (every file): HTTP status, rejection of HTML/XML error bodies
+  that arrive with HTTP 200, received-vs-`Content-Length` comparison, NetCDF magic sniff, full
+  variable read (a readable header is not enough), `version`/`variant_label` identity, complete and
+  strictly ascending unique timestamps, grid trim and coordinate equality, recognised units,
+  infinity rejection, all-missing rejection, then a compressed rewrite, a reopen with decoded
+  value-and-mask equality against the response, a SHA-256, and only then an atomic rename.
+  **Downloaded is not verified**, and ocean/masked cells alone are never a failure.
+- **Output encoding:** NetCDF4/HDF5, zlib level 5 + shuffle, chunks `(1, 128, 120)`, source dtype,
+  fill value and calendar preserved. Acquisition provenance is added under `irt_acquisition_*`
+  attributes without overwriting any source attribute.
+- **Concurrency:** default 16 workers, **capped at 16** — this is a public NASA service. NCSS
+  is server-CPU-bound and its response time is bimodal, so `--read-timeout` defaults to 900 s; a
+  naive short timeout fails requests that would otherwise succeed. HDF5 work is serialised under a
+  lock while transfers stay concurrent.
+- **Adaptive reduction:** a governor watches a 20-task sliding window and **halves** the in-flight
+  target (floor 2) once a quarter of that window fails, stepping back up one worker per 40
+  consecutive successes. It can only ever go *below* `--workers`, never above. Reductions are
+  logged as warnings and reported in `summary.json` as `concurrency_reductions` and
+  `final_in_flight_target`. This matters in practice: a sustained 16-way run has been observed
+  degrading roughly sevenfold (445 → 76 → 15 files/hour, mean latency 103 → 328 s, 60 dropped
+  transfers) while a plain catalog fetch stayed fast at 1.7–2.8 s — that is NCSS subsetting
+  pressure, and continuing to push 16 requests into it makes the run slower, not faster.
+- **`--allow-workers-above-ceiling`** raises the cap from 16 to an absolute 32. It exists for
+  deliberate concurrency measurement against a healthy service, not for routine bulk acquisition;
+  the ceiling is never raised automatically.
+- **`--overall-deadline`** (default 3,600 s) is enforced *during* streaming, so a slow drip that
+  keeps delivering bytes inside every `--read-timeout` window is abandoned and retried rather than
+  holding a worker open indefinitely.
+- **Resume** is checksum-based: an output is skipped only when the manifest says `verified` *and*
+  the recorded SHA-256 still matches, so a same-size but altered file is re-acquired.
+- **Scope is never silently empty:** a `--models`/`--experiments`/`--variables`/`--years` filter
+  that selects 0 planned tasks is a scope error (exit 2), not a vacuous success, and `verify`
+  raises it *before* touching `verification.csv`.
+- **`verify` re-checks identity, not just bytes:** dataset version, ensemble member, calendar,
+  planned day count, timestamps, units, grid and payload are all re-asserted, so an output with no
+  manifest checksum cannot pass on size alone. Identity is read from NASA's own `version` and
+  `variant_label` attributes, and the tool's `irt_acquisition_*` provenance is cross-checked
+  against them rather than trusted in their place: the provenance records what was *requested*, so
+  reading it first compared the request against its own echo. Both attributes must be present.
+- **An unreadable time reference fails the row.** The expected timestamps come from the local
+  `tasmax` file recorded in the plan, and a reference that cannot be opened is an error, never an
+  empty expectation that silently skips the date comparison. This matters across the WSL/Windows
+  split: the plan records `D:\...` paths, so **run `verify` from the Windows env**. From WSL every
+  reference resolves to nothing, and each row now says so instead of passing.
+- **A scoped `verify` writes its own report.** Only a pass covering every planned task writes
+  `acquisition/verification.csv`; a filtered pass writes
+  `acquisition/verification.scoped-<hash>.csv`, logs that it did, and leaves the archive-wide
+  record untouched. In `summary.json`, `verification` holds the last **full** pass and
+  `verification_scoped` the last partial one. `status_counts` there is acquisition state from the
+  manifest, not verification — `status_counts_source` says so in the file.
+- **Exit codes:** `0` complete, `2` scope/plan error, `3` incomplete (any expected task not
+  verified, including unresolved remote gaps), `4` interrupted.
+
+Commands (WSL; on Windows use `python` after `conda activate irt`). `ROOT` is outside the repo:
+
+```bash
+PY_EXE="/mnt/c/Users/22015611/AppData/Local/miniconda3/envs/irt/python.exe"
+ROOT="D:/projects/irt_data/nex_gddp_cmip6_v2_wbgt"
+```
+
+Readiness check (reads only):
+```bash
+"$PY_EXE" -c "import xarray, h5netcdf, requests, numpy, cftime; print('acquisition deps ok')"
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" plan --help
+```
+
+Focused tests (synthetic fixtures, no network):
+```bash
+"$PY_EXE" -m pytest tests/test_nex_wbgt_ncss.py -q
+```
+
+Plan, no-write rehearsal (reads remote catalogs and local headers, writes nothing):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" --dry-run \
+    plan --data-root D:/projects/irt_data
+```
+
+Plan (writes `acquisition/plan.json` and `acquisition/manifest.csv`; no climate payload):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" \
+    plan --data-root D:/projects/irt_data
+```
+
+Pilot download (writes data; covers both variables, all three experiments and all four calendars):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" download \
+    --workers 2 --models GFDL-ESM4,EC-Earth3,MIROC6,KACE-1-0-G --years 2000,2040,2080
+```
+
+Pilot verification (reads published outputs only):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" verify \
+    --models GFDL-ESM4,EC-Earth3,MIROC6,KACE-1-0-G --years 2000,2040,2080
+```
+
+Bulk download (writes data; resumable — re-run the same command after any interruption):
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" download --workers 16
+```
+
+Final verification (reads published outputs only; writes `verification.csv` and `summary.json`).
+Run it from the Windows env: the plan's time references are `D:\...` paths, and an unreachable
+reference is now a failed row rather than a skipped date check. Reads the full ~67 GB:
+```bash
+"$PY_EXE" -m tools.data_acquisition.nex_wbgt_ncss --out-root "$ROOT" verify
+```
+
+A filtered `verify` is a spot check, not the record: it writes
+`acquisition/verification.scoped-<hash>.csv` and leaves `verification.csv` as the last full pass
+left it.
+
+**Known downstream WBGT blockers, recorded separately from acquisition failures.** A clean
+acquisition does not certify that every model-year is ready for a WBGT computation:
+- the existing `tas`/`tasmax`/`hurs` are NASA dataset version **1.0**, while the `rsds`/`sfcWind`
+  acquired here are **v2.0**;
+- `r1i1p1f1/ssp245/hurs/KIOST-ESM/2058.nc` is absent locally;
+- IITM-ESM is excluded from the roster because the archive has no `tasmax` for it.
 
 `tools/subbasin_shp_explore.py` notes:
 - source: `waterbasin_goi.shp`
@@ -206,20 +483,153 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - `IRT_DATA_DIR/processed/population_total/{state}/master_metrics_by_block.csv`
   - `IRT_DATA_DIR/processed/population_density/{state}/master_metrics_by_district.csv`
   - `IRT_DATA_DIR/processed/population_density/{state}/master_metrics_by_block.csv`
+  - `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay.png`
+  - `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay_meta.json`
 - QA CSVs under `IRT_DATA_DIR/population/`
 - uses raster cell-center inclusion (`all_touched=False`) and canonical polygon area in `EPSG:6933`
+- the overlay is display-only binned people-per-source-cell context; dashboard runtime and optimized bundles read the exported PNG/metadata, never the raw TIFF
+
+`tools/geodata/build_rural_facilities_admin_masters.py` notes:
+- source shapefiles:
+  - `Agroinfrastructure.shp`
+  - `Educationinfrastructure.shp`
+  - `Healthinfrastructure.shp`
+  - `Serviceinfrastructure.shp`
+- outputs:
+  - `IRT_DATA_DIR/processed/rural_facilities_*/*/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/rural_facilities_*/*/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_<category>_overlay.png`
+  - `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_<category>_overlay_meta.json`
+- QA files are written under `IRT_DATA_DIR/rural_facilities/`
+- counts use deterministic point coverage into canonical blocks, with unmatched/ambiguous/invalid coordinates reported in QA
+
+`tools/geodata/build_built_up_area_admin_masters.py` notes:
+- source raster:
+  - `IRT_DATA_DIR/built_up_area/Cleaned_India_Built_Surface_WGS84.tif`
+  - a timestamped Drive download path may be supplied with `--raster`; move/rename the stable operational copy to the canonical path above for repeatable runs
+- canonical boundary inputs:
+  - `IRT_DATA_DIR/districts_4326.geojson`
+  - `IRT_DATA_DIR/blocks_4326.geojson` (optional; missing blocks warn and district outputs still build)
+- outputs:
+  - `IRT_DATA_DIR/processed/built_up_area_km2/{state}/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/built_up_area_km2/{state}/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/built_up_area_share_pct/{state}/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/built_up_area_share_pct/{state}/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay.png`
+  - `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay_meta.json`
+- QA files are written under `IRT_DATA_DIR/built_up_area/`
+- source values are `m2/source cell`; `0` is valid no built-up and `65535` is invalid/background
+- tabulation reprojects vectors to the raster CRS and uses `all_touched=False`; area-share denominators use polygon area in `EPSG:6933`
+- useful commands:
+  - `python -m tools.geodata.build_built_up_area_admin_masters --help`
+  - `python -m tools.runs.prepare_dashboard built-up-area --built-up-raster "<path>" --plan-only`
+
+`tools/geodata/build_worldpop_agesex_admin_masters.py` notes:
+
+- Inputs: `<IRT_DATA_DIR>/worldpop_agesex/bands/*.tif` (12 bands: sexes m/f x age groups
+  00, 01, 65, 70, 75, 80) and the 2025 population raster used as the share denominator.
+- Sums the bands into `worldpop_agesex/derived/ind_age65plus_*.tif` and
+  `ind_ageunder5_*.tif`, then zonal-sums those with the same helper the population
+  master uses, so a unit's age share is exactly its age count over its own population.
+- **The shares carry no sub-state variation.** WorldPop applies one State/UT age
+  proportion to every grid cell: 99.8% of district-level variance and 99.9% of
+  block-level variance is explained by State/UT alone, and inside Kerala the per-cell
+  65+ ratio is constant to 1e-6. They are published as Context and Evidence card text
+  and must never drive a district or block map fill.
+- Guardrails: an age count may not exceed a unit's population, and the national shares
+  must land inside plausibility bounds (a wrong denominator or a dropped band shows up
+  here first). Override with `--allow-count-outlier` / `--allow-share-outlier`.
+
+`tools/geodata/build_lgrip_admin_masters.py` notes:
+
+- Inputs: `<IRT_DATA_DIR>/irrigation/LGRIP30_2015_*.tif` (12 tiles covering India).
+  Classes: 0 water, 1 non-cropland, 2 irrigated, 3 rainfed.
+- Builds `lgrip30_india.vrt` itself. Every tile is verified to share one resolution and
+  to sit at an integer cell offset from a common origin, so the mosaic involves no
+  resampling; anything else is refused rather than silently warped.
+- Shares divide by full canonical polygon area in EPSG:6933, never by cropland area,
+  matching `build_lulc_admin_masters` so `lgrip_cropland_share_pct` is directly
+  comparable with `lulc_agri_share_pct` (BL-0027).
+- **Tile coverage is a guardrail, not an afterthought.** A VRT returns 0 for uncovered
+  area and 0 is LGRIP's water class, so a missing tile publishes as zero cropland and no
+  nodata or class check can see it. `tile_coverage_pct` tests admin polygons against the
+  union of tile footprints and fails the build below 99.9%.
+- **The irrigated/rainfed split is not wired into the runtime.** It reads monsoon paddy
+  as irrigated across eastern India (Assam measures 78.8% irrigated against a Census
+  figure near 12%; mean bias +26.7pp, rank correlation 0.667). Masters are written so
+  the data is ready, but only `lgrip_cropland_*` is registered and published.
+
+`tools/geodata/build_gsw_admin_masters.py` notes:
+
+- Inputs: `<IRT_DATA_DIR>/surface_water/occurrence_*.tif` (11 JRC GSW v1.4 tiles covering
+  India). Band 1 is `0-100` percent of valid observations that were water, and `255` for
+  no valid observation -- which is NOT zero water and is never folded into either class.
+- Reuses `build_lgrip_admin_masters.build_tile_vrt` to mosaic with no resampling, and its
+  `tile_coverage_pct` guardrail. The same trap applies here and is worse: uncovered area
+  reads as occurrence 0, which is the legitimate value "never water".
+- **Permanent is occurrence >= 75%, seasonal 25-74%.** These are this repo's thresholds,
+  not product definitions. GSW ships a `seasonality` band that would settle the split
+  without thresholds; only `occurrence` was acquired. Anything that ranks units on these
+  numbers inherits the choice.
+- **Marine water is removed before aggregation, and this is not optional.** GSW masks the
+  open ocean inconsistently -- far offshore carries 0 or 255, but a nearshore band tens of
+  kilometres wide is classified as permanent water at 99-100% occurrence. Coastal polygons
+  reach into that band, so an uncorrected tabulation publishes the sea as district water:
+  the Nicobars measure 17.5% permanent water, almost all of it ocean. Because the offshore
+  mask is inconsistent, a flood fill from the raster edge cannot reach the band; the mask
+  is seeded from water lying outside the national land union instead.
+- **The opening is what protects coastal lagoons.** Vembanad and Chilika connect to the sea
+  through mouths under a kilometre wide, so pure connectivity removes them with the ocean:
+  Alappuzha falls 10.7% -> 8.2% and Puri 19.8% -> 16.7%. One cell of binary opening
+  (`--sea-opening-cells`, ~550 m at the default decimation) restores both to 8.9% and 18.2%,
+  stable at every larger opening, while still removing ~90% of the marine water from island
+  districts (Nicobars 24.2% -> 2.2%). Larger openings only protect more nearshore creeks, so
+  the smallest opening that stabilises the lagoons is the default.
+- The correction is published, not hidden: `marine_removed_area_km2` and
+  `marine_corrected` are written per unit, so a coastal unit's residual nearshore water
+  stays auditable. Island and creek-dense coastal units do keep some.
+- National permanent water measures about 17,000 km2, roughly 0.5% of land area. That is
+  far below the 2-3% usually quoted for "water bodies", which mixes in seasonal extent; a
+  75% occurrence floor counts only what is wet in three observations out of four.
+
+`tools/geodata/build_lulc_admin_masters.py` notes:
+- source raster:
+  - `IRT_DATA_DIR/lulc/LULC_2_Agri.tif`
+  - alternate source paths may be supplied with `--raster`; keep the canonical copy above for repeatable runs
+- canonical boundary inputs:
+  - `IRT_DATA_DIR/districts_4326.geojson`
+  - `IRT_DATA_DIR/blocks_4326.geojson` (optional; missing blocks warn and district outputs still build)
+- outputs:
+  - `IRT_DATA_DIR/processed/lulc_agri_area_km2/{state}/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/lulc_agri_area_km2/{state}/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/lulc_agri_share_pct/{state}/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/lulc_agri_share_pct/{state}/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay.png`
+  - `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay_meta.json`
+- QA files are written under `IRT_DATA_DIR/lulc/`
+- source values are binary: `1` is agricultural LULC; `0` is nodata/background; unexpected values fail unless `--allow-unexpected-values` is supplied
+- tabulation reads the raster through a nearest-neighbor `EPSG:6933` WarpedVRT and uses `all_touched=False`; area-share denominators use polygon area in `EPSG:6933`
+- guardrails fail national totals outside `1,200,000-2,300,000 km2` unless `--allow-total-outlier` is supplied and district/block shares above `100.01%` unless `--allow-share-outlier` is supplied
+- useful commands:
+  - `python -m tools.geodata.build_lulc_admin_masters --help`
+  - `python -m tools.runs.prepare_dashboard lulc --lulc-raster "<path>" --plan-only`
 
 `tools/geodata/build_groundwater_district_masters.py` notes:
 - source workbook:
   - `IRT_DATA_DIR/CentralReport1773820094787.xlsx`
 - canonical boundary input:
   - `IRT_DATA_DIR/districts_4326.geojson`
+- manual alias input (optional `--district-alias-csv`, defaults to the path below):
+  - `IRT_DATA_DIR/groundwater/groundwater_district_aliases.csv`
+  - mapping rows re-point a source `(state, district)` onto its current canonical district spelling
+  - a target district equal to the `__EXCLUDE__` sentinel marks an intentional source drop (e.g. `DELHI, NAZUL LAND`), recorded in `groundwater_excluded_sources.csv` rather than treated as unmatched
 - outputs:
   - `IRT_DATA_DIR/processed/gw_stage_extraction_pct/{state}/master_metrics_by_district.csv`
   - `IRT_DATA_DIR/processed/gw_future_availability_ham/{state}/master_metrics_by_district.csv`
   - `IRT_DATA_DIR/processed/gw_extractable_resource_ham/{state}/master_metrics_by_district.csv`
   - `IRT_DATA_DIR/processed/gw_total_extraction_ham/{state}/master_metrics_by_district.csv`
-  - QA CSVs under `IRT_DATA_DIR/groundwater/`
+  - QA CSVs under `IRT_DATA_DIR/groundwater/` (`groundwater_unmatched_districts.csv`, `groundwater_excluded_sources.csv`, `groundwater_summary.csv`)
+- multiple source rows that map to one canonical district are summed via declarative rules (`SOURCE_DISTRICT_AGGREGATIONS`, plus the Lakshadweep island roll-up), reported in the summary as `aggregation_rows`
 - the tool refuses to write masters if any source districts remain unmatched after alias resolution
 
 `tools/optimized/build_processed_optimised.py` notes:
@@ -228,7 +638,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - current canonical root-level geometry and context artifacts under `IRT_DATA_DIR/`
 - writes to:
   - `IRT_DATA_DIR/processed_optimised/`
-  - `IRT_DATA_DIR/processed_optimised/parity_report.json`
+  - `IRT_DATA_DIR/processed_optimised/parity_report.json` for unscoped runs, or an explicit `--report-path` for scoped runs
 - retained runtime contract:
   - Parquet-only masters
   - yearly ensemble facts
@@ -241,7 +651,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 - terminal UX:
   - exact pre-scan task counting before execution
   - `--overwrite` rewrites only the selected optimized targets in place
-  - `--overwrite --prune-scope` deletes stale files only inside the selected metric/level ownership roots before rewriting
+  - `--overwrite --prune-scope` deletes only the exact selected output files before rewriting
   - `--full-rebuild` is the explicit destructive whole-bundle reset
   - `--dry-run` prints the resolved write/delete plan without mutating the bundle
   - yearly-model and yearly-ensemble stages use deterministic process-parallel execution by default at roughly `80%` of logical CPUs
@@ -249,6 +659,10 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - `--workers 1` forces serial execution
   - nested `tqdm` progress bars during execution
   - `--no-progress` disables the bars
+  - `--state <name>` scopes admin district/block work to resolved legacy state roots while preserving their discovered names in output paths
+  - state-scoped runs leave shared-global admin artifacts, `bundle_manifest.json`, and the global `parity_report.json` untouched by default
+  - `--include-shared-admin-artifacts` opt-in rebuilds shared-global admin artifacts during a scoped run
+  - state-scoped parity reports are written only when `--report-path` is supplied
 - parity:
   - yearly ensemble facts are migrated directly from legacy ensemble CSVs
   - hydro yearly ensemble facts fall back to legacy hydro per-model yearly CSVs when the legacy hydro `ensembles/` tree is missing or empty
@@ -267,9 +681,32 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 `tools/optimized/audit_processed_optimised_parity.py` notes:
 - compares `processed_optimised/` against the dashboard-visible legacy `processed/` contract
 - validates expected optimized masters, yearly facts, geometry, context, and manifest outputs
+- accepts repeatable `--state` for admin-scoped audits
+- leaves the global `parity_report.json` untouched on scoped runs unless `--report-path` is supplied
 - exits non-zero when parity gaps remain
 
+`tools/geodata/build_admin_boundaries_from_lgd.py` notes:
+- source shapefile (resolved from the first existing of):
+  - `IRT_DATA_DIR/LGD_Blocks/LGD_Blocks.shp`
+  - `IRT_DATA_DIR/_tmp_lgd_blocks/LGD_Blocks.shp`
+  - `IRT_DATA_DIR/LGD_Blocks.shp`
+  - override with `--source`
+- canonical outputs (all three derived from the same atomic block layer so they nest exactly):
+  - `IRT_DATA_DIR/blocks_4326.geojson` — atomic blocks (one row per block)
+  - `IRT_DATA_DIR/districts_4326.geojson` — dissolve of blocks by `(state_name, district_name)`
+  - `IRT_DATA_DIR/states_4326.geojson` — dissolve of districts by `state_name`
+- design contract:
+  - district identity keyed on **name**, not `dist_lgd` (preserves 2023 splits that still share a parent LGD code; the modal LGD code is kept only as a reference attribute)
+  - state names canonicalized to Title-Case via an exhaustive map; an unmapped source state is a **hard error**
+  - district/block labels run through the same `repair_adm3_identity_columns` the ADM3 loader applies at runtime, so the district file and block-derived district references match exactly at load time
+  - redundant trailing `" District"` suffix stripped (e.g. `Lakshadweep District` → `Lakshadweep`)
+  - fails the build on the same suspicious admin-label characters the block loader rejects
+- safety: refuses to clobber without `--overwrite`; on overwrite, backs up each existing output to `<file>.bak-<timestamp>` unless `--no-backup`
+- `--dry-run` prints the full per-state district/block roster + hierarchy QA (and `--qa-out` writes the per-state table to CSV) without writing any GeoJSON
+- current roster: 7,134 blocks · 783 districts · 36 states/UTs (Arunachal Pradesh fully present)
+
 `tools/geodata/build_blocks_geojson.py` notes:
+- **superseded** by `build_admin_boundaries_from_lgd.py`, which now produces `blocks_4326.geojson` (along with the matching districts/states) from the bharatlas `LGD_Blocks` source; this legacy builder rebuilds only the block layer from the older `Block_GH_WUP` shapefile and is retained for reference
 - source shapefile:
   - `IRT_DATA_DIR/Block_GH_WUP_POP R2025A _GHS_WUP/Block_GH_WUP_POP R2025A _GHS_WUP.shp`
 - canonical output:
@@ -339,3 +776,58 @@ Aqueduct methodology note:
 | Script | Purpose | Run |
 |---|---|---|
 | `tools/legacy/DONOTUSE_ArtparkGenerateReport.py` | Historical one-off report script (kept for reproducibility) | `python tools/legacy/DONOTUSE_ArtparkGenerateReport.py` |
+
+## Telangana Block Yearly Model Recovery
+
+Use explicit preserve cleanup when rebuilding block climate metrics that must feed dashboard model-member traces.
+
+python -m tools.pipeline.compute_indices_multiprocess --state Telangana --level block --overwrite --yearly-cleanup-policy preserve --metrics tas_annual_mean
+python -m tools.optimized.build_processed_optimised --state Telangana --level block --overwrite --prune-scope --skip-geometry --skip-context --metric tas_annual_mean
+
+Generate repeated metric flags from the optimized yearly inventory:
+python -m tools.diagnostics.list_optimized_yearly_metrics --state Telangana --level block --format args
+
+Run the strict state-scoped parity audit after rebuilding:
+python -m tools.optimized.audit_processed_optimised_parity --state Telangana --level block --require-block-yearly-models --strict --report-path D:/projects/irt_data/processed_optimised/parity_report_telangana_block_yearly_models.json
+
+Notes:
+- compute marker schema version is 5 and ensemble marker schema version is 4
+- default cleanup deletes block yearly CSVs after ensembles but preserves district, basin, and sub-basin yearly CSVs
+- preserve keeps block per-model yearly CSVs; budget disk before full-state runs
+
+## Shade WBGT correction (CHG-0583–0587)
+
+Run from the repository root in the existing `irt` environment. None of these diagnostics downloads data.
+
+| Tool | Command | Inputs | Outputs |
+|---|---|---|---|
+| Shade validation | `python -m tools.diagnostics.wbgt_shade_release` | Cached six-site hourly parquets, 1990–2014 | Exact reproduction, site/season/year errors, bootstrap intervals and release gate under `docs/diagnostics/wbgt_shade_release/` |
+| Input/published audit | `python -m tools.diagnostics.wbgt_shade_inventory --data-root D:/projects/irt_data` | Eight published metric masters and local NEX tree | Baseline zero/NaN fractions and shared input roster |
+| Calendar audit | `python -m tools.diagnostics.wbgt_shade_inventory --data-root D:/projects/irt_data --calendars-only` | Previous roster plus every selected NetCDF header | `source_calendars.csv`, supported `release_roster.json` |
+| Helper pilot | `python -m tools.diagnostics.wbgt_shade_pilot --data-root D:/projects/irt_data` | Local ACCESS-CM2 historical inputs and admin boundaries | Private caches, rows, time/RSS/I/O and provisional budget in `scratch/wbgt_shade_pilot/` |
+| NEX residuals | `python -m tools.diagnostics.wbgt_shade_nex --source-root D:/projects/irt_data/r1i1p1f1` | Local historical inputs and cached hourly references | Distribution/annual-count comparisons and explicit calendar exclusions |
+| National staging runner | `python -m tools.pipeline.build_shade_release --data-dir D:/projects/irt_data --stage scratch/wbgt_shade_national [--dry-run] [--build]` | `release_roster.json`, `pilot_report.json`, `staged_downstream_timings.json`, `published_baseline.csv`, the staged pilot tree, and the published shade trees under `--data-dir` | `budget.json`, cached `rollback_sizes.json`, `build_spec.json`, per-stage logs, `status.json`, `parity.json` and `release_ready.json`, all under `--stage`. **Never writes to the published tree and never publishes.** |
+
+The validation tool supports `--dry-run` (cache existence check) and `--summarize-only` (derive reports
+from existing scores). Every tool supports `--help`. Compute supports `--output-root` for staging;
+spawned workers inherit `IRT_COMPUTE_OUTPUT_ROOT`. See
+[the ordered release runbook](../docs/wbgt_shade_release.md) before using this destination override.
+
+`build_shade_release` refuses to stage inside the published tree, requires both release gates to pass,
+and separates measurement from execution:
+
+- **Budget only (default, no `--build`)** — measures the staged pilot and the published shade trees,
+  then extrapolates time and disk. Walking the published trees costs minutes *per tree*, so results are
+  cached in `<stage>/rollback_sizes.json` and written back after each tree; an interrupted run resumes.
+  Pass `--remeasure-rollback` after the published shade trees change.
+- **`--dry-run`** — skips the published-tree walk entirely (seconds, not tens of minutes). It yields no
+  space verdict, so it is refused in combination with `--build`.
+- **`--build`** — resumable state-by-state compute, then masters, optimized outputs, strict state values
+  and strict parity. Immediately after each state computes, validates native per-unit yearly CSVs against
+  boundary units, model/scenario/year rosters and shade signatures; no master summary is required yet.
+  Validation exceptions set `status.json` to failed and stop downstream stages. Resume with the same
+  command and stage to reuse valid compute markers and revalidate the outputs. `--source-root` additionally preflights every rostered model-year input before the
+  first compute stage. A stage built from a different roster, state list or formula signature is refused
+  rather than mixed. `--force` breaks a build lock only where the holding PID cannot be probed.
+
+National publication and rollback rehearsal are not complete; nothing consumes `release_ready.json` yet.

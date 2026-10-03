@@ -1,0 +1,244 @@
+state_name,check,unit,ok,discrepancy_area_m2,discrepancy_fraction,detail
+Kerala,district_names_unique,Kerala,True,0.0,0.0,0 duplicate district names
+Kerala,block_names_unique_within_district,Kerala,True,0.0,0.0,0 duplicate block names
+Kerala,every_block_parent_present,Kerala,True,0.0,0.0,0 orphan parents: 
+Kerala,district_geometries_valid,Kerala,True,0.0,0.0,0 invalid
+Kerala,block_geometries_valid,Kerala,True,0.0,0.0,0 invalid
+Kerala,block_geometries_distinct,Kerala,True,0.0,0.0,0 duplicate geometries
+Kerala,gap_blocks_cover_district,Alappuzha,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Alappuzha,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Alappuzha,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Ernakulam,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Ernakulam,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Ernakulam,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Idukki,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Idukki,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Idukki,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Kannur,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Kannur,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Kannur,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Kasaragod,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Kasaragod,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Kasaragod,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Kollam,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Kollam,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Kollam,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Kottayam,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Kottayam,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Kottayam,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Kozhikode,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Kozhikode,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Kozhikode,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Malappuram,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Malappuram,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Malappuram,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Palakkad,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Palakkad,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Palakkad,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Pathanamthitta,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Pathanamthitta,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Pathanamthitta,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Thiruvananthapuram,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Thiruvananthapuram,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Thiruvananthapuram,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Thrissur,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Thrissur,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Thrissur,True,0.0,0.0,no overlapping pair
+Kerala,gap_blocks_cover_district,Wayanad,True,0.0,0.0,tolerance 0.001
+Kerala,child_inside_parent,Wayanad,True,0.0,0.0,tolerance 0.001
+Kerala,blocks_do_not_overlap,Wayanad,True,0.0,0.0,no overlapping pair
+Rajasthan,district_names_unique,Rajasthan,True,0.0,0.0,0 duplicate district names
+Rajasthan,block_names_unique_within_district,Rajasthan,True,0.0,0.0,0 duplicate block names
+Rajasthan,every_block_parent_present,Rajasthan,True,0.0,0.0,0 orphan parents: 
+Rajasthan,district_geometries_valid,Rajasthan,True,0.0,0.0,0 invalid
+Rajasthan,block_geometries_valid,Rajasthan,True,0.0,0.0,0 invalid
+Rajasthan,block_geometries_distinct,Rajasthan,True,0.0,0.0,0 duplicate geometries
+Rajasthan,gap_blocks_cover_district,Ajmer,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Ajmer,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Ajmer,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Alwar,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Alwar,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Alwar,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Anoopgarh,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Anoopgarh,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Anoopgarh,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Balotra,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Balotra,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Balotra,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Banswara,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Banswara,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Banswara,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Baran,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Baran,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Baran,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Barmer,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Barmer,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Barmer,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Beawar,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Beawar,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Beawar,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Bharatpur,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Bharatpur,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Bharatpur,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Bhilwara,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Bhilwara,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Bhilwara,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Bikaner,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Bikaner,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Bikaner,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Bundi,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Bundi,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Bundi,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Chittorgarh,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Chittorgarh,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Chittorgarh,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Churu,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Churu,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Churu,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Dausa,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Dausa,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Dausa,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Deeg,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Deeg,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Deeg,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Dholpur,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Dholpur,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Dholpur,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Didwana Kuchaman,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Didwana Kuchaman,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Didwana Kuchaman,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Dudu,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Dudu,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Dudu,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Dungarpur,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Dungarpur,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Dungarpur,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Ganganagar,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Ganganagar,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Ganganagar,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Gangapurcity,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Gangapurcity,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Gangapurcity,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Hanumangarh,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Hanumangarh,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Hanumangarh,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Jaipur,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Jaipur,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Jaipur,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Jaipur Gramin,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Jaipur Gramin,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Jaipur Gramin,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Jaisalmer,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Jaisalmer,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Jaisalmer,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Jalore,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Jalore,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Jalore,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Jhalawar,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Jhalawar,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Jhalawar,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Jhunjhunu,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Jhunjhunu,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Jhunjhunu,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Jodhpur,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Jodhpur,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Jodhpur,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Jodhpur Gramin,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Jodhpur Gramin,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Jodhpur Gramin,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Karauli,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Karauli,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Karauli,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Kekri,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Kekri,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Kekri,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Khairthal-Tijara,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Khairthal-Tijara,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Khairthal-Tijara,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Kota,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Kota,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Kota,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Kotputli-Behror,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Kotputli-Behror,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Kotputli-Behror,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Nagaur,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Nagaur,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Nagaur,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Neem Ka Thana,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Neem Ka Thana,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Neem Ka Thana,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Pali,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Pali,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Pali,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Phalodi,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Phalodi,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Phalodi,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Pratapgarh,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Pratapgarh,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Pratapgarh,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Rajsamand,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Rajsamand,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Rajsamand,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Salumbar,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Salumbar,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Salumbar,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Sawai Madhopur,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Sawai Madhopur,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Sawai Madhopur,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Shahpura,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Shahpura,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Shahpura,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Sikar,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Sikar,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Sikar,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Sirohi,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Sirohi,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Sirohi,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Tonk,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Tonk,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Tonk,True,0.0,0.0,no overlapping pair
+Rajasthan,gap_blocks_cover_district,Udaipur,True,0.0,0.0,tolerance 0.001
+Rajasthan,child_inside_parent,Udaipur,True,0.0,0.0,tolerance 0.001
+Rajasthan,blocks_do_not_overlap,Udaipur,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,district_names_unique,Himachal Pradesh,True,0.0,0.0,0 duplicate district names
+Himachal Pradesh,block_names_unique_within_district,Himachal Pradesh,True,0.0,0.0,0 duplicate block names
+Himachal Pradesh,every_block_parent_present,Himachal Pradesh,True,0.0,0.0,0 orphan parents: 
+Himachal Pradesh,district_geometries_valid,Himachal Pradesh,True,0.0,0.0,0 invalid
+Himachal Pradesh,block_geometries_valid,Himachal Pradesh,True,0.0,0.0,0 invalid
+Himachal Pradesh,block_geometries_distinct,Himachal Pradesh,True,0.0,0.0,0 duplicate geometries
+Himachal Pradesh,gap_blocks_cover_district,Bilaspur,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Bilaspur,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Bilaspur,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Chamba,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Chamba,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Chamba,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Hamirpur,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Hamirpur,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Hamirpur,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Kangra,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Kangra,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Kangra,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Kinnaur,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Kinnaur,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Kinnaur,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Kullu,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Kullu,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Kullu,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Lahul and Spiti,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Lahul and Spiti,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Lahul and Spiti,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Mandi,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Mandi,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Mandi,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Shimla,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Shimla,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Shimla,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Sirmaur,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Sirmaur,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Sirmaur,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Solan,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Solan,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Solan,True,0.0,0.0,no overlapping pair
+Himachal Pradesh,gap_blocks_cover_district,Una,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,child_inside_parent,Una,True,0.0,0.0,tolerance 0.001
+Himachal Pradesh,blocks_do_not_overlap,Una,True,0.0,0.0,no overlapping pair

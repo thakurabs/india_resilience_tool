@@ -2,9 +2,8 @@
 Geography & analysis-focus controls for the Streamlit sidebar.
 
 This module keeps the dashboard runtime smaller while preserving stable widget
-keys and introducing a family-aware geography flow:
+keys for the admin geography flow:
   - Admin -> state -> district -> block
-  - Hydro -> basin -> sub-basin
 """
 
 from __future__ import annotations
@@ -18,17 +17,28 @@ import streamlit as st
 
 from india_resilience_tool.app.geo_cache import (
     load_admin_block_selector_index,
+    load_local_adm2,
     list_available_states_from_processed_root_cached,
-    load_basin_selector_index,
-    load_hydro_subbasin_selector_index,
-    load_subbasin_selector_index,
+)
+from india_resilience_tool.app.overlays import (
+    OverlayControlState,
+    ensure_overlay_session_state,
+    resolve_overlay_control_states,
+)
+from india_resilience_tool.app.geography import (
+    build_district_options,
+    district_option_label,
+    resolve_district_option,
+    resolve_effective_state,
+    split_district_option,
 )
 from india_resilience_tool.app.sidebar import render_analysis_mode_selector
+from india_resilience_tool.app.state import reset_district_option_state
 from india_resilience_tool.config.variables import VARIABLES
 from india_resilience_tool.data.adm3_loader import (
     get_blocks_for_district as _get_blocks_for_district,
 )
-from india_resilience_tool.data.optimized_bundle import optimized_context_path
+from india_resilience_tool.data.optimized_bundle import optimized_context_path, optimized_geometry_path
 from india_resilience_tool.utils.naming import alias
 
 
@@ -39,20 +49,13 @@ class GeographyContext:
     selected_state: str
     selected_district: str
     selected_block: str
-    selected_basin: str
-    selected_subbasin: str
-    show_river_network: bool
+    overlay_states: dict[str, OverlayControlState]
     gdf_state_districts: Any
 
 
 def _analysis_mode_options(spatial_family: str, admin_level: str) -> list[str]:
     """Return level-aware analysis-mode options for the sidebar selector."""
-    family_norm = str(spatial_family).strip().lower()
     level_norm = str(admin_level).strip().lower()
-    if family_norm == "hydro":
-        if level_norm == "sub_basin":
-            return ["Single sub-basin focus", "Multi-sub-basin portfolio"]
-        return ["Single basin focus", "Multi-basin portfolio"]
     if level_norm == "block":
         return ["Single block focus", "Multi-block portfolio"]
     return ["Single district focus", "Multi-district portfolio"]
@@ -82,14 +85,89 @@ def _supported_admin_states_for_selected_metric() -> list[str]:
     return [str(state).strip() for state in supported if str(state).strip()]
 
 
+def _empty_adm2_like(adm2: Any) -> Any:
+    """Return an empty district frame without dropping GeoDataFrame metadata."""
+    if adm2 is None:
+        return pd.DataFrame(columns=["district_name", "state_name"])
+    return adm2.iloc[0:0].copy()
+
+
+def _valid_state_name_mask(values: pd.Series) -> pd.Series:
+    """Return rows with a concrete, non-placeholder state name."""
+    text = values.astype("string").str.strip()
+    return text.notna() & (text != "") & ~text.str.lower().isin({"<na>", "nan", "none", "unknown"})
+
+
+def _resolve_selected_state_geometry(adm1: Any, selected_state: str) -> Any:
+    """Return the exact ADM1 geometry for ``selected_state``, or ``None``."""
+    if adm1 is None or getattr(adm1, "empty", True):
+        return None
+    selected_key = alias(selected_state)
+    for col in ("state_name", "shapeName"):
+        if col not in adm1.columns:
+            continue
+        mask = adm1[col].astype(str).map(alias) == selected_key
+        matches = adm1[mask]
+        if not matches.empty:
+            return matches.iloc[0].geometry
+    return None
+
+
+def _districts_for_selected_state(adm2: Any, adm1: Any, selected_state: str) -> Any:
+    """
+    Resolve district options for a state using exact state attribution first.
+
+    Blank/Unknown rows are supplemented with a representative-point test against
+    the selected full-fidelity state geometry. If exact attribution finds no
+    districts at all, the same representative-point test is allowed as a full
+    fallback so older artifacts still produce usable options. Substring state
+    matching is intentionally not used.
+    """
+    if adm2 is None or getattr(adm2, "empty", True):
+        return _empty_adm2_like(adm2)
+    if "district_name" not in adm2.columns or "state_name" not in adm2.columns:
+        return _empty_adm2_like(adm2)
+
+    selected_key = alias(selected_state)
+    state_values = adm2["state_name"].astype("string").str.strip()
+    valid_state = _valid_state_name_mask(adm2["state_name"])
+    exact = adm2[valid_state & (state_values.map(alias) == selected_key)].copy()
+
+    state_geom = _resolve_selected_state_geometry(adm1, selected_state)
+    if state_geom is None:
+        return exact if not exact.empty else _empty_adm2_like(adm2)
+
+    try:
+        point_mask = adm2.geometry.representative_point().within(state_geom.buffer(0.001))
+    except Exception:
+        return exact if not exact.empty else _empty_adm2_like(adm2)
+
+    if exact.empty:
+        return adm2[point_mask].copy()
+
+    supplement = adm2[(~valid_state) & point_mask].copy()
+    if supplement.empty:
+        return exact
+    return pd.concat([exact, supplement], axis=0).drop_duplicates(subset=["district_name"]).copy()
+
+
+def _load_state_adm2_shard_for_sidebar(*, selected_state: str, data_dir: Path) -> Any:
+    """Load an optimized district shard for sidebar options when full ADM2 is deferred."""
+    shard_path = optimized_geometry_path(level="district", state=selected_state, data_dir=data_dir)
+    if not shard_path.exists():
+        return None
+    return load_local_adm2(str(shard_path), cache_version="adm2_state_v2")
+
+
 def _build_admin_geography(
     *,
     analysis_ready: bool,
     analysis_mode: str,
     processed_root: Optional[Path],
     adm1: Any,
-    adm2: Any,
+    adm2: Optional[Any],
     adm3_geojson: Path,
+    data_dir: Path,
     simplify_tol_adm3: float,
     admin_level: str,
 ) -> tuple[str, str, str, Any]:
@@ -118,6 +196,7 @@ def _build_admin_geography(
         st.session_state["selected_state"] = restricted_states[0]
         st.session_state["selected_district"] = "All"
         st.session_state["selected_block"] = "All"
+        reset_district_option_state(st.session_state)
     st.session_state["__admin_geography_metric_slug"] = metric_slug
 
     if st.session_state.get("selected_state") not in available_states:
@@ -126,7 +205,6 @@ def _build_admin_geography(
     selected_state = st.selectbox(
         "State",
         options=available_states,
-        index=available_states.index(st.session_state["selected_state"]),
         key="selected_state",
         disabled=(not analysis_ready) or (not metric_ready_for_geography),
     )
@@ -134,61 +212,104 @@ def _build_admin_geography(
     if restricted_states:
         st.caption("This metric is currently available for Telangana only.")
 
-    if selected_state == "All":
-        gdf_state_districts = adm2.copy()
+    adm2_for_options = adm2
+    if adm2_for_options is None and selected_state != "All":
+        adm2_for_options = _load_state_adm2_shard_for_sidebar(
+            selected_state=selected_state,
+            data_dir=data_dir,
+        )
+
+    if adm2_for_options is None:
+        gdf_state_districts = _empty_adm2_like(adm2_for_options)
+    elif selected_state == "All":
+        gdf_state_districts = adm2_for_options.copy()
     else:
-        sel_state_norm = selected_state.strip().lower()
-        state_row = adm1[
-            adm1["shapeName"].astype(str).str.strip().str.lower() == sel_state_norm
-        ]
-        if state_row.empty:
-            state_row = adm1[
-                adm1["shapeName"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
-                .str.contains(sel_state_norm, na=False)
-            ]
-
-        if not state_row.empty:
-            state_geom = state_row.iloc[0].geometry
-            try:
-                gdf_state_districts = adm2[
-                    adm2.geometry.within(state_geom.buffer(0.001))
-                ].copy()
-            except Exception:
-                gdf_state_districts = adm2[
-                    adm2.geometry.centroid.within(state_geom.buffer(0.001))
-                ].copy()
-        else:
-            gdf_state_districts = pd.DataFrame()
-
+        gdf_state_districts = _districts_for_selected_state(adm2_for_options, adm1, selected_state)
         if getattr(gdf_state_districts, "empty", True):
-            gdf_state_districts = adm2[
-                adm2["state_name"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
-                .str.contains(sel_state_norm, na=False)
-            ].copy()
-
-    districts = ["All"] + sorted(
-        gdf_state_districts["district_name"].astype(str).unique().tolist()
-    )
-    if st.session_state.get("selected_district") not in districts:
-        st.session_state["selected_district"] = "All"
+            shard_adm2 = _load_state_adm2_shard_for_sidebar(
+                selected_state=selected_state,
+                data_dir=data_dir,
+            )
+            if shard_adm2 is not None:
+                gdf_state_districts = _districts_for_selected_state(shard_adm2, adm1, selected_state)
 
     admin_level_from_state = st.session_state.get("admin_level", admin_level)
-    if "Multi" in analysis_mode and str(admin_level_from_state) != "block":
-        st.session_state["selected_district"] = "All"
 
-    selected_district = st.selectbox(
-        "District",
-        options=districts,
-        index=districts.index(st.session_state["selected_district"]),
-        key="selected_district",
-        disabled=not analysis_ready,
-    )
+    if selected_state == "All":
+        # All-India district selector: composite option values disambiguate
+        # duplicated district names ("<district>||<state>"); the canonical
+        # `selected_district` key always holds the bare name and is never a
+        # widget key on this branch (CHG-0279).
+        if (
+            "district_name" in gdf_state_districts.columns
+            and "state_name" in gdf_state_districts.columns
+        ):
+            pair_rows = (
+                gdf_state_districts[["district_name", "state_name"]]
+                .astype(str)
+                .itertuples(index=False, name=None)
+            )
+            district_state_pairs = [(d.strip(), s.strip()) for d, s in pair_rows]
+        else:
+            district_state_pairs = []
+        district_options = ["All"] + build_district_options(district_state_pairs)
+
+        district_state_map: dict[str, list[str]] = {}
+        for district, state in district_state_pairs:
+            if district:
+                district_state_map.setdefault(district, []).append(state)
+
+        if "Multi" in analysis_mode and str(admin_level_from_state) != "block":
+            st.session_state["selected_district"] = "All"
+            reset_district_option_state(st.session_state)
+        if st.session_state.get("selected_district") not in {
+            split_district_option(opt)[0] for opt in district_options
+        }:
+            st.session_state["selected_district"] = "All"
+            reset_district_option_state(st.session_state)
+
+        st.session_state["selected_district_option"] = resolve_district_option(
+            st.session_state, district_options
+        )
+
+        raw_option = st.selectbox(
+            "District",
+            options=district_options,
+            key="selected_district_option",
+            format_func=district_option_label,
+            disabled=not analysis_ready,
+        )
+
+        parsed_district, option_state = split_district_option(raw_option)
+        # Legal write: `selected_district` is not a widget key on this branch.
+        st.session_state["selected_district"] = parsed_district
+        if parsed_district == "All":
+            effective_state = "All"
+        else:
+            effective_state = (
+                option_state
+                or resolve_effective_state(parsed_district, district_state_map)
+                or "All"
+            )
+        st.session_state["_district_effective_state"] = effective_state
+        selected_district = parsed_district
+    else:
+        districts = ["All"] + sorted(
+            gdf_state_districts["district_name"].astype(str).unique().tolist()
+        )
+        if st.session_state.get("selected_district") not in districts:
+            st.session_state["selected_district"] = "All"
+
+        if "Multi" in analysis_mode and str(admin_level_from_state) != "block":
+            st.session_state["selected_district"] = "All"
+
+        selected_district = st.selectbox(
+            "District",
+            options=districts,
+            key="selected_district",
+            disabled=not analysis_ready,
+        )
+        effective_state = selected_state
 
     selected_block = "All"
     if str(admin_level_from_state) == "block":
@@ -198,7 +319,7 @@ def _build_admin_geography(
             block_index_path = optimized_context_path("admin_block_index.parquet", data_dir=data_dir)
             if block_index_path.exists():
                 selector_index = load_admin_block_selector_index(str(block_index_path))
-                selector_key = f"{alias(selected_state)}|{alias(selected_district)}"
+                selector_key = f"{alias(effective_state)}|{alias(selected_district)}"
                 block_options = ["All"] + [str(v) for v in selector_index.get("blocks_by_selector", {}).get(selector_key, [])]
             else:
                 if not adm3_geojson.exists():
@@ -212,7 +333,7 @@ def _build_admin_geography(
                 try:
                     blocks = _get_blocks_for_district(
                         adm3_sidebar,
-                        selected_state,
+                        effective_state,
                         selected_district,
                         normalize_fn=alias,
                     )
@@ -230,7 +351,6 @@ def _build_admin_geography(
         selected_block = st.selectbox(
             "Block",
             options=block_options,
-            index=block_options.index(st.session_state["selected_block"]),
             key="selected_block",
             disabled=not analysis_ready,
         )
@@ -240,81 +360,9 @@ def _build_admin_geography(
     st.session_state["selected_basin"] = "All"
     st.session_state["selected_subbasin"] = "All"
 
-    return selected_state, selected_district, selected_block, gdf_state_districts
-
-
-def _build_hydro_geography(
-    *,
-    analysis_ready: bool,
-    admin_level: str,
-    basins_geojson: Path,
-    subbasins_geojson: Path,
-) -> tuple[str, str]:
-    if not basins_geojson.exists():
-        st.error(
-            f"Hydro basin geojson not found at {basins_geojson}. Please provide basins.geojson."
-        )
-        st.stop()
-    if not subbasins_geojson.exists():
-        st.error(
-            f"Hydro sub-basin geojson not found at {subbasins_geojson}. Please provide subbasins.geojson."
-        )
-        st.stop()
-
-    level_norm = str(admin_level).strip().lower()
-    data_dir = basins_geojson.parent
-    hydro_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir)
-    if hydro_index_path.exists():
-        selector_index = load_hydro_subbasin_selector_index(str(hydro_index_path))
-    else:
-        selector_index = (
-            load_subbasin_selector_index(str(subbasins_geojson))
-            if level_norm == "sub_basin"
-            else load_basin_selector_index(str(basins_geojson))
-        )
-
-    basin_names = selector_index.get("basin_names", [])
-    subbasins_by_basin = selector_index.get("subbasins_by_basin", {})
-    subbasins_all = selector_index.get("subbasins_all", [])
-
-    basin_options = ["All"] + [str(v) for v in basin_names]
-    if st.session_state.get("selected_basin") not in basin_options:
-        st.session_state["selected_basin"] = "All"
-
-    selected_basin = st.selectbox(
-        "Basin",
-        options=basin_options,
-        index=basin_options.index(st.session_state["selected_basin"]),
-        key="selected_basin",
-        disabled=not analysis_ready,
-    )
-
-    subbasin_options = ["All"]
-    if selected_basin != "All":
-        subbasin_options = ["All"] + [str(v) for v in subbasins_by_basin.get(str(selected_basin).strip(), [])]
-    elif level_norm == "sub_basin":
-        subbasin_options = ["All"] + [str(v) for v in subbasins_all]
-
-    if st.session_state.get("selected_subbasin") not in subbasin_options:
-        st.session_state["selected_subbasin"] = "All"
-
-    if level_norm == "sub_basin":
-        selected_subbasin = st.selectbox(
-            "Sub-basin",
-            options=subbasin_options,
-            index=subbasin_options.index(st.session_state["selected_subbasin"]),
-            key="selected_subbasin",
-            disabled=not analysis_ready,
-        )
-    else:
-        selected_subbasin = "All"
-        st.session_state["selected_subbasin"] = "All"
-
-    st.session_state["selected_state"] = "All"
-    st.session_state["selected_district"] = "All"
-    st.session_state["selected_block"] = "All"
-
-    return selected_basin, selected_subbasin
+    # Surface the effective state (resolved from a composite option or unique
+    # bare name) as the context's state; the state widget itself stays "All".
+    return effective_state, selected_district, selected_block, gdf_state_districts
 
 
 def render_geography_and_analysis_focus(
@@ -327,11 +375,10 @@ def render_geography_and_analysis_focus(
     view_map: str,
     view_rankings: str,
     adm1: Any,
-    adm2: Any,
+    adm2: Optional[Any],
     adm3_geojson: Path,
-    basins_geojson: Path,
-    subbasins_geojson: Path,
     river_display_geojson: Path,
+    data_dir: Path,
     simplify_tol_adm3: float,
 ) -> GeographyContext:
     """Render the geography controls and return the active selection context."""
@@ -369,9 +416,6 @@ def render_geography_and_analysis_focus(
 
             unit_singular = "block" if admin_level == "block" else "district"
             unit_plural = "blocks" if admin_level == "block" else "districts"
-            if str(spatial_family).strip().lower() == "hydro":
-                unit_singular = "sub-basin" if admin_level == "sub_basin" else "basin"
-                unit_plural = "sub-basins" if admin_level == "sub_basin" else "basins"
 
             if analysis_mode == sel_placeholder:
                 st.caption("Select an analysis focus to continue.")
@@ -393,52 +437,93 @@ def render_geography_and_analysis_focus(
             selected_state = "All"
             selected_district = "All"
             selected_block = "All"
-            selected_basin = "All"
-            selected_subbasin = "All"
-            show_river_network = bool(st.session_state.get("show_river_network", False))
-            gdf_state_districts = adm2.copy()
+            gdf_state_districts = (
+                adm2.copy()
+                if adm2 is not None
+                else pd.DataFrame(columns=["district_name", "state_name"])
+            )
+            ensure_overlay_session_state(st.session_state)
 
-            if str(spatial_family).strip().lower() == "hydro":
-                selected_basin, selected_subbasin = _build_hydro_geography(
-                    analysis_ready=analysis_ready,
-                    admin_level=admin_level,
-                    basins_geojson=basins_geojson,
-                    subbasins_geojson=subbasins_geojson,
-                )
-                if selected_basin == "All":
-                    st.session_state["show_river_network"] = False
-                show_river_network = st.checkbox(
-                    "Show river network",
-                    key="show_river_network",
-                    value=bool(st.session_state.get("show_river_network", False)),
-                    disabled=(not analysis_ready) or (selected_basin == "All"),
-                    help=(
-                        "Show cleaned river lines for the selected basin or sub-basin. "
-                        "Available only when a specific basin is selected."
-                    ),
-                )
-                if not river_display_geojson.exists():
-                    st.session_state["show_river_network"] = False
-                    show_river_network = False
-                    st.caption("River overlay unavailable: river_network_display.geojson not found.")
-            else:
-                (
-                    selected_state,
-                    selected_district,
-                    selected_block,
-                    gdf_state_districts,
-                ) = _build_admin_geography(
-                    analysis_ready=analysis_ready,
-                    analysis_mode=analysis_mode,
-                    processed_root=processed_root,
-                    adm1=adm1,
-                    adm2=adm2,
-                    adm3_geojson=adm3_geojson,
-                    simplify_tol_adm3=simplify_tol_adm3,
-                    admin_level=admin_level,
-                )
-                st.session_state["show_river_network"] = False
-                show_river_network = False
+            (
+                selected_state,
+                selected_district,
+                selected_block,
+                gdf_state_districts,
+            ) = _build_admin_geography(
+                analysis_ready=analysis_ready,
+                analysis_mode=analysis_mode,
+                processed_root=processed_root,
+                adm1=adm1,
+                adm2=adm2,
+                adm3_geojson=adm3_geojson,
+                simplify_tol_adm3=simplify_tol_adm3,
+                admin_level=admin_level,
+                data_dir=data_dir,
+            )
+
+            overlay_states = resolve_overlay_control_states(
+                session_state=st.session_state,
+                admin_level=admin_level,
+                selected_state=selected_state,
+                river_display_geojson_path=river_display_geojson,
+                data_dir=data_dir,
+                selected_district=selected_district,
+            )
+            visible_overlay_states = [state for state in overlay_states.values() if state.visible]
+            if visible_overlay_states:
+                st.markdown("#### Reference overlays")
+                for overlay_state in visible_overlay_states:
+                    st.checkbox(
+                        overlay_state.label,
+                        key=overlay_state.enabled_key,
+                        disabled=(not analysis_ready) or (not overlay_state.available),
+                    )
+                    if overlay_state.category_key and overlay_state.category_choices:
+                        # ensure_overlay_session_state (called above) has already
+                        # coerced the category key to a valid choice.
+                        if st.session_state.get(overlay_state.category_key) not in overlay_state.category_choices:
+                            st.session_state[overlay_state.category_key] = overlay_state.category_choices[0]
+                        st.selectbox(
+                            f"{overlay_state.label} category",
+                            options=list(overlay_state.category_choices),
+                            key=overlay_state.category_key,
+                            disabled=(not analysis_ready) or (not overlay_state.available),
+                        )
+                    st.slider(
+                        overlay_state.slider_label,
+                        min_value=0,
+                        max_value=100,
+                        step=5,
+                        key=overlay_state.opacity_key,
+                        disabled=(not analysis_ready) or (not overlay_state.available),
+                    )
+                    if overlay_state.unavailable_caption:
+                        st.caption(overlay_state.unavailable_caption)
+                    if overlay_state.availability_reason:
+                        st.caption(overlay_state.availability_reason)
+                overlay_states = {
+                    overlay_id: OverlayControlState(
+                        overlay_id=state.overlay_id,
+                        label=state.label,
+                        slider_label=state.slider_label,
+                        enabled_key=state.enabled_key,
+                        opacity_key=state.opacity_key,
+                        category_key=state.category_key,
+                        selected_category=(
+                            str(st.session_state.get(state.category_key, state.selected_category))
+                            if state.category_key
+                            else None
+                        ),
+                        category_choices=state.category_choices,
+                        visible=state.visible,
+                        available=state.available,
+                        enabled=bool(st.session_state.get(state.enabled_key, False)) and state.available,
+                        opacity_pct=max(0, min(100, int(st.session_state.get(state.opacity_key, state.opacity_pct)))),
+                        unavailable_caption=state.unavailable_caption,
+                        availability_reason=state.availability_reason,
+                    )
+                    for overlay_id, state in overlay_states.items()
+                }
 
     return GeographyContext(
         analysis_mode=analysis_mode,
@@ -446,8 +531,6 @@ def render_geography_and_analysis_focus(
         selected_state=str(selected_state or "All"),
         selected_district=str(selected_district or "All"),
         selected_block=str(selected_block or "All"),
-        selected_basin=str(selected_basin or "All"),
-        selected_subbasin=str(selected_subbasin or "All"),
-        show_river_network=bool(show_river_network),
+        overlay_states=overlay_states,
         gdf_state_districts=gdf_state_districts,
     )

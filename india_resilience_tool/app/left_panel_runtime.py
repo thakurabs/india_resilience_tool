@@ -54,7 +54,8 @@ def render_left_panel(
     map_mode: str,
     map_width: int,
     map_height: int,
-    perf_section: Optional[Callable[[str], Any]],
+    map_key_suffix: str = "",
+    perf_section: Optional[Callable[[str], Any]] = None,
     # Selection context
     variable_slug: str,
     sel_scenario: str,
@@ -63,8 +64,6 @@ def render_left_panel(
     selected_state: str,
     selected_district: str,
     selected_block: str,
-    selected_basin: str,
-    selected_subbasin: str,
     level: str,
     # Rankings inputs
     table_df: Any,
@@ -78,7 +77,7 @@ def render_left_panel(
     portfolio_normalize_fn: Callable[[str], str],
     # Data (for coordinate fallback in add-to-portfolio)
     merged: Any,
-    river_overlay_message: Optional[str] = None,
+    overlay_messages: tuple[str, ...] = (),
     blocked_message: Optional[str] = None,
 ) -> Tuple[Mapping[str, Any], str]:
     """
@@ -90,24 +89,19 @@ def render_left_panel(
     import streamlit as st
 
     from india_resilience_tool.app.state import VIEW_MAP, VIEW_RANKINGS
-    from india_resilience_tool.app.views.map_view import render_map_view, render_unit_add_to_portfolio
+    from india_resilience_tool.app.views.map_view import (
+        render_map_view,
+        render_unit_add_to_portfolio,
+        resolve_clicked_state_for_navigation,
+    )
     from india_resilience_tool.app.views.rankings_view import render_rankings_view
     from india_resilience_tool.app.sidebar import render_view_selector
 
     returned: Mapping[str, Any] = {}
 
     with col:
-        # Ribbon is shown above; keep only the reset action here (right-aligned)
-        _, reset_col = st.columns([4, 1])
-        with reset_col:
-            if st.button("⟲ Reset View", key="reset_map_view"):
-                st.session_state["pending_selected_state"] = "All"
-                st.session_state["pending_selected_district"] = "All"
-                st.session_state["selected_basin"] = "All"
-                st.session_state["selected_subbasin"] = "All"
-                st.session_state["crosswalk_overlay"] = None
-                st.session_state["map_reset_requested"] = True
-
+        # Ribbon is shown above and now owns the "Reset View" action (rendered
+        # inline with the collapse chevron), so nothing is needed here.
         # Main view selector: Map vs Rankings (replaces tabs)
         view = render_view_selector(label="View", horizontal=True)
 
@@ -115,8 +109,10 @@ def render_left_panel(
         if view == VIEW_MAP:
             if blocked_message:
                 st.info(blocked_message)
-            elif river_overlay_message:
-                st.caption(river_overlay_message)
+            else:
+                for overlay_message in overlay_messages:
+                    if str(overlay_message).strip():
+                        st.caption(str(overlay_message).strip())
 
             # In portfolio mode, reserve a slot ABOVE the map so the add/remove control
             # is visible even when the user is scrolling inside the right panel.
@@ -138,13 +134,12 @@ def render_left_panel(
                         selected_state=selected_state,
                         selected_district=selected_district,
                         selected_block=selected_block,
-                        selected_basin=selected_basin,
-                        selected_subbasin=selected_subbasin,
                         map_width=map_width,
                         map_height=map_height,
                         legend_block_html=legend_block_html,
                         perf_section=perf_section,
                         level=level,
+                        map_key_suffix=map_key_suffix,
                     )
             elif not blocked_message:
                 st.info("No map available for this selection.")
@@ -170,6 +165,23 @@ def render_left_panel(
                         merged=merged,
                         level=level,
                     )
+
+            # Nationwide clicks may carry only a district name, which is
+            # ambiguous for duplicated names; resolve the state from the click
+            # coordinates before queuing navigation (CHG-0279 §5a).
+            if (
+                clicked_district
+                and str(clicked_state or "").strip() in {"", "All"}
+                and str(selected_state or "").strip() == "All"
+            ):
+                clicked_state = resolve_clicked_state_for_navigation(
+                    returned=returned,
+                    merged=merged,
+                    level=level,
+                    clicked_district=clicked_district,
+                    clicked_state=clicked_state,
+                    normalize_fn=portfolio_normalize_fn,
+                )
 
             if _queue_pending_map_navigation(
                 session_state=st.session_state,

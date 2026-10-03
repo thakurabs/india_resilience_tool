@@ -1,0 +1,10 @@
+.auth/
+runs/
+reference-data/
+downloads/
+videos/
+screenshots/
+tmp/
+campaign-state*.json
+reports/drafts/
+

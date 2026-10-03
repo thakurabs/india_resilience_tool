@@ -1,0 +1,57 @@
+{
+  "bundle_domain": "Extreme Rainfall | Flash Flood Risk",
+  "colour_scale_id": "whbgyr-101-floor045-v1",
+  "composite_slug": "composite_flood_extreme_rainfall_risk",
+  "configured_weight": 0.75,
+  "coverage_failure_rate": 0.0,
+  "coverage_gate": 1.0,
+  "data_snapshot_hash": "17bb22770dd9d1106ef912e61e5c56195b47679a3a4a6468079631387eab9f70",
+  "fitted_utc": "2026-09-13T09:49:16Z",
+  "headline_metric_count": 4,
+  "level_fitted": "district",
+  "n_below_coverage_gate": 0,
+  "n_districts": 784,
+  "n_fit_rows": 5488,
+  "n_source_masters": 144,
+  "n_states": 36,
+  "pooled_n": 5488,
+  "ruler_id": "composite_flood_extreme_rainfall_risk_cdf_v1",
+  "ruler_kind": "cdf",
+  "ruler_sha256": "fa9c83cbedfdfe9b9bad94d750ead067ed4db633e20e919457d4c790afdbd8a1",
+  "slices": [
+    [
+      "historical",
+      "1990-2010"
+    ],
+    [
+      "ssp245",
+      "2020-2040"
+    ],
+    [
+      "ssp245",
+      "2040-2060"
+    ],
+    [
+      "ssp245",
+      "2060-2080"
+    ],
+    [
+      "ssp585",
+      "2020-2040"
+    ],
+    [
+      "ssp585",
+      "2040-2060"
+    ],
+    [
+      "ssp585",
+      "2060-2080"
+    ]
+  ],
+  "weights": {
+    "cwd_consecutive_wet_days": 0.25,
+    "pr_max_1day_precip": 0.125,
+    "pr_max_5day_precip": 0.125,
+    "r20mm_very_heavy_precip_days": 0.25
+  }
+}

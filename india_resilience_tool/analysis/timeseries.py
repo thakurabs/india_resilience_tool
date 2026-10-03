@@ -26,7 +26,6 @@ from india_resilience_tool.data.discovery import (
     discover_district_model_yearly_files,
     discover_block_yearly_file,
     discover_block_model_yearly_files,
-    discover_hydro_yearly_file,
     discover_state_yearly_file,
 )
 from india_resilience_tool.data.optimized_bundle import (
@@ -37,7 +36,7 @@ from india_resilience_tool.data.optimized_bundle import (
 from india_resilience_tool.utils.processed_io import read_table
 
 PathLike = Union[str, Path]
-AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+AdminLevel = Literal["district", "block"]
 
 
 def _normalized_key(*parts: str, normalize_fn: Optional[callable] = None) -> str:
@@ -65,7 +64,16 @@ def _load_optimized_yearly_table(
     try:
         return read_table(path, columns=columns, filters=filters)
     except Exception:
+        if not columns:
+            return pd.DataFrame()
+    try:
+        out = read_table(path, columns=None, filters=filters)
+    except Exception:
         return pd.DataFrame()
+    if out.empty or not columns:
+        return out
+    available_columns = [column for column in columns if column in out.columns]
+    return out.loc[:, available_columns].copy()
 
 
 def _filter_optimized_admin_yearly(
@@ -644,74 +652,3 @@ def load_block_yearly(
 
     return df
 
-
-def load_hydro_yearly(
-    *,
-    ts_root: PathLike,
-    level: Literal["basin", "sub_basin"],
-    basin_display: str,
-    subbasin_display: Optional[str],
-    scenario_name: str,
-) -> pd.DataFrame:
-    """Load a hydro yearly ensemble CSV using processed/{metric}/hydro/ discovery."""
-    ts_root_p = Path(ts_root)
-    if is_optimized_metric_root(ts_root_p):
-        df = _load_optimized_yearly_table(
-            ts_root=ts_root_p,
-            level=level,
-            state_dir=None,
-            kind="ensemble",
-            columns=(
-                ["basin_name", "scenario", "year", "mean", "median"]
-                if level == "basin"
-                else ["basin_name", "subbasin_name", "scenario", "year", "mean", "median"]
-            ),
-            filters=(
-                [
-                    ("basin_name", "==", str(basin_display).strip()),
-                    ("scenario", "==", str(scenario_name).strip().lower()),
-                ]
-                if level == "basin" or not subbasin_display
-                else [
-                    ("basin_name", "==", str(basin_display).strip()),
-                    ("subbasin_name", "==", str(subbasin_display).strip()),
-                    ("scenario", "==", str(scenario_name).strip().lower()),
-                ]
-            ),
-        )
-        if df.empty:
-            return pd.DataFrame()
-        if df.empty:
-            return pd.DataFrame()
-        return prepare_yearly_series(df)
-
-    f = discover_hydro_yearly_file(
-        ts_root=ts_root,
-        level=level,
-        basin_display=basin_display,
-        subbasin_display=subbasin_display,
-        scenario_name=scenario_name,
-    )
-    if not f:
-        return pd.DataFrame()
-
-    df = read_yearly_csv_robust(f)
-    if df.empty:
-        return pd.DataFrame()
-
-    df = _normalize_ensemble_columns(df)
-    if "scenario" not in df.columns:
-        df["scenario"] = str(scenario_name).strip()
-    if "basin" not in df.columns:
-        df["basin"] = str(basin_display).strip()
-    if level == "sub_basin" and "sub_basin" not in df.columns:
-        df["sub_basin"] = str(subbasin_display or "").strip()
-
-    scenario = str(scenario_name).strip().lower()
-    try:
-        df["scenario"] = df["scenario"].astype(str).str.strip()
-        df = df[df["scenario"].str.lower() == scenario]
-    except Exception:
-        pass
-
-    return prepare_yearly_series(df)

@@ -17,7 +17,7 @@ import pandas as pd
 
 from india_resilience_tool.data.master_loader import MasterSourceLike, master_source_signature
 
-AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+AdminLevel = Literal["district", "block"]
 _NULL_LIKE_STRINGS = {"", "<na>", "nan", "none", "nat"}
 
 
@@ -121,13 +121,15 @@ def merge_adm2_with_master(
     master_df: pd.DataFrame,
     *,
     alias_fn: Callable[[str], str],
+    adm2_state_col: str = "state_name",
     adm2_district_col: str = "district_name",
+    master_state_col: str = "state",
     master_district_col: str = "district",
     key_col: str = "__key",
     suffixes: tuple[str, str] = ("", "_csv"),
 ) -> pd.DataFrame:
     """
-    Deterministic left merge for districts using alias-normalized join keys.
+    Deterministic left merge for districts using state-aware alias-normalized join keys.
 
     Notes:
       - Does not mutate inputs.
@@ -137,8 +139,16 @@ def merge_adm2_with_master(
     dfc = master_df.copy()
 
     if key_col not in adm2c.columns:
-        adm2c[key_col] = adm2c[adm2_district_col].astype(str).map(alias_fn)
-    dfc[key_col] = dfc[master_district_col].astype(str).map(alias_fn)
+        adm2c[key_col] = (
+            adm2c[adm2_state_col].astype(str).map(alias_fn)
+            + "|"
+            + adm2c[adm2_district_col].astype(str).map(alias_fn)
+        )
+    dfc[key_col] = (
+        dfc[master_state_col].astype(str).map(alias_fn)
+        + "|"
+        + dfc[master_district_col].astype(str).map(alias_fn)
+    )
 
     merged = adm2c.merge(dfc, on=key_col, how="left", suffixes=suffixes).drop(columns=[key_col])
     return merged
@@ -187,56 +197,13 @@ def merge_adm3_with_master(
     return merged
 
 
-def merge_basin_with_master(
-    basin_df: pd.DataFrame,
-    master_df: pd.DataFrame,
-    *,
-    alias_fn: Callable[[str], str],
-    basin_id_col: str = "basin_id",
-    master_basin_id_col: str = "basin_id",
-    key_col: str = "__key",
-    suffixes: tuple[str, str] = ("", "_csv"),
-) -> pd.DataFrame:
-    """Deterministic left merge for basins using normalized basin IDs."""
-    basinc = basin_df.copy()
-    dfc = master_df.copy()
-
-    if key_col not in basinc.columns:
-        basinc[key_col] = basinc[basin_id_col].astype(str).map(alias_fn)
-    dfc[key_col] = dfc[master_basin_id_col].astype(str).map(alias_fn)
-
-    merged = basinc.merge(dfc, on=key_col, how="left", suffixes=suffixes).drop(columns=[key_col])
-    return merged
-
-
-def merge_subbasin_with_master(
-    subbasin_df: pd.DataFrame,
-    master_df: pd.DataFrame,
-    *,
-    alias_fn: Callable[[str], str],
-    subbasin_id_col: str = "subbasin_id",
-    master_subbasin_id_col: str = "subbasin_id",
-    key_col: str = "__key",
-    suffixes: tuple[str, str] = ("", "_csv"),
-) -> pd.DataFrame:
-    """Deterministic left merge for sub-basins using normalized sub-basin IDs."""
-    subc = subbasin_df.copy()
-    dfc = master_df.copy()
-
-    if key_col not in subc.columns:
-        subc[key_col] = subc[subbasin_id_col].astype(str).map(alias_fn)
-    dfc[key_col] = dfc[master_subbasin_id_col].astype(str).map(alias_fn)
-
-    merged = subc.merge(dfc, on=key_col, how="left", suffixes=suffixes).drop(columns=[key_col])
-    return merged
-
-
 def get_or_build_merged_for_index_cached(
     adm2_df: pd.DataFrame,
     master_df: pd.DataFrame,
     *,
     slug: str,
     master_path: MasterSourceLike,
+    boundary_signature: tuple[str, Optional[float], Optional[float], int],
     session_state: MutableMapping,
     alias_fn: Callable[[str], str],
     level: AdminLevel = "district",
@@ -247,18 +214,19 @@ def get_or_build_merged_for_index_cached(
     Cache merged result by master mtime in session_state["_merged_cache"][cache_key].
 
     Contract:
-      - Cache key is (slug, level, master_mtime)
+      - Cache key is (slug, level, master paths, boundary signature)
       - Stored under session_state["_merged_cache"]
       - Restricts boundaries to states present in master (if columns exist)
       - Deterministic join using alias-normalized keys
       - For blocks, uses composite district|block key
-      - For hydro levels, uses canonical basin/sub-basin IDs
+      - For blocks, uses district|block IDs; for districts, uses state|district IDs
       
     Args:
         adm2_df: GeoDataFrame with boundary geometries (ADM2 or ADM3)
         master_df: Master metrics DataFrame
         slug: Index slug for cache key
         master_path: Path to master CSV (for mtime checking)
+        boundary_signature: Explicit boundary path/mtime/tolerance/row-count signature
         session_state: Streamlit session state or dict-like
         alias_fn: Normalization function for names
         level: "district" or "block"
@@ -271,10 +239,14 @@ def get_or_build_merged_for_index_cached(
     merged_cache = session_state.setdefault("_merged_cache", {})
 
     source_signature = master_source_signature(master_path)
-    cache_key = (slug, level, tuple(path for path, _ in source_signature))
+    cache_key = (slug, level, tuple(path for path, _ in source_signature), boundary_signature)
     cache_entry = merged_cache.get(cache_key)
 
-    if cache_entry is not None and cache_entry.get("source_signature") == source_signature:
+    if (
+        cache_entry is not None
+        and cache_entry.get("source_signature") == source_signature
+        and cache_entry.get("boundary_signature") == boundary_signature
+    ):
         return cache_entry["gdf"]
 
     master_c = master_df
@@ -304,23 +276,25 @@ def get_or_build_merged_for_index_cached(
         )
 
     # Merge based on level
-    if level == "sub_basin":
-        merged = merge_subbasin_with_master(boundary_c, master_c, alias_fn=alias_fn)
-    elif level == "basin":
-        merged = merge_basin_with_master(boundary_c, master_c, alias_fn=alias_fn)
-    elif level == "block":
+    if level == "block":
         merged = merge_adm3_with_master(boundary_c, master_c, alias_fn=alias_fn)
     else:
-        merged = merge_adm2_with_master(boundary_c, master_c, alias_fn=alias_fn)
+        merged = merge_adm2_with_master(
+            boundary_c,
+            master_c,
+            alias_fn=alias_fn,
+            adm2_state_col=adm2_state_col,
+            master_state_col=master_state_col,
+        )
 
-    merged_cache[cache_key] = {"source_signature": source_signature, "gdf": merged}
+    merged_cache[cache_key] = {
+        "source_signature": source_signature,
+        "boundary_signature": boundary_signature,
+        "gdf": merged,
+    }
     return merged
 
 
 def get_unit_name_column(level: AdminLevel) -> str:
     """Get the primary unit name column for a given level."""
-    if level == "sub_basin":
-        return "subbasin_name"
-    if level == "basin":
-        return "basin_name"
     return "block_name" if level == "block" else "district_name"

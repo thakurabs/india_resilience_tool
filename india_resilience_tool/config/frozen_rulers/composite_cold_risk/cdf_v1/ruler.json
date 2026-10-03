@@ -1,0 +1,61 @@
+{
+  "bundle_domain": "Cold Risk",
+  "colour_scale_id": "whbgyr-101-floor045-v1",
+  "composite_slug": "composite_cold_risk",
+  "configured_weight": 0.75,
+  "coverage_failure_rate": 0.0,
+  "coverage_gate": 1.0,
+  "data_snapshot_hash": "ae33ed0dde1538d885ca6a4abbccf3c1318a9c395e69096ae246fa390220d48b",
+  "fitted_utc": "2026-09-13T12:11:15Z",
+  "headline_metric_count": 8,
+  "level_fitted": "district",
+  "n_below_coverage_gate": 0,
+  "n_districts": 784,
+  "n_fit_rows": 5488,
+  "n_source_masters": 288,
+  "n_states": 36,
+  "pooled_n": 5488,
+  "ruler_id": "composite_cold_risk_cdf_v1",
+  "ruler_kind": "cdf",
+  "ruler_sha256": "e6fdb66aeb293af319ea5456a3cbd3be0c921884c3238bdd83791c0a6807666b",
+  "slices": [
+    [
+      "historical",
+      "1990-2010"
+    ],
+    [
+      "ssp245",
+      "2020-2040"
+    ],
+    [
+      "ssp245",
+      "2040-2060"
+    ],
+    [
+      "ssp245",
+      "2060-2080"
+    ],
+    [
+      "ssp585",
+      "2020-2040"
+    ],
+    [
+      "ssp585",
+      "2040-2060"
+    ],
+    [
+      "ssp585",
+      "2060-2080"
+    ]
+  ],
+  "weights": {
+    "tas_winter_mean": 0.1,
+    "tasmin_winter_mean": 0.1,
+    "tasmin_winter_min": 0.1,
+    "tnle10_cold_nights": 0.08333333333333333,
+    "tnle10_consecutive_cold_nights": 0.1,
+    "tnle5_severe_cold_nights": 0.08333333333333333,
+    "tnn_annual_min": 0.1,
+    "txle15_cold_days": 0.08333333333333333
+  }
+}

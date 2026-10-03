@@ -1,0 +1,13 @@
+state,lat,lon,invalid_target_days,reason,consequence
+Kerala,12.375,74.875,1,tasmin>tasmax (min tasmax-tasmin -0.758 C),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.375,77.125,1,hurs>100% (max 100.005),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.375,77.375,2,hurs>100% (max 101.075),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.375,77.625,3,hurs>100% (max 101.208),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.375,77.875,2,hurs>100% (max 100.460),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.375,78.125,1,hurs>100% (max 100.224),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.625,77.375,2,hurs>100% (max 100.933),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.625,77.625,4,hurs>100% (max 101.068),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.625,77.875,3,hurs>100% (max 101.040),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.625,78.125,1,hurs>100% (max 100.549),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.625,78.375,1,hurs>100% (max 100.019),complete-365 lost -> whole cell-year NaN
+Himachal Pradesh,32.875,77.875,1,hurs>100% (max 100.027),complete-365 lost -> whole cell-year NaN

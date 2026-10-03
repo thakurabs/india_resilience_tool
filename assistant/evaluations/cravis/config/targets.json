@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "defaultOrigin": "https://cravis.ai",
+  "approvedOrigins": ["https://cravis.ai"],
+  "authExcludedPathPrefixes": ["/auth", "/login", "/logout", "/oauth", "/api/auth"],
+  "selectors": {
+    "promptInput": "textarea",
+    "submit": "button[type='submit']",
+    "quota": "[data-testid='quota']",
+    "activeConversation": "[data-testid='active-conversation']",
+    "activeConversationId": "[data-conversation-id]",
+    "lastUserMessage": "[data-role='user']",
+    "response": "[data-role='assistant']",
+    "busy": "[aria-busy='true'], button:has-text('Stop')",
+    "table": "table",
+    "chart": "svg, canvas, [data-testid*='chart']",
+    "map": "[data-testid*='map'], .leaflet-container, .mapboxgl-map",
+    "sources": "[data-testid*='source'], a[href]",
+    "export": "a[download], button:has-text('Export'), button:has-text('Download')",
+    "upload": "input[type='file']"
+  }
+}

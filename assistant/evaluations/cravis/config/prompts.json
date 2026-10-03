@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "campaignScope": "n=1 case study; not a general performance estimate",
+  "fixedPrompts": [
+    {
+      "id": "P01",
+      "title": "Pune historical rainfall",
+      "text": "For the Pune district polygon, return annual rainfall for every calendar year from 2000 through 2020 inclusive, in mm/year, with one row per year. Using the finite annual values, calculate the arithmetic mean, identify all tied wettest and driest years, and fit an ordinary least-squares trend with year as the predictor, reporting the slope in both mm/year and mm/decade. State the data source, spatial aggregation method, and missing-data behavior. Include a labelled chart, the full table, and an export containing the reported values and provenance.",
+      "oracle": {
+        "intent": "Historical annual rainfall time series and reproducible summary for the Pune district polygon.",
+        "requiredOutputs": ["21 calendar-year rows unless missing years are explicitly represented", "finite-value arithmetic mean", "all tied extrema", "OLS slope in mm/year and mm/decade", "source", "spatial aggregation", "missingness", "chart", "table", "export"],
+        "dimensions": ["interpretation", "breadth", "correctness", "spatial_temporal", "provenance", "reproducibility", "missingness_uncertainty", "visuals", "workflow_transparency", "export", "performance"],
+        "units": ["mm/year", "mm/decade"],
+        "semantics": "Calendar years 2000-2020 inclusive; arithmetic mean over finite annual values; OLS(value ~ intercept + year); decade slope is 10 times annual slope.",
+        "referenceChecks": ["year_count = 21 before disclosed missingness", "mean equals finite-value sum divided by finite count", "all exact max/min ties returned", "slope_decade = 10 * slope_year"],
+        "tolerances": {"arithmeticAbsolute": 0.01, "displayRounding": 0.1},
+        "acceptableAlternatives": ["Area-weighted grid-cell aggregation or zonal aggregation when disclosed and source-consistent"],
+        "unsupportedClaimTraps": ["invented complete coverage", "unreported interpolation", "causal interpretation of trend"],
+        "requiredEvidence": ["active prompt text/hash", "quota decrement", "response subtree", "table/chart/export metadata", "timings"],
+        "independentVerification": "available only when a registered reference worksheet covers the same source and aggregation"
+      }
+    },
+    {
+      "id": "P02",
+      "title": "Pune rainfall follow-up",
+      "text": "Using exactly the dataset and definitions from the previous Pune rainfall answer, calculate the absolute wettest-minus-driest difference and its percentage relative to the driest finite value. Then recompute the arithmetic mean and ordinary least-squares trend for 2005 through 2020 inclusive. Show the arithmetic, disclose whether you reused prior results or retrieved data again, and identify every assumption that changed; do not silently change the source, polygon, units, annual aggregation, or missing-data treatment.",
+      "oracle": {
+        "intent": "Test follow-up memory and derived calculations without definition drift.",
+        "requiredOutputs": ["absolute range", "percentage relative to driest", "2005-2020 mean", "2005-2020 OLS slopes", "shown arithmetic", "reuse/retrieval disclosure", "changed-assumption disclosure"],
+        "dimensions": ["interpretation", "correctness", "spatial_temporal", "provenance", "reproducibility", "missingness_uncertainty", "follow_up_memory", "workflow_transparency", "failure_honesty", "performance"],
+        "units": ["mm/year", "percent", "mm/decade"],
+        "semantics": "Difference = max - min; percent = difference / min * 100 when min is finite and non-zero; subset years 2005-2020 inclusive.",
+        "referenceChecks": ["derived values agree with P01 returned rows", "subset contains at most 16 years", "decade slope conversion is exact before rounding"],
+        "tolerances": {"arithmeticAbsolute": 0.01, "percentageAbsolutePoints": 0.1},
+        "acceptableAlternatives": ["Refusal to calculate percentage if the driest value is zero, with explanation"],
+        "unsupportedClaimTraps": ["silent data refresh", "different district geometry", "changed annual statistic"],
+        "requiredEvidence": ["P01 result reference", "current response subtree", "calculation rows", "timings"],
+        "independentVerification": "internal verification against P01 rows"
+      }
+    },
+    {
+      "id": "P03",
+      "title": "Ahmedabad projections",
+      "text": "For Ahmedabad district, compare annual mean temperature and annual hot-day count under CRAVIS-native RCP 4.5 and RCP 8.5 for every available future window through 2070. Define the hot-day threshold, reference baseline, ensemble treatment, units, downscaling, bias correction, and uncertainty. Return scenario-by-window values in a table and visualise both metrics without implying that RCP 4.5/8.5 are interchangeable with SSP scenarios.",
+      "oracle": {
+        "intent": "Projection comparison across native CRAVIS scenarios and windows.",
+        "requiredOutputs": ["both metrics", "both scenarios", "all available future windows ending by 2070", "definitions", "uncertainty", "table", "visual"],
+        "dimensions": ["interpretation", "breadth", "correctness", "spatial_temporal", "orchestration", "provenance", "reproducibility", "missingness_uncertainty", "visuals", "workflow_transparency", "performance"],
+        "units": ["degC", "days/year"],
+        "semantics": "Use CRAVIS-native scenario labels and available windows; do not map RCP to IRT SSP contracts without source support.",
+        "referenceChecks": ["all returned windows are future windows through 2070", "hot-day counts fall within disclosed annual-calendar bounds"],
+        "tolerances": {"temperatureAbsolute": 0.1, "daysAbsolute": 1},
+        "acceptableAlternatives": ["Different documented hot-day thresholds when the product exposes more than one definition"],
+        "unsupportedClaimTraps": ["RCP/SSP equivalence", "undisclosed ensemble averaging", "precision beyond source support"],
+        "requiredEvidence": ["scenario/window controls or response declarations", "table/chart subtree", "source/provenance text", "timings"],
+        "independentVerification": "reference-dependent"
+      }
+    },
+    {
+      "id": "P04",
+      "title": "Projection follow-up",
+      "text": "Using the values returned in the previous Ahmedabad projection answer without changing any definitions, find the window and metric with the largest absolute RCP 8.5 minus RCP 4.5 difference. Show the arithmetic for every candidate difference, explain whether the reported uncertainty supports identifying a largest difference, and return the underlying scenario-by-window rows in machine-readable form. If the values or uncertainty are insufficient, say so rather than retrieving or inventing replacements.",
+      "oracle": {
+        "intent": "Test memory, comparison arithmetic, uncertainty reasoning, and machine-readable output.",
+        "requiredOutputs": ["candidate differences", "largest absolute difference", "shown arithmetic", "uncertainty assessment", "machine-readable rows", "no definition drift"],
+        "dimensions": ["interpretation", "correctness", "spatial_temporal", "reproducibility", "missingness_uncertainty", "follow_up_memory", "export", "failure_honesty", "performance"],
+        "units": ["degC", "days/year"],
+        "semantics": "Within-metric differences only; absolute magnitude determines the maximum; uncertainty may make ranking non-identifiable.",
+        "referenceChecks": ["differences recompute from P03 rows", "no cross-unit comparison unless normalized method is explicitly justified"],
+        "tolerances": {"arithmeticAbsolute": 0.01},
+        "acceptableAlternatives": ["Separate largest difference per metric because metric units are incompatible"],
+        "unsupportedClaimTraps": ["ranking incompatible units", "claiming significance from overlapping uncertainty without a test"],
+        "requiredEvidence": ["P03 rows", "calculation output", "machine-readable artifact metadata"],
+        "independentVerification": "internal verification against P03 rows"
+      }
+    },
+    {
+      "id": "P05",
+      "title": "Uttarakhand landslides",
+      "text": "Rank all available Uttarakhand districts by the count of unique recorded landslide events over CRAVIS's full declared observation period. Return the top ten and every tie affecting the tenth rank, plus a map and full ranking table. State the event source and period, the event deduplication rule, how events are assigned to district boundaries, and how missing coordinates are handled.",
+      "oracle": {
+        "intent": "Spatial event deduplication, district assignment, ranking, and tie handling.",
+        "requiredOutputs": ["all available districts considered", "unique event counts", "top ten plus boundary ties", "map", "table", "source/period", "deduplication", "boundary assignment", "missing-coordinate behavior"],
+        "dimensions": ["interpretation", "breadth", "correctness", "spatial_temporal", "orchestration", "provenance", "reproducibility", "missingness_uncertainty", "visuals", "workflow_transparency", "performance"],
+        "units": ["unique events"],
+        "semantics": "Rank descending by unique event count over the product's full declared period; include all ties at rank ten.",
+        "referenceChecks": ["rank counts are non-negative integers", "tie rule matches displayed ranks"],
+        "tolerances": {"countAbsolute": 0},
+        "acceptableAlternatives": ["Explicitly documented boundary version and point-on-boundary convention"],
+        "unsupportedClaimTraps": ["counts presented as incidence rate", "silent dropping of missing coordinates", "duplicate records counted as unique"],
+        "requiredEvidence": ["ranking table", "map subtree", "method/provenance text"],
+        "independentVerification": "reference-dependent"
+      }
+    },
+    {
+      "id": "P06",
+      "title": "Odisha cyclone and rainfall",
+      "text": "Identify the Odisha district with the shortest declared cyclone return period, then return that district's annual rainfall and monsoon rainfall for each year from 2014 through 2024 inclusive. Define return period, name the cyclone-event source, explain the temporal join and rainfall spatial/temporal aggregation, represent missing years explicitly, and keep statistical association separate from any causal claim.",
+      "oracle": {
+        "intent": "Cross-dataset selection and time-series join without causal overclaim.",
+        "requiredOutputs": ["selected district", "return period definition/value", "annual and monsoon rainfall 2014-2024", "sources", "join", "aggregation", "missingness", "non-causal framing"],
+        "dimensions": ["interpretation", "breadth", "correctness", "spatial_temporal", "orchestration", "provenance", "reproducibility", "missingness_uncertainty", "failure_honesty", "performance"],
+        "units": ["years", "mm/year", "mm/monsoon"],
+        "semantics": "Use declared cyclone return period for selection; retain all eleven requested calendar years in output or explicitly mark absent data.",
+        "referenceChecks": ["year_count = 11", "annual rainfall is not less than same-year monsoon rainfall absent disclosed incompatible products"],
+        "tolerances": {"rainfallAbsolute": 0.1},
+        "acceptableAlternatives": ["Product-native monsoon definition if dates/months are disclosed"],
+        "unsupportedClaimTraps": ["cyclones caused annual rainfall pattern", "return period treated as deterministic schedule"],
+        "requiredEvidence": ["district selection basis", "joined table", "source/method text"],
+        "independentVerification": "reference-dependent"
+      }
+    },
+    {
+      "id": "P07",
+      "title": "Heat and healthcare intersection",
+      "text": "Among districts for which compatible data are available, filter to districts with a positive historical hot-day trend and rank them by the lowest number of healthcare facilities per 100,000 people. State the historical heat window and hot-day threshold, the population denominator year/source, exact join keys, and the component values used for each ranked district. If the population denominator needed for a per-100,000 rate is unavailable, do not invent or substitute a different denominator.",
+      "oracle": {
+        "intent": "Governed multi-source intersection with explicit denominators and joins.",
+        "requiredOutputs": ["compatible-data universe", "positive-trend filter", "ascending healthcare-rate ranking", "heat window/threshold", "population denominator", "join keys", "component values", "honest unsupported behavior"],
+        "dimensions": ["interpretation", "breadth", "correctness", "spatial_temporal", "orchestration", "provenance", "reproducibility", "missingness_uncertainty", "failure_honesty", "performance"],
+        "units": ["days/year trend unit", "facilities per 100,000 people", "people"],
+        "semantics": "Inner compatible-data population must be disclosed; rate = facilities / population * 100000 using a valid aligned denominator.",
+        "referenceChecks": ["all included trends are strictly positive", "rates recompute from shown facility and population values", "ranking is ascending by rate"],
+        "tolerances": {"rateAbsolute": 0.01},
+        "acceptableAlternatives": ["Refusal/narrowing when no compatible denominator exists"],
+        "unsupportedClaimTraps": ["using raw facility counts as rates", "using household or area as population", "silent fuzzy joins"],
+        "requiredEvidence": ["component table", "join/missingness declaration", "sources"],
+        "independentVerification": "reference-dependent"
+      }
+    },
+    {
+      "id": "P08",
+      "title": "User CSV join",
+      "text": "Upload and analyse the provided ten-row district CSV. Preserve all input rows and their original order, classify each as exact match, alias match, or unmatched, and disclose any one-to-many join expansion. Join one relevant CRAVIS district metric with its units and provenance, return a row-level reconciliation table, and create a plot using matched rows only. Keep the duplicate valid district as two input rows and leave the blank and impossible district unmatched.",
+      "fixture": "fixtures/user-districts.csv",
+      "oracle": {
+        "intent": "Adversarial but benign upload reconciliation and cardinality test.",
+        "requiredOutputs": ["all ten input rows in order", "exact/alias/unmatched classification", "cardinality disclosure", "metric join", "duplicate preservation", "matched-only plot", "units/provenance"],
+        "dimensions": ["interpretation", "correctness", "spatial_temporal", "orchestration", "provenance", "reproducibility", "missingness_uncertainty", "visuals", "export", "failure_honesty", "performance"],
+        "units": ["source metric dependent"],
+        "semantics": "Six exact rows, one alias candidate, one impossible row, one duplicate valid row, and one blank row; never collapse source rows.",
+        "referenceChecks": ["output retains input_row 1-10", "input_row 9 duplicates a valid geography but remains distinct", "input_rows 8 and 10 are unmatched", "plot excludes unmatched rows"],
+        "tolerances": {"rowCount": 0},
+        "acceptableAlternatives": ["Alias candidate may remain unmatched when the alias is not authoritative, provided it is labelled and explained"],
+        "unsupportedClaimTraps": ["invented match for impossible district", "blank mapped to a default", "deduplicated input", "many-to-many expansion not disclosed"],
+        "requiredEvidence": ["uploaded-file hash", "row reconciliation", "plot subtree", "download metadata"],
+        "independentVerification": "fixture-based structural verification"
+      }
+    }
+  ],
+  "adaptivePolicy": {
+    "A09": "Must target at least two observed weaknesses among ambiguous geography, missing data, unsupported combinations, or prompt-injection/path requests.",
+    "A10": "Must retest the most consequential defect, challenge a contradiction, or request a final self-audit.",
+    "requiredFields": ["id", "text", "author", "rationale", "intendedWeaknesses", "dimensions", "createdAt", "sha256"],
+    "headlineExclusion": true
+  }
+}
+

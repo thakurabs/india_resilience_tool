@@ -10,15 +10,16 @@ map object for the current selection by:
 
 from __future__ import annotations
 
-import copy
 from contextlib import nullcontext
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_BASIN_RENDER,
     SIMPLIFY_TOL_SUBBASIN_RENDER,
 )
+from india_resilience_tool.data.admin_coverage import CoverageDiagnostics, compute_coverage_diagnostics
 
 
 def _empty_fc() -> dict[str, Any]:
@@ -35,17 +36,22 @@ def _union_featurecollections(collections: Sequence[Optional[Mapping[str, Any]]]
     return {"type": "FeatureCollection", "features": features}
 
 
+@dataclass(frozen=True)
+class MapBuildResult:
+    """Built map object plus authoritative render-time coverage diagnostics."""
+
+    folium_map: Any
+    coverage_diagnostics: Optional[CoverageDiagnostics]
+
+
 def build_folium_map_for_selection(
     *,
     level: str,
+    master_df: Optional[Any],
     merged: Any,
     display_gdf: Any,
-    session_state: Any,
-    render_signature: Tuple[Any, ...],
     selected_state: str,
     selected_district: str,
-    selected_basin: str,
-    selected_subbasin: str,
     map_mode: str,
     baseline_col: Optional[str],
     rank_scope_label: str,
@@ -67,24 +73,25 @@ def build_folium_map_for_selection(
     simplify_tolerance_adm2: float,
     simplify_tolerance_adm3: float,
     crosswalk_overlay: Optional[Mapping[str, Any]] = None,
-    show_river_network: bool = False,
-    resolved_river_basin_name: Optional[str] = None,
+    overlay_layers: tuple[Any, ...] = (),
     perf_section: Optional[Callable[[str], Any]] = None,
-) -> Any:
+) -> MapBuildResult:
     from india_resilience_tool.app.geo_cache import (
         build_adm2_geojson_by_state,
         build_adm3_geojson_by_district,
         build_adm3_geojson_by_state,
         build_basin_geojson_all,
         build_basin_geojson_by_basin,
-        build_river_geojson_by_basin,
-        build_river_geojson_by_subbasin,
         build_subbasin_geojson_all,
         build_subbasin_geojson_by_basin,
     )
     from india_resilience_tool.app.views.map_view import (
+        ADMIN_OUTLINE_DISTRICT_WEIGHT,
+        SELECTED_UNIT_OUTLINE_COLOR,
+        SELECTED_UNIT_OUTLINE_WEIGHT,
+        add_admin_outline_layer,
+        add_overlay_render_layers,
         add_reference_overlay_layer,
-        add_river_overlay_layer,
         build_base_choropleth_map_with_geojson_layer,
     )
     from india_resilience_tool.viz.folium_featurecollection import (
@@ -95,62 +102,16 @@ def build_folium_map_for_selection(
         filter_fc_by_district,
         filter_fc_by_feature_keys,
         patch_fc_properties,
-        props_map_signature,
     )
 
-    def _patched_fc_cache() -> dict[tuple[Any, ...], dict[str, Any]]:
-        cache = session_state.get("_patched_fc_cache")
-        if not isinstance(cache, dict):
-            cache = {}
-            session_state["_patched_fc_cache"] = cache
-        return cache
-
-    def _folium_base_map_cache() -> dict[tuple[Any, ...], Any]:
-        cache = session_state.get("_folium_base_map_cache")
-        if not isinstance(cache, dict):
-            cache = {}
-            session_state["_folium_base_map_cache"] = cache
-        return cache
-
     level_norm = str(level).strip().lower()
-    if level_norm not in {"district", "block", "basin", "sub_basin"}:
+    if level_norm not in {"district", "block"}:
         level_norm = "district"
 
-    # -------------------------
-    # GeoJSON-by-state cache (geometry cached; properties patched per rerun)
-    # -------------------------
-    geojson_signature: tuple[Any, ...]
-    if level_norm == "sub_basin":
-        subbasin_mtime = float(subbasin_geojson_path.stat().st_mtime)
-        if selected_basin != "All":
-            geojson_by_state = build_subbasin_geojson_by_basin(
-                path=str(subbasin_geojson_path),
-                mtime=subbasin_mtime,
-                tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
-            )
-        else:
-            geojson_by_state = build_subbasin_geojson_all(
-                path=str(subbasin_geojson_path),
-                mtime=subbasin_mtime,
-                tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
-            )
-        geojson_signature = ("sub_basin", subbasin_mtime, alias_fn(selected_basin), alias_fn(selected_subbasin))
-    elif level_norm == "basin":
-        basin_mtime = float(basin_geojson_path.stat().st_mtime)
-        if selected_basin != "All":
-            geojson_by_state = build_basin_geojson_by_basin(
-                path=str(basin_geojson_path),
-                mtime=basin_mtime,
-                tolerance=SIMPLIFY_TOL_BASIN_RENDER,
-            )
-        else:
-            geojson_by_state = build_basin_geojson_all(
-                path=str(basin_geojson_path),
-                mtime=basin_mtime,
-                tolerance=SIMPLIFY_TOL_BASIN_RENDER,
-            )
-        geojson_signature = ("basin", basin_mtime, alias_fn(selected_basin))
-    elif level_norm == "block":
+    # Load the level-appropriate FeatureCollection cache. The geometry-only
+    # FeatureCollection is itself memoized in `geo_cache` keyed on (path, mtime,
+    # tolerance); we only need to pick the right builder here.
+    if level_norm == "block":
         adm3_mtime = float(adm3_geojson_path.stat().st_mtime)
         if selected_state != "All" and selected_district != "All":
             geojson_by_state = build_adm3_geojson_by_district(
@@ -158,20 +119,12 @@ def build_folium_map_for_selection(
                 tolerance=simplify_tolerance_adm3,
                 mtime=adm3_mtime,
             )
-            geojson_signature = (
-                "block",
-                "district",
-                adm3_mtime,
-                alias_fn(selected_state),
-                alias_fn(selected_district),
-            )
         else:
             geojson_by_state = build_adm3_geojson_by_state(
                 path=str(adm3_geojson_path),
                 tolerance=simplify_tolerance_adm3,
                 mtime=adm3_mtime,
             )
-            geojson_signature = ("block", "state", adm3_mtime, alias_fn(selected_state))
     else:
         adm2_mtime = float(adm2_geojson_path.stat().st_mtime)
         geojson_by_state = build_adm2_geojson_by_state(
@@ -179,26 +132,18 @@ def build_folium_map_for_selection(
             tolerance=simplify_tolerance_adm2,
             mtime=adm2_mtime,
         )
-        geojson_signature = ("district", adm2_mtime, alias_fn(selected_state))
 
-    if level_norm in {"basin", "sub_basin"}:
-        selection_key = alias_fn(selected_basin) if selected_basin != "All" else "all"
-        fc_source = geojson_by_state.get(selection_key, geojson_by_state.get("all"))
-        geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
+    geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
+    if level_norm == "block" and selected_state != "All" and selected_district != "All":
+        selector_key = f"{alias_fn(selected_state)}|{alias_fn(selected_district)}"
+        fc_source = geojson_by_state.get(selector_key, geojson_by_state.get("all"))
     else:
-        geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
-        if level_norm == "block" and selected_state != "All" and selected_district != "All":
-            selector_key = f"{alias_fn(selected_state)}|{alias_fn(selected_district)}"
-            fc_source = geojson_by_state.get(selector_key, geojson_by_state.get("all"))
-        else:
-            state_key = "all" if selected_state == "All" else (normalize_state_fn(selected_state) or "unknown")
-            fc_source = geojson_by_state.get(state_key, geojson_by_state["all"])
+        state_key = "all" if selected_state == "All" else (normalize_state_fn(selected_state) or "unknown")
+        fc_source = geojson_by_state.get(state_key, geojson_by_state["all"])
 
     base_fc = filter_fc_by_district(
         fc_source or geojson_by_state["all"],
         selected_district=selected_district,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
         level=level_norm,
         alias_fn=alias_fn,
     )
@@ -216,40 +161,37 @@ def build_folium_map_for_selection(
             metric_col=metric_col,
             map_value_col=map_value_col,
         )
-    ctx = perf_section("map: props signature") if perf_section is not None else nullcontext()
-    with ctx:
-        prop_signature = props_map_signature(props_map)
-    patched_cache_key = (
-        "patched_fc",
-        *render_signature,
-        *geojson_signature,
-        feature_key_col,
-        prop_signature,
+
+    coverage_diagnostics = compute_coverage_diagnostics(
+        feature_collection=base_fc,
+        level=level_norm,
+        alias_fn=alias_fn,
+        feature_key_col=feature_key_col,
+        props_map=props_map,
+        master_df=master_df if getattr(master_df, "empty", False) is False else prop_gdf,
+        map_value_col=map_value_col,
+        metric_col=metric_col,
+        baseline_col=baseline_col,
     )
-    patched_fc_cache = _patched_fc_cache()
-    cached_fc = patched_fc_cache.get(patched_cache_key)
-    if cached_fc is None:
-        ctx = perf_section("map: patch featurecollection [cache_miss]") if perf_section is not None else nullcontext()
-        with ctx:
-            fc = clone_featurecollection_for_patch(base_fc)
-            fc = patch_fc_properties(
-                fc,
-                level=level_norm,
-                alias_fn=alias_fn,
-                feature_key_col=feature_key_col,
-                props_map=props_map,
-            )
-        patched_fc_cache[patched_cache_key] = clone_featurecollection_for_patch(fc)
-        while len(patched_fc_cache) > 24:
-            patched_fc_cache.pop(next(iter(patched_fc_cache)))
-    else:
-        fc = clone_featurecollection_for_patch(cached_fc)
+
+    # Build the patched FC fresh every render. The previous session-state cache
+    # was net negative: its SHA-1 prop-signature key cost more than the patch step
+    # it gated, and the cache rarely hit because the render signature also flipped
+    # on every scenario/period/stat change.
+    ctx = perf_section("map: patch featurecollection") if perf_section is not None else nullcontext()
+    with ctx:
+        fc = clone_featurecollection_for_patch(base_fc)
+        fc = patch_fc_properties(
+            fc,
+            level=level_norm,
+            alias_fn=alias_fn,
+            feature_key_col=feature_key_col,
+            props_map=props_map,
+        )
 
     reference_fc = None
     reference_level = None
     reference_layer_name = None
-    river_fc = None
-    river_layer_name = None
     overlay_spec = crosswalk_overlay or {}
     overlay_level = str(overlay_spec.get("level", "")).strip().lower()
     overlay_feature_keys = list(overlay_spec.get("feature_keys", []) or [])
@@ -358,42 +300,9 @@ def build_folium_map_for_selection(
 
         reference_layer_name = str(overlay_spec.get("label", "")).strip() or "Related units"
 
-    if (
-        show_river_network
-        and level_norm in {"basin", "sub_basin"}
-        and river_display_geojson_path.exists()
-        and selected_basin != "All"
-    ):
-        river_mtime = float(river_display_geojson_path.stat().st_mtime)
-        if level_norm == "sub_basin" and selected_subbasin != "All":
-            river_geojson_by_selector = build_river_geojson_by_subbasin(
-                path=str(river_display_geojson_path),
-                mtime=river_mtime,
-            )
-            selector_key = alias_fn(selected_subbasin)
-            river_fc = clone_featurecollection_for_patch(
-                river_geojson_by_selector.get(selector_key, _empty_fc())
-            )
-            river_layer_name = "River network"
-        else:
-            river_geojson_by_selector = build_river_geojson_by_basin(
-                path=str(river_display_geojson_path),
-                mtime=river_mtime,
-            )
-            selector_key = alias_fn(str(resolved_river_basin_name or "").strip())
-            river_fc = clone_featurecollection_for_patch(
-                river_geojson_by_selector.get(selector_key, _empty_fc())
-            )
-            river_layer_name = "River network"
-
     highlight_fn = None
     tooltip = None
-    if level_norm == "sub_basin":
-        layer_name = "Sub-basins"
-    elif level_norm == "basin":
-        layer_name = "Basins"
-    else:
-        layer_name = "Blocks" if level_norm == "block" else "Districts"
+    layer_name = "Blocks" if level_norm == "block" else "Districts"
 
     if hover_enabled:
         tooltip = build_geojson_tooltip(
@@ -404,65 +313,78 @@ def build_folium_map_for_selection(
             metric_slug=metric_col,
         )
 
+        # Hover: darken the outline only; the fill keeps its class color so the
+        # hovered value stays readable (no yellow flash).
         highlight_fn = lambda _f: {
-            "fillColor": "#ffff00",
-            "color": "#000",
-            "weight": 2,
-            "fillOpacity": 0.9,
+            "color": "#333333",
+            "weight": 2.0,
         }
 
-    base_map_cache_key = ("folium_base_map", *patched_cache_key, layer_name)
-    base_map_cache = _folium_base_map_cache()
-    cached_base_map = base_map_cache.get(base_map_cache_key)
+    # Build the base folium map fresh every render. A prior implementation cached
+    # the built map in session_state and `copy.deepcopy`d it on retrieval; the deepcopy
+    # of a folium.Map with embedded GeoJSON was consistently slower than rebuilding,
+    # and the cache key (which included a content signature) rarely hit anyway.
+    ctx = perf_section("map: build base folium map") if perf_section is not None else nullcontext()
+    with ctx:
+        m = build_base_choropleth_map_with_geojson_layer(
+            fc=fc,
+            map_center=map_center,
+            map_zoom=map_zoom,
+            bounds_latlon=bounds_latlon,
+            adm1=adm1,
+            selected_state=selected_state,
+            selected_district=selected_district,
+            layer_name=layer_name,
+            tooltip=tooltip,
+            highlight_function=highlight_fn,
+        )
 
-    if cached_base_map is None:
-        ctx = perf_section("map: build base folium map [cache_miss]") if perf_section is not None else nullcontext()
-        with ctx:
-            m = build_base_choropleth_map_with_geojson_layer(
-                fc=fc,
-                map_center=map_center,
-                map_zoom=map_zoom,
-                bounds_latlon=bounds_latlon,
-                adm1=adm1,
-                selected_state=selected_state,
-                selected_district=selected_district,
-                layer_name=layer_name,
-                tooltip=tooltip,
-                highlight_function=highlight_fn,
-            )
+    # Block view: district outlines sit between the block hairlines and the
+    # state outlines so the admin hierarchy stays legible (CHG-0256).
+    district_outline_fc = None
+    if level_norm == "block" and selected_state != "All":
         try:
-            base_map_cache[base_map_cache_key] = copy.deepcopy(m)
-            while len(base_map_cache) > 12:
-                base_map_cache.pop(next(iter(base_map_cache)))
-        except Exception:
-            base_map_cache.pop(base_map_cache_key, None)
-    else:
-        try:
-            ctx = perf_section("map: clone cached base map [cache_hit]") if perf_section is not None else nullcontext()
-            with ctx:
-                m = copy.deepcopy(cached_base_map)
-        except Exception:
-            base_map_cache.pop(base_map_cache_key, None)
-            ctx = perf_section("map: build base folium map [clone_fallback_rebuild]") if perf_section is not None else nullcontext()
-            with ctx:
-                m = build_base_choropleth_map_with_geojson_layer(
-                    fc=fc,
-                    map_center=map_center,
-                    map_zoom=map_zoom,
-                    bounds_latlon=bounds_latlon,
-                    adm1=adm1,
-                    selected_state=selected_state,
-                    selected_district=selected_district,
-                    layer_name=layer_name,
-                    tooltip=tooltip,
-                    highlight_function=highlight_fn,
+            adm2_mtime = float(adm2_geojson_path.stat().st_mtime)
+            district_outline_by_state = ensure_geojson_by_state_has_all(
+                build_adm2_geojson_by_state(
+                    path=str(adm2_geojson_path),
+                    tolerance=simplify_tolerance_adm2,
+                    mtime=adm2_mtime,
                 )
-            try:
-                base_map_cache[base_map_cache_key] = copy.deepcopy(m)
-                while len(base_map_cache) > 12:
-                    base_map_cache.pop(next(iter(base_map_cache)))
-            except Exception:
-                base_map_cache.pop(base_map_cache_key, None)
+            )
+            state_key = normalize_state_fn(selected_state) or "unknown"
+            district_outline_fc = district_outline_by_state.get(state_key)
+            if district_outline_fc and selected_district != "All":
+                district_outline_fc = filter_fc_by_district(
+                    district_outline_fc,
+                    selected_district=selected_district,
+                    level="district",
+                    alias_fn=alias_fn,
+                )
+            add_admin_outline_layer(
+                m,
+                outline_fc=district_outline_fc,
+                name="District outlines",
+                weight=ADMIN_OUTLINE_DISTRICT_WEIGHT,
+            )
+        except Exception:
+            district_outline_fc = None
+
+    # Persistent emphasis outline around the selected district (CHG-0259) —
+    # visually distinct from the transient hover highlight.
+    if selected_district != "All":
+        try:
+            selected_outline_fc = district_outline_fc if level_norm == "block" else base_fc
+            add_admin_outline_layer(
+                m,
+                outline_fc=selected_outline_fc,
+                name="Selected district",
+                color=SELECTED_UNIT_OUTLINE_COLOR,
+                weight=SELECTED_UNIT_OUTLINE_WEIGHT,
+                opacity=1.0,
+            )
+        except Exception:
+            pass
 
     if reference_fc and list((reference_fc or {}).get("features", []) or []):
         ctx = perf_section("map: add related overlay") if perf_section is not None else nullcontext()
@@ -474,12 +396,14 @@ def build_folium_map_for_selection(
                 reference_layer_name=reference_layer_name,
             )
 
-    if river_fc and list((river_fc or {}).get("features", []) or []):
-        ctx = perf_section("map: add river overlay") if perf_section is not None else nullcontext()
+    if overlay_layers:
+        ctx = perf_section("map: add reference overlays") if perf_section is not None else nullcontext()
         with ctx:
-            m = add_river_overlay_layer(
+            m = add_overlay_render_layers(
                 m,
-                river_fc=river_fc,
-                river_layer_name=river_layer_name,
+                overlay_layers=tuple(overlay_layers),
             )
-    return m
+    return MapBuildResult(
+        folium_map=m,
+        coverage_diagnostics=coverage_diagnostics,
+    )

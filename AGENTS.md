@@ -174,7 +174,17 @@ Formatting requirement for git handoff commands:
 
 ---
 
-## 9) PERFECT HANDOFF POINT (mandatory on session end)
+## 9) Operator command clarity
+
+When giving the user commands for data downloads, builds, or pipelines:
+- Provide steps in strict chronological order.
+- Avoid ambiguous prerequisite language such as "assuming X exists."
+- Instead, give explicit verification commands or concrete file checks before the next step.
+- Clearly state whether each command downloads data, validates data, writes manifests, builds derived artifacts, or publishes outputs.
+
+---
+
+## 10) PERFECT HANDOFF POINT (mandatory on session end)
 
 Whenever the user indicates they are ending / pausing the session (examples: “wrap up”, “pause”, “handoff”, “end”, “stop”, `/quit`, `/new`),
 append a copy-paste-ready section titled:
@@ -196,7 +206,67 @@ Important:
 
 ---
 
-## 10) Nested AGENTS.md
+## 11) Geospatial environment hygiene (PROJ / GDAL stack)
+
+This repo's geo stack (`pyproj`, `rasterio`, `fiona`, `shapely`, `geopandas`) is fragile on Windows because each package can bundle its own PROJ/GDAL native libraries. Mixing conda-forge and pip installs causes DLL/`proj.db` version mismatches that surface as cryptic runtime errors.
+
+### Rules
+
+- **Install geo packages via conda-forge only.** Never `pip install` `pyproj`, `rasterio`, `fiona`, `shapely`, `geopandas`, `cartopy`, or `gdal` into this env.
+- **Never set `PROJ_LIB` or `PROJ_DATA`** as user/system environment variables. Modern pyproj resolves its own data dir; setting these globally pins all envs to one location and breaks version-skewed envs.
+- If a user reports geo errors, **diagnose before reinstalling**. Reinstall-first wastes time when the real cause is leftover files or env vars.
+
+### Known-bad symptoms
+
+- `pyproj.exceptions.CRSError: Invalid projection: EPSG:4326: (Internal Proj Error: proj_create: no database context specified)`
+- `UserWarning: pyproj unable to set PROJ database path`
+- `rasterio` / `fiona` import errors mentioning `proj.db`, `PROJ`, or missing DLLs
+- GDAL "Cannot find proj.db" at runtime
+
+### Diagnostic block (read-only; run first)
+
+```bash
+python -c "import pyproj, os; print('pyproj:', pyproj.__version__, 'PROJ:', pyproj.proj_version_str); print('data_dir:', pyproj.datadir.get_data_dir()); print('proj.db exists:', os.path.exists(os.path.join(pyproj.datadir.get_data_dir(),'proj.db'))); print('PROJ_LIB=', os.environ.get('PROJ_LIB')); print('PROJ_DATA=', os.environ.get('PROJ_DATA')); from pyproj import CRS; print(CRS('EPSG:4326'))"
+conda list | grep -iE "^(proj|pyproj|proj-data|rasterio|fiona|shapely|geopandas|gdal) "
+pip list --format=columns | grep -iE "^(pyproj|rasterio|fiona|shapely|geopandas|gdal) "
+```
+
+### Triage decision tree
+
+1. **`pyproj.datadir.get_data_dir()` points inside `site-packages/pyproj/proj_dir/...`** → leftover from a previous `pip install pyproj`. `pip uninstall` does not always remove this directory. Delete it, then re-test:
+   - Windows: `Remove-Item -Recurse -Force "<env>/Lib/site-packages/pyproj/proj_dir"`
+   - Linux/macOS: `rm -rf "<env>/lib/python*/site-packages/pyproj/proj_dir"`
+   Conda-forge `pyproj` does NOT ship a `proj_dir` directory; if it exists, it is stale.
+
+2. **`PROJ_LIB` or `PROJ_DATA` is set** → check Windows env vars, `~/.bashrc`, `~/.zshrc`, conda `etc/conda/activate.d/*.sh|*.bat`, and the PowerShell `$PROFILE`. Unset and re-test.
+
+3. **Same package appears in both `conda list` and `pip list`** → pip has shadowed conda. Resolve:
+   ```bash
+   pip uninstall -y <pkg>
+   conda install -n <env> -c conda-forge --force-reinstall <pkg>
+   # then re-check for leftover bundled data dirs (proj_dir, gdal_data, ...) under site-packages
+   ```
+
+4. **Version skew between `proj` and `pyproj`** → force-reinstall both from conda-forge together:
+   ```bash
+   conda install -n <env> -c conda-forge --force-reinstall pyproj proj proj-data
+   ```
+
+### When suggesting fixes to users
+
+- Always run the diagnostic block first; do not propose reinstalls without seeing its output.
+- Treat `--force-reinstall` as the minimum for conda repair (plain `conda install` no-ops if metadata still claims the package is present after a pip uninstall).
+- After any reinstall, verify by deleting leftover `proj_dir` / `gdal_data` directories under `site-packages` if present, and re-running `CRS('EPSG:4326')`.
+
+### Do not
+
+- Do not `pip install pyproj` (or other geo packages) into this env, even as a "quick fix".
+- Do not advise users to `export PROJ_LIB=...` as a workaround — it masks the real problem and breaks other envs on the same machine.
+- Do not edit `environment.yml` to pin around a broken install; fix the install first.
+
+---
+
+## 12) Nested AGENTS.md
 
 This repo uses nested `AGENTS.md` files to improve agent performance. Apply the closest applicable instructions when working in subdirectories.
 
@@ -210,3 +280,16 @@ Current nested scopes include:
 - `tests/AGENTS.md`
 - `tools/AGENTS.md`
 - `notebooks/AGENTS.md`
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

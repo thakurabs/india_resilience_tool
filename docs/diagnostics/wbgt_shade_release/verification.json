@@ -1,0 +1,36 @@
+{
+  "full_suite": {
+    "command": "python -m pytest -q tests --tb=short",
+    "passed": 1673,
+    "skipped": 3,
+    "failed": 15,
+    "failures": [
+      "FAILED tests/test_admin_boundaries_block_placeholder.py::test_blank_block_name_is_recovered_via_placeholder",
+      "FAILED tests/test_admin_boundaries_block_placeholder.py::test_blank_district_name_is_still_dropped",
+      "FAILED tests/test_color_range_controls.py::test_single_unit_scale_value_preserves_floor_1",
+      "FAILED tests/test_compute_indices_task_planning.py::test_metric_role_varnames_uses_level_aware_percentile_and_drought_baselines",
+      "FAILED tests/test_heat_risk_gridfirst.py::test_gridfirst_threshold_day_metrics_cover_txge30_and_tropical_nights_gt25_without_baseline",
+      "FAILED tests/test_map_view_layout.py::test_clamp_map_height_enforces_maximum",
+      "FAILED tests/test_no_emojis.py::test_no_emoji_characters_in_repo_text - Asser...",
+      "FAILED tests/test_optimized_bundle.py::test_build_processed_optimised_writes_proposal_bundle_admin_masters",
+      "FAILED tests/test_optimized_bundle.py::test_build_processed_optimised_overwrite_preserves_prior_level_outputs_and_rebuilds_manifest_inventory",
+      "FAILED tests/test_optimized_bundle.py::test_build_processed_optimised_prune_scope_removes_selected_owned_roots_only",
+      "FAILED tests/test_optimized_bundle.py::test_build_processed_optimised_state_scope_preserves_other_states_and_shared_globals",
+      "FAILED tests/test_optimized_bundle.py::test_audit_processed_optimised_state_scope_does_not_write_global_report_by_default",
+      "FAILED tests/test_optimized_bundle.py::test_audit_processed_optimised_state_scope_writes_only_explicit_scoped_report",
+      "FAILED tests/test_optimized_bundle.py::test_list_optimized_yearly_metrics_reports_state_block_metrics",
+      "FAILED tests/test_optimized_bundle.py::test_strict_audit_requires_block_yearly_models_when_ensemble_exists"
+    ],
+    "baseline": "All 15 failing cases reproduced using an isolated git archive of 269be91",
+    "note": "Predates CHG-0588..0598. The 15 failures reproduce on clean 269be91 and are unrelated to the shade programme; re-run the full suite before publication."
+  },
+  "focused_suite": "135 passed",
+  "embedded_compute_plus_shade": "41 passed",
+  "latest_dedicated_shade": "34 passed",
+  "new_module_ruff": "passed",
+  "runtime_ruff_findings": 86,
+  "baseline_runtime_ruff_findings": 88,
+  "black_and_mypy": "Unavailable modules; no dependency installation performed",
+  "latest_dedicated_shade_note": "tests/test_wbgt_shade_release.py after CHG-0593..0597: 34 passed. The seven new cases cover the release-runner findings from external review -- --force against a live lock, lock ownership on release, rollback cache bound to its published root, unreadable-subtree detection, an incomplete measurement withholding the space verdict, and preflight derived from the compute archive. Three earlier cases were updated to the new contracts.",
+  "latest_focused_shade": "99 passed"
+}

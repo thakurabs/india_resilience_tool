@@ -1,0 +1,9 @@
+check,ok,n_units,unmatched_units,nan_pattern_mismatches,max_abs_mean_diff_c,count_mismatches,max_abs_count_diff_days,valid_area_fraction_mismatches,max_abs_area_fraction_diff,tolerance_c,comparison_basis,detail
+reproduces_frozen_district,True,75.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1e-09,published CSV on both sides,frozen table docs\diagnostics\wbgt_outdoor_pilot\district_values.csv
+reproduces_frozen_block,True,581.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1e-09,published CSV on both sides,frozen table docs\diagnostics\wbgt_outdoor_pilot\block_values.csv
+A3_rh_restores_cell_years,True,,,,,,,,,,,11 cell-years restored by the RH treatment
+A4_elevation_changes_no_validity,True,,,,,,,,,,,valid cell-year count identical to baseline
+A5_no_valid_coverage_never_numeric,True,,,,,,,,,,,0 unsupported units carry a number
+A6_admin_checks_pass,True,,,,,,,,,,,0 admin check failures
+A7_geometry_within_tolerance,True,,,,,,,,,,,0 of 243 geometry checks outside the declared tolerances; all are reported
+A2_cell_parity_under_the_treated_path,True,,,,,,,,,,,"7 of 7 parity checks ok, run with the RH treatment and the acquired elevation applied"
