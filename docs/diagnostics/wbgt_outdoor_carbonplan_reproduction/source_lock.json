@@ -1,0 +1,46 @@
+{
+  "carbonplan_commit": "f662b37200fe219db912ebd09ceb52fdac979861",
+  "metsim_commit": "edbd68fecd7decf0f03b32d1226f44327bd297b7",
+  "files": {
+    "02_generate.ipynb": {
+      "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/02_generate.ipynb",
+      "sha256": "a3b029836df47e03e1df8e4318f49607a1a861b20956ba64301e1b276906c513"
+    },
+    "05_aggregate.ipynb": {
+      "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/05_aggregate.ipynb",
+      "sha256": "79019b5174d31b8b790bffe9bff678f04b0c92f1f7abf895eb3f84520050c18f"
+    },
+    "06_bias_correction.ipynb": {
+      "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/06_bias_correction.ipynb",
+      "sha256": "22c1bff8fbea53fc83eb5453b6ec74c48e80a8b2042e3cae56d76df9d7a6cd48"
+    },
+    "07_solar_radiation_wind.ipynb": {
+      "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/07_solar_radiation_wind.ipynb",
+      "sha256": "5a0acf2c3c33d40e29be5f5b3eddfc4a42c54227c52703020b88d1347d10f83f"
+    },
+    "08_shade_sun_adjustment.ipynb": {
+      "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/08_shade_sun_adjustment.ipynb",
+      "sha256": "6a6e5f3d6896ddf6697746cd7c95385d2a245b2c5889fd2691499182a08cb810"
+    },
+    "10_packaging.ipynb": {
+      "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/10_packaging.ipynb",
+      "sha256": "97e2a895f34981f6723840a7044d6161561bbbb79ec201fc91de9df910f1e2af"
+    },
+    "utils.py": {
+      "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/utils.py",
+      "sha256": "a6aa37aceb48942af31c5dcae5ed5c43a3faf9cf944ab487b3803866f26cfe8c"
+    },
+    "metsim_constants.py": {
+      "url": "https://raw.githubusercontent.com/carbonplan/MetSim/edbd68fecd7decf0f03b32d1226f44327bd297b7/metsim/constants.py",
+      "sha256": "4b106a543dc4fa9265e823d25e645b04350b12caf36ad670324b34920b7a0c28"
+    },
+    "metsim_disaggregate.py": {
+      "url": "https://raw.githubusercontent.com/carbonplan/MetSim/edbd68fecd7decf0f03b32d1226f44327bd297b7/metsim/disaggregate.py",
+      "sha256": "3446c73995aff864ab52088a51a9acf3eef9f42713f7e41f0f111e43c00b8a71"
+    },
+    "metsim_physics.py": {
+      "url": "https://raw.githubusercontent.com/carbonplan/MetSim/edbd68fecd7decf0f03b32d1226f44327bd297b7/metsim/physics.py",
+      "sha256": "3565ff9739a53cfd4a92b088f4d8e9243ce04ee6c673310f3f353f8ab9d802cb"
+    }
+  }
+}
