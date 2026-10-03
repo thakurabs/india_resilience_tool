@@ -960,3 +960,11 @@ resumably without ever writing to the published tree. Each state is validated ag
 per-unit yearly files before masters are built; validation failures are recorded in `status.json`.
 Promotion and rollback are not implemented.
 See [shade release status, evidence and staged operator commands](docs/wbgt_shade_release.md).
+
+Outdoor WBGT Route B is an approved **diagnostic programme**, using CarbonPlan's
+shade/QDM/sun method with both regional and grid-first aggregation in the planned
+pilot. UHE-Daily is a provisional reference; calibration remains 1985–2014 and
+IRT reporting remains 1990–2010. Preview reference acquisition without network
+access or writes with `python -m tools.data_acquisition.uhe_daily --sample --dry-run`.
+See [the programme and ordered acquisition/QC steps](docs/wbgt_outdoor_route_b.md).
+Production outdoor methods and composite membership have not changed.

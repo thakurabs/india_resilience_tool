@@ -5,6 +5,20 @@ but are intentionally kept out of the runtime package.
 
 Run these from the **repo root** so imports like `paths.py` resolve correctly.
 
+## UHE-Daily reference acquisition (outdoor WBGT Route B; CHG-0644)
+
+`python -m tools.data_acquisition.uhe_daily --sample --dry-run` prints the
+12-date seasonal reference plan without network or writes. Explicit `--download`
+reads bounded HTTP ranges from CHC's public daily WBGTmax TIFFs, validates their
+native 0.05° grid/layout, and saves cropped arrays, coordinates, source hashes,
+and acquisition QC in atomic per-day NPZs under `scratch/uhe_daily` by default.
+Requests are single-stream and paced; the default 0.25 GB attempt budget refuses
+the full 1985–2014 acquisition. `--sample --verify` validates local sample dates;
+rerunning `--download` verifies cached days before skipping them. Missing values
+stay NaN, and no regridding, bias correction or publication occurs. See
+[the programme](../docs/wbgt_outdoor_route_b.md) for chronological commands,
+full-archive budgeting, scientific QC gates and pilot scope.
+
 ## Canonical runner
 
 The recommended operator entrypoint is:

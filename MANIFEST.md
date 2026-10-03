@@ -50,6 +50,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | Command | Purpose |
 |---------|---------|
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
+| `python -m tools.data_acquisition.uhe_daily --sample --dry-run` | Plan bounded diagnostic UHE-Daily reference acquisition for outdoor WBGT Route B; no network or writes by default. `--download` uses validated HTTP ranges and a transfer cap, writes atomic native-grid NPZs with provenance/QC, and verifies cached days on resume. `--verify` checks selected local dates without network or writes. Programme: `docs/wbgt_outdoor_route_b.md`; contracts: `tests/test_uhe_daily.py`. No pilot compute or production publication. |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
 | `python -m tools.docs.build_technical_note_html --help` | Build the committed self-contained `Read the Docs` dashboard HTML asset from `docs/technical_guidance_note.md`, approved figure callouts, and vendored KaTeX |
 | `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, persisted visible-Glance composites, Aqueduct, population, groundwater, state-scoped JRC flood depth, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
