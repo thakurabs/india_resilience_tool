@@ -19,6 +19,37 @@ stay NaN, and no regridding, bias correction or publication occurs. See
 [the programme](../docs/wbgt_outdoor_route_b.md) for chronological commands,
 full-archive budgeting, scientific QC gates and pilot scope.
 
+## Route B diagnostic pilot tools (CHG-0649/CHG-0650)
+
+- `python -m tools.diagnostics.wbgt_route_b_reference --help`: sample native-UHE
+  QC and separate published-footprint control. Reads acquired NPZs, canonical
+  boundaries and cached CarbonPlan controls; writes QC CSVs/manifests. Population
+  acquisition is separately opt-in and capped.
+- `python -m tools.diagnostics.wbgt_route_b_prepare --stage support`: plans spatial
+  support; `--stage reference` or `--stage drivers` selects local preparation.
+  Explicit `--run` writes signed NPZs under `scratch/wbgt_route_b`. Support requires
+  canonical boundaries, NEX coordinates and the cached elevation table documented
+  in the programme. Geo preparation runs in IRT's existing Windows environment.
+- `python -m tools.diagnostics.wbgt_route_b_run --smoke`: exercises pinned QDM,
+  formula parity and solar conservation in the isolated CarbonPlan environment.
+  `--probe --model ACCESS-CM2` measures real-series cost; `--run` computes one
+  complete diagnostic model. Inputs come from the preparation tool; outputs are
+  under `docs/diagnostics/wbgt_outdoor_route_b_pilot`. Numerical support/metric
+  contracts live in `tools/diagnostics/wbgt_route_b.py`.
+- `python -m tools.diagnostics.wbgt_route_b_report`: plans reporting; `--run`
+  consumes completed model outputs and writes period metrics, aggregation gaps,
+  held-out summaries, descriptive W1 comparisons and measured cost evidence.
+- `python -m tools.diagnostics.wbgt_route_b_finish`: plans the ordered local
+  completion chain; `--run` waits for full inputs, verifies reference integrity,
+  prepares reference shards, smoke-tests, cost-probes and runs both models, then
+  reports. One locked coordinator, sequential models, bounded waits/compute,
+  atomic status and per-stage logs. No downloads or production writes.
+
+Use `/tmp/irt-carbonplan-py310/bin/python` for QDM/report/completion commands in
+this workspace. See [the programme](../docs/wbgt_outdoor_route_b.md) for execution
+order, exact inputs, resume budgets and scientific limits. Tests are
+`tests/test_wbgt_route_b*.py` plus `tests/test_uhe_daily.py`.
+
 ## Canonical runner
 
 The recommended operator entrypoint is:

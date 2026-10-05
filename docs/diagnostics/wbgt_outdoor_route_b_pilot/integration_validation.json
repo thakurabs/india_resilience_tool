@@ -1,0 +1,28 @@
+{
+  "scope": "SYNTHETIC_INTEGRATION_ONLY_NOT_REAL_PILOT_RESULTS",
+  "status": "PASS",
+  "offline_tests": 49,
+  "models": [
+    {
+      "model": "ACCESS-CM2",
+      "rows": 1716,
+      "excluded_unit_rows": 429,
+      "all_excluded_metrics_nan": true,
+      "all_eligible_metrics_finite": true,
+      "elapsed_seconds": 152.06954644189682,
+      "peak_rss_mb": 361.68359375
+    },
+    {
+      "model": "CMCC-CM2-SR5",
+      "rows": 1716,
+      "excluded_unit_rows": 429,
+      "all_excluded_metrics_nan": true,
+      "all_eligible_metrics_finite": true,
+      "elapsed_seconds": 157.13458125991747,
+      "peak_rss_mb": 374.25390625
+    }
+  ],
+  "report_generated": true,
+  "fixture_root": "scratch/wbgt_route_b_integration_v2",
+  "fixture_notes": "Four cells, three eligible state districts and one excluded district; full calibration/reporting envelope; deterministic synthetic weather variability. Perfectly repeating seasonal inputs triggered the nonfinite-QDM abort gate in an earlier fixture; neither QDM nor the gate was relaxed."
+}

@@ -18,11 +18,23 @@ production-method replacement. The shade release retains its separate authority.
 | Destination | Diagnostic-only. Display release and composite/ruler membership require subsequent acceptance decisions. |
 | Route C | Deferred challenger; no direct outdoor-to-shade-reference QDM. Define compatible quantities before testing it. |
 
-The current implementation delivers the acquisition tool and this specification.
+The implementation now includes acquisition, native-support QC, conservative
+input preparation, both pilot aggregation paths, held-out evaluation, reporting
+and a resumable local completion coordinator (CHG-0649/CHG-0650).
 The [12-date acquisition sample](diagnostics/wbgt_outdoor_route_b_reference/README.md)
-has passed integrity checks; scientific reference QC remains pending.
-It does not yet implement the two pilot compute paths. Full reference acquisition,
-pilot execution, and national scale-out are separate budgeted execution steps.
+has passed integrity checks; independent observational accuracy remains unestablished.
+Follow-up [reference QC](diagnostics/wbgt_outdoor_route_b_reference/QC_SPEC.md)
+has established source identity: CarbonPlan's published reference uses overlapping
+0.25° footprints on 0.05° UHE centres. Reproducing that wiring matches 36 sample
+values to 2.63e-14 °C. IRT retains true native footprints; the published wiring
+is a separate control. This difference and incomplete island support are explicit.
+The [frozen paired-pilot specification](diagnostics/wbgt_outdoor_route_b_reference/PILOT_SPEC.md)
+covers two models and the verified 75-district/581-block roster, intersecting 784
+NEX cells before reference/input coverage screens. All 304 model/scenario/year
+driver shards have been extracted locally. Full reference acquisition is running;
+the paired pilot has not yet produced scientific results. Execution state is
+recorded in `docs/diagnostics/wbgt_outdoor_route_b_pilot/execution_status.json`.
+National scale-out and publication remain later decisions.
 
 ## Evidence and limits
 
@@ -143,12 +155,61 @@ Run from the repository root in the existing `irt` Python environment.
    python -m tools.data_acquisition.uhe_daily --start 1985-01-01 --end 2014-12-31 --dry-run --output-dir scratch/uhe_daily --max-transfer-gb 230
    ```
 
-   The complete download is not started by this change. After the QC/budget
-   decision, run the reviewed plan with `--download`, then the identical date
+   The complete download was subsequently authorized and started. For a fresh
+   acquisition, run the reviewed plan with `--download`, then the identical date
    range with `--verify`. Use a durable diagnostic output directory with measured
    free space. A transfer cap exhausted by retries requires an explicit resume
    budget; it must not be disabled. Coordinate host etiquette before a bulk pull;
    no external message is sent automatically.
+
+### Active execution and resumption (CHG-0650)
+
+The initial single-stream acquisition stopped on a read timeout after 2007-03-05,
+having reserved 149.701 GB. The active resume uses an **80 GB attempt cap**;
+combined reservations stay below the original 230 GB envelope. Do not launch a
+second downloader or reset that budget while a download is active. Existing days
+are verified on resume. Network time is variable; the initial 21-hour estimate
+is not a completion guarantee.
+
+Input preparation uses the existing Windows IRT geo environment. QDM execution
+uses the existing isolated Linux Python 3.10 environment at
+`/tmp/irt-carbonplan-py310/bin/python`, with xclim 0.44.0 and thermofeel 1.3.0.
+No environment was upgraded. The elevation input is
+`scratch/wbgt_route_b/elevation_cells.csv`: previously cached CarbonPlan elevations
+plus the missing 32.125°N, 78.875°E cell (5268 m), retrieved from cached elevation
+chunks. Its source hashes are in `elevation_supplement_provenance.json`; the
+support manifest freezes the complete elevation table and all support artifacts.
+
+The ordered local stages are:
+
+1. `python -m tools.diagnostics.wbgt_route_b_prepare --stage support --run`
+   builds/verifies canonical polygon intersections and reference mapping in the
+   Windows geo environment. This step and driver extraction are complete locally.
+2. `python -m tools.diagnostics.wbgt_route_b_prepare --stage drivers --run`
+   extracts local NEX data, enforcing units, exact cells and complete calendars.
+3. `/tmp/irt-carbonplan-py310/bin/python -m tools.diagnostics.wbgt_route_b_finish`
+   prints the completion plan without writes or network. Adding `--run` starts
+   the locked local coordinator. It waits for all 10,957 reference dates and all
+   304 driver shards, verifies the reference, reduces it to NEX support, reruns
+   integration smoke, probes each model, runs both pilots sequentially, and writes
+   the comparison report. It makes no network requests and never publishes.
+
+The coordinator records progress/failure atomically in `execution_status.json`
+and stage logs in `scratch/wbgt_route_b/finish_*.log`. An hour without acquisition
+log progress stops the wait for inspection. Each model's measured QDM estimate
+must fit a 12-hour diagnostic budget; actual model execution has a 24-hour cap.
+Input waiting is limited to 36 hours. These are bounded diagnostic execution
+limits, not estimates or national-run authorization. Cache signatures prevent
+silent reuse after code/input/support changes. On an input or numerical failure,
+inspect the named log and resolve it before rerunning the coordinator.
+
+Validation: focused offline tests cover geometry, missing support, complete years,
+different threshold estimands, holdout separation, future windows, cache identity,
+period completeness and comparison labels. The real pinned integration smoke
+checks Gregorian and no-leap additive QDM, formula parity and solar conservation.
+Manual acceptance: verify both model manifests are complete, inspect excluded
+units and clipping, compare held-out shade distributions and aggregation gaps,
+then review the scientific limitations before any release decision.
 
 ## Stage 2: paired three-state pilot
 
@@ -223,6 +284,13 @@ resource budget. Display-only release precedes any separate composite decision.
 
 CHG-0644 — APPLIED (user-confirmed direction): this programme, bounded acquisition
 tool, offline tests, and navigation updates in README/MANIFEST/tools README.
+CHG-0649 — APPLIED (user-confirmed continuation): reference QC tool/tests, native
+support evidence and preserved native-versus-published-footprint controls.
+CHG-0650 — APPLIED (user-confirmed continuation): paired-pilot kernels, input
+preparation, pinned runner, complete-period reporting, common-support W1
+comparison, logged completion coordinator, tests and navigation. Input acquisition
+and scientific pilot execution remain in progress; code completion is not a
+scientific acceptance verdict.
 No production formulas, metric slugs, scoring membership, published artifacts,
 HANDOFF or BACKLOG entries are changed.
 
