@@ -123,6 +123,22 @@ def matched_w1(cell_table: pd.DataFrame, units: pd.DataFrame, areas: np.ndarray,
     return pd.DataFrame(rows)
 
 
+def measured_timings(root: Path) -> pd.DataFrame:
+    """Retain measured fitting costs across resumes; reject altered recovery evidence."""
+    frames = [pd.read_csv(root / "timings.csv")]
+    probe = root / "probe_timings.csv"
+    if probe.exists():
+        frames.append(pd.read_csv(probe))
+    initial = root / "initial_qdm_timings.csv"
+    if initial.exists():
+        audit = json.loads((root.parent / "solar_precision_cache_audit.json").read_text())
+        if hashlib.sha256(initial.read_bytes()).hexdigest() != audit["initial_timings_sha256"]:
+            raise ValueError("Changed original QDM timing evidence")
+        frames.append(pd.read_csv(initial))
+    timing = pd.concat(frames, ignore_index=True)
+    return timing[timing.seconds > 0].drop_duplicates(["kind", "series"])
+
+
 def report(args: argparse.Namespace) -> dict:
     """Require complete model manifests, then write evidence without acceptance claims."""
     summaries, all_gaps, all_w1, common_w1, holdouts, costs, manifests = [], [], [], [], [], [], {}
@@ -155,11 +171,7 @@ def report(args: argparse.Namespace) -> dict:
         holdout = pd.read_csv(root / "holdout_scores.csv").merge(units, on="unit_index", validate="many_to_one")
         holdout["model"] = model
         holdouts.append(holdout)
-        timing = pd.read_csv(root / "timings.csv")
-        probe_path = root / "probe_timings.csv"
-        if probe_path.exists():
-            timing = pd.concat([timing, pd.read_csv(probe_path)], ignore_index=True)
-        timing = timing[timing.seconds > 0].drop_duplicates(["kind", "series"])
+        timing = measured_timings(root)
         for kind, sample in timing.groupby("kind"):
             costs.append({"model": model, "kind": kind, "measured_series": len(sample),
                           "mean_seconds_per_series": float(sample.seconds.mean()),
@@ -199,7 +211,7 @@ def report(args: argparse.Namespace) -> dict:
               "national_cost_note": "Per-1000-series costs are measured. National grid count, all-model scaling and production workload remain unmeasured."}
     (args.out_dir / "summary.json").write_text(json.dumps(result, indent=2))
     lines = ["# Route B paired pilot results — CHG-0650", "",
-             "The two-model diagnostic pilot is complete. Production release and composite membership remain undecided.", "",
+             f"The {len(summaries)} requested model run(s) are complete. Production release and composite membership remain undecided.", "",
              "Both paths use the same native-footprint UHE reference coarsened conservatively to NEX cells. CarbonPlan's overlapping 0.25° reference footprints remain a separate reproduction control.", "",
              "| Model | Eligible / total units | Eligible cells | Peak memory MB |", "|---|---:|---:|---:|"]
     for row in summaries:

@@ -6,10 +6,33 @@ production-method replacement. The shade release retains its separate authority.
 
 ## Decisions adopted
 
+**2026-10-05 scope update (CHG-0654):** the user stopped further two-model
+calculations and selected a working **grid-first, ACCESS-CM2-only** pilot.
+Both the recovery coordinator and CMCC worker were terminated and verified
+absent. CMCC's 135 cell and 3 regional cached series remain intact for potential
+future work; no automatic resume is scheduled. These partial fits are not a
+completed model and are not used in the pilot. The earlier two-model comparison
+programme below is retained as history, not a prerequisite for the working pilot.
+
+Open [the working pilot](diagnostics/wbgt_outdoor_route_b_pilot/working_pilot/index.html)
+directly in a browser. It provides district/block selection, historical and future
+periods, annual charts, baseline differences, coverage and CSV downloads from the
+completed grid-first cell metrics. Build with
+`python -m tools.diagnostics.wbgt_route_b_pilot --build` (offline artifact writes,
+no climate compute). The default command is a no-write plan. The viewer,
+`pilot_yearly.csv` and the source `ACCESS-CM2/yearly_metrics.csv` are git-ignored
+for size and exist only locally; `working_pilot/validation.json` and
+`ACCESS-CM2/run_manifest.json` are committed and pin their hashes and provenance.
+Because the source metrics are the output of the now-stopped pilot compute, a
+clone cannot regenerate the viewer without re-running `wbgt_route_b_run`. Counts are explicitly
+area-weighted cell exceedance days; maxima are area-weighted cell annual maxima.
+Missing units remain visible. Production and composite membership are unchanged.
+
 | Decision | Contract |
 |---|---|
 | Method | Route B: reproduce CarbonPlan's shade → QDM → sun chain on IRT support. |
-| Aggregation | Pilot both region-first and grid-first. Grid-first is the preferred production candidate, subject to evidence. |
+| Aggregation | Grid-first selected for the working pilot. Completed region-first results remain diagnostic comparators. |
+| Models | ACCESS-CM2 only for the working pilot; further CMCC computation stopped by user choice. |
 | Reference | UHE-Daily is provisional calibration evidence, not observed outdoor WBGT truth. |
 | Calibration | 1985–2014 inclusive. Radiation is unnecessary for shade calibration. |
 | Reporting baseline | 1990–2010 inclusive; separate from calibration. |
@@ -31,10 +54,39 @@ is a separate control. This difference and incomplete island support are explici
 The [frozen paired-pilot specification](diagnostics/wbgt_outdoor_route_b_reference/PILOT_SPEC.md)
 covers two models and the verified 75-district/581-block roster, intersecting 784
 NEX cells before reference/input coverage screens. All 304 model/scenario/year
-driver shards have been extracted locally. Full reference acquisition is running;
-the paired pilot has not yet produced scientific results. Execution state is
+driver shards have been extracted locally. All 10,957 reference days were acquired
+and passed local integrity verification. The first ACCESS-CM2 run completed all
+774 cell and 630 regional QDM fits, then stopped at the solar conservation gate:
+float32 daily radiation multiplication incurred a roughly 1e-5 W/m² residual.
+CHG-0651 promotes radiation to float64 before the pinned solar function; the
+1e-8 W/m² conservation gate is unchanged. A representative real-input check
+reduced the residual to 8.53e-14 W/m². Recovery verifies that only the downstream
+solar function changed, checks original source/input signatures, and preserves
+all QDM arrays and original fit timings. The audit and recovery script are under
+`docs/diagnostics/wbgt_outdoor_route_b_pilot/`. Scientific results require the
+completed two-model report. Execution state is
 recorded in `docs/diagnostics/wbgt_outdoor_route_b_pilot/execution_status.json`.
 National scale-out and publication remain later decisions.
+
+Before the scope change, the 2026-10-05 recovery used the offline, locked
+`docs/diagnostics/wbgt_outdoor_route_b_pilot/scripts/finish_recovery.py --run`
+coordinator. **That chain is now stopped; it is not needed for the working pilot.**
+Its implementation waits for the already-running ACCESS solar/output stage, verifies
+its manifest against the cache audit, applies the existing 12-hour QDM cost gate
+to CMCC, runs that model, then writes the standard report and stratified
+`REVIEW.md`/`review_tables/` via `scripts/review_results.py`. Both scripts plan
+without writes unless `--run` is supplied. This recovery entrypoint is specific
+to the audited 9979326 solar failure; use the normal completion coordinator for
+a fresh run. Recovery logs are under `scratch/wbgt_route_b/recovery_*.log`.
+The acquired compressed reference occupies 9,482,300,289 bytes across 10,957
+files, with all 30 annual reference shards prepared.
+
+ACCESS-CM2 completed on 2026-10-05; CMCC-CM2-SR5 was subsequently stopped by the user.
+The [ACCESS interim review](diagnostics/wbgt_outdoor_route_b_pilot/INTERIM_ACCESS_REVIEW.md)
+records the completed first-model evidence: small aggregation-order effects but
+substantial count-definition differences, improved seasonal held-out performance
+with a Rajasthan upper-tail deterioration, and material future application-window
+sensitivity. It is not a completed two-model verdict or release approval.
 
 ## Evidence and limits
 
@@ -293,6 +345,11 @@ and scientific pilot execution remain in progress; code completion is not a
 scientific acceptance verdict.
 No production formulas, metric slugs, scoring membership, published artifacts,
 HANDOFF or BACKLOG entries are changed.
+
+CHG-0651 — APPLIED (user-confirmed continuation, 2026-10-05): solar float64
+input promotion, regression coverage, audited reuse of unchanged QDM arrays,
+and retention of original compute timings during recovery. The isolated pinned
+smoke passed; the IRT regression suite passed 50 tests before reporting changes.
 
 Offline tests cover dry-run isolation, exact spatial windows, changed TIFF
 layouts, HTTP fallback/range/encoding/truncation, source mutation, transfer caps,

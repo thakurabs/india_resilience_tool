@@ -1,0 +1,25 @@
+{
+  "change": "CHG-0651",
+  "started_utc": "2026-10-05T18:26:10.647238+00:00",
+  "models": [
+    "ACCESS-CM2",
+    "CMCC-CM2-SR5"
+  ],
+  "publication": false,
+  "completed_stages": [
+    "PILOT_ACCESS-CM2"
+  ],
+  "reference_complete": 10957,
+  "driver_shards_complete": 304,
+  "recovery_audit_sha256": "f4153d58520b6cce30f94a99650fc1a29f5d2a77963b9812a5cb3ac66ee94be6",
+  "prior_reference_verification_log_sha256": "2262985afff9b244d1a9c982465f0ed86c73c89d8588a0d60f974882b6f9706a",
+  "status": "STOPPED_BY_USER",
+  "updated_utc": "2026-10-05T19:09:12.166728+00:00",
+  "estimated_qdm_hours": 9.335079686017707,
+  "maximum_qdm_hours": 12,
+  "reason": "User chose a working ACCESS-CM2 grid-first pilot instead of completing second-model evidence.",
+  "next_action": "Build pilot from completed ACCESS-CM2 grid_first_cell_metrics outputs",
+  "automatic_resume": false,
+  "cmcc_cached_cell_series": 135,
+  "cmcc_cached_unit_series": 3
+}

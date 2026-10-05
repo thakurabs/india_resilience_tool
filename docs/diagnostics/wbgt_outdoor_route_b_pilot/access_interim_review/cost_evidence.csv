@@ -1,0 +1,3 @@
+model,kind,measured_series,mean_seconds_per_series,median_seconds_per_series,p95_seconds_per_series,hours_per_1000_series,scope
+ACCESS-CM2,cell,774,15.318474884238515,15.269934530486353,15.670237513858591,4.255131912288476,"full and holdout calibration, historical/future application; excludes solar, I/O and geospatial prep"
+ACCESS-CM2,unit,630,15.736880538743064,15.456437987973914,16.24870765976375,4.3713557052064065,"full and holdout calibration, historical/future application; excludes solar, I/O and geospatial prep"

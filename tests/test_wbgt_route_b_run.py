@@ -69,3 +69,27 @@ def test_distribution_score_is_not_synchronized_weather_error():
     assert result["monthly_climatology_mae_c"] == pytest.approx(0, abs=1e-12)
     assert result["days_ge_30_bias"] == 0
     assert run.distribution_errors(dates, np.full(365, np.nan), dates, values) == {"complete": False}
+
+
+def test_solar_promotes_float32_before_disaggregation(tmp_path):
+    """Daily energy must survive MetSim's multiplication before float64 output."""
+    class Solar:
+        @staticmethod
+        def solar_peak(radiation, dates, geometry, upstream, *, interpretation):
+            assert radiation.dtype == np.float64
+            assert interpretation == "consistent3600s"
+            recovered = (radiation * 24).astype(float) / 24
+            return radiation * 2, {"maximum_daily_mean_radiation_residual_wm2":
+                                   float(np.max(np.abs(recovered - radiation)))}
+
+        @staticmethod
+        def sun_delta(peak, wind):
+            return peak * .01
+
+    radiation = np.array([[123.4567], [0.], [np.nan], [-1.]], dtype=np.float32)
+    values, records = run.sun_adjustments(
+        Solar, radiation, np.ones_like(radiation), pd.date_range("2001-01-01", periods=4),
+        "gregorian", pd.DataFrame({"lat": [8.375], "elevation_m": [53.]}), tmp_path)
+    assert records[0]["conservation_max_wm2"] < 1e-8
+    assert records[0]["valid_days"] == 2
+    assert values[1, 0] == 0 and np.isnan(values[2:]).all()

@@ -198,7 +198,9 @@ def sun_adjustments(mod, rsds: np.ndarray, wind: np.ndarray, dates, calendar: st
     result = np.full_like(rsds, np.nan, dtype=float)
     records = []
     for i, row in supports.iterrows():
-        radiation, speed = rsds[:, i], wind[:, i]
+        # MetSim multiplies daily radiation by 24 before its float64 output.
+        # Promote first so float32 rounding cannot violate energy conservation.
+        radiation, speed = np.asarray(rsds[:, i], dtype=np.float64), wind[:, i]
         valid = np.isfinite(radiation) & np.isfinite(speed) & (radiation >= 0) & (speed >= 0)
         if not valid.any():
             records.append({"support": i, "valid_days": 0})
@@ -208,7 +210,7 @@ def sun_adjustments(mod, rsds: np.ndarray, wind: np.ndarray, dates, calendar: st
                                           interpretation="consistent3600s")
         residual = diagnostic["maximum_daily_mean_radiation_residual_wm2"]
         if not np.isfinite(residual) or residual > 1e-8:
-            raise ValueError("Radiation conservation gate failed")
+            raise ValueError(f"Radiation conservation gate failed at support {i}: {residual} W/m2")
         result[valid, i] = mod.sun_delta(peak, speed[valid])
         records.append({"support": i, "valid_days": int(valid.sum()), "invalid_days": int((~valid).sum()),
                         "conservation_max_wm2": residual,

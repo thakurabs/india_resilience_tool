@@ -114,3 +114,14 @@ tools/_scratch_*.py
 # graphify knowledge graph (local-only; rebuild with `/graphify . --update`)
 # --------------------------------
 graphify-out/
+
+# --------------------------------
+# Outdoor WBGT Route B pilot: large generated artifacts (local-only).
+# `ACCESS-CM2/yearly_metrics.csv` is the grid-first pilot compute output
+# (`tools.diagnostics.wbgt_route_b_run`); the other two are derived from it by
+# `python -m tools.diagnostics.wbgt_route_b_pilot --build`. The committed
+# evidence JSONs record their hashes and provenance.
+# --------------------------------
+docs/diagnostics/wbgt_outdoor_route_b_pilot/ACCESS-CM2/yearly_metrics.csv
+docs/diagnostics/wbgt_outdoor_route_b_pilot/working_pilot/pilot_yearly.csv
+docs/diagnostics/wbgt_outdoor_route_b_pilot/working_pilot/index.html

@@ -1,0 +1,40 @@
+{
+  "status": "PROBE_COMPLETE",
+  "series": 6,
+  "timings": [
+    {
+      "kind": "cell",
+      "series": 40,
+      "seconds": 25.89110006694682
+    },
+    {
+      "kind": "cell",
+      "series": 323,
+      "seconds": 16.42966805701144
+    },
+    {
+      "kind": "cell",
+      "series": 731,
+      "seconds": 16.198891746927984
+    },
+    {
+      "kind": "unit",
+      "series": 6,
+      "seconds": 21.53424669499509
+    },
+    {
+      "kind": "unit",
+      "series": 17,
+      "seconds": 21.07691027398687
+    },
+    {
+      "kind": "unit",
+      "series": 46,
+      "seconds": 21.30734515900258
+    }
+  ],
+  "total_cell_series": 774,
+  "total_unit_series": 630,
+  "elapsed_seconds": 170.68401551700663,
+  "peak_rss_mb": 2604.88671875
+}

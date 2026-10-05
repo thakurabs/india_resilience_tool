@@ -1,0 +1,21 @@
+{
+  "change": "CHG-0654",
+  "pytest": "8 passed; tests/test_wbgt_route_b_pilot.py",
+  "browser": "PASS",
+  "browser_checks": [
+    "historical source equality",
+    "future 2060-2080 source equality",
+    "CSV download and provenance",
+    "excluded units remain missing",
+    "block drilldown",
+    "maximum semantics",
+    "390px mobile width",
+    "no page errors"
+  ],
+  "browser_check_script": "../scripts/check_working_pilot.cjs",
+  "html_sha256": "5dd29628d61bae173d82a73dd3b0418c82e1054c8d4e164c6c15911dcfbf155f",
+  "units": 656,
+  "eligible_units": 630,
+  "compute_status": "CMCC worker and coordinator stopped; caches preserved",
+  "climate_recomputation": false
+}

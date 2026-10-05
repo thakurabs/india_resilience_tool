@@ -1,0 +1,28 @@
+{
+  "change": "CHG-0654",
+  "model": "ACCESS-CM2",
+  "method": "grid_first_cell_metrics",
+  "source_manifest_sha256": "886c620bf91f4ffd846399419191afe4e8130b24e7c160bd3189af7a36aae093",
+  "source_signature": "2efd5aa64386fe36ce43771ba224806274be1dd3c375d4a517ea461f4b7f4d89",
+  "source_artifact_sha256": {
+    "yearly_metrics.csv": "b44eeca3b9f04a7a98de330624ecdb264cb3194766f4d38d5594417f77f21078",
+    "radiation_diagnostics.csv": "69025a7bd70c3737875e7d3232167467a20b097afeb21b77a77fc82766c3b039",
+    "holdout_scores.csv": "f7fe2cadf6faa404ef8da02a1151506429e41cc5529d3dcd09c478c38d567c84",
+    "application_window_sensitivity.csv": "1b295a15b95c787dcd286d5bc0f94dbf697b567dcaf547da39ec4f3220111963",
+    "cell_support.csv": "72cfda07ea76c426e279568999e7e977e053729218a9e206420309fe09ce9764",
+    "unit_support.csv": "f87d68753fc54b0f9d3ebafc10856d0aa55a29d9a4acef85d1a448d9e7b9c72f",
+    "timings.csv": "69f300ce68fc29411d18d9de3e5ecb2214c6974fcad4c1def03cdbc06f2109c7",
+    "cell_metrics_2005.csv": "b3aca8fe6f0bba1c8064fc8dc4293a8e1512ffac903bf906b9640a66b9384251"
+  },
+  "units": 656,
+  "eligible_units": 630,
+  "calibration": "1985-2014",
+  "reporting_baseline": "1990-2010",
+  "annual_calendar": "365 days, excluding February 29",
+  "production": false,
+  "second_model": "Stopped by user; partial caches excluded",
+  "output_sha256": {
+    "index.html": "5dd29628d61bae173d82a73dd3b0418c82e1054c8d4e164c6c15911dcfbf155f",
+    "pilot_yearly.csv": "eeda54a12eaf58946e5d8d0b9db97c993c976e661916bc29ed80f5a393a938d7"
+  }
+}

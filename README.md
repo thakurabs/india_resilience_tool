@@ -962,12 +962,27 @@ Promotion and rollback are not implemented.
 See [shade release status, evidence and staged operator commands](docs/wbgt_shade_release.md).
 
 Outdoor WBGT Route B is an approved **diagnostic programme**, using CarbonPlan's
-shade/QDM/sun method with both regional and grid-first aggregation implemented for
-the two-model pilot. UHE-Daily is a provisional reference; calibration remains 1985–2014 and
+shade/QDM/sun method. Grid-first ACCESS-CM2 results power the working pilot;
+regional-first results remain diagnostic comparisons. UHE-Daily is a provisional
+reference; calibration remains 1985–2014 and
 IRT reporting remains 1990–2010. Preview reference acquisition without network
 access or writes with `python -m tools.data_acquisition.uhe_daily --sample --dry-run`.
 See [the programme and ordered acquisition/QC steps](docs/wbgt_outdoor_route_b.md).
 The local completion coordinator (`python -m tools.diagnostics.wbgt_route_b_finish`,
 plan by default) waits for complete inputs, verifies them, runs bounded pilot
 compute and produces diagnostic comparisons; it does not download or publish.
+The full 1985–2014 UHE reference is acquired and integrity-verified. A solar
+input-precision fix (CHG-0651) retains the radiation conservation gate; see the
+programme for the audited recovery of completed QDM calculations.
+The working pilot now uses **ACCESS-CM2 grid-first results**; further CMCC
+calculations were stopped by user choice (CHG-0654). Open
+[`working_pilot/index.html`](docs/diagnostics/wbgt_outdoor_route_b_pilot/working_pilot/index.html)
+in a browser to explore district/block annual values and download CSVs. It works
+offline. Rebuild from verified completed evidence with
+`python -m tools.diagnostics.wbgt_route_b_pilot --build`; no climate recomputation.
+The viewer, its `pilot_yearly.csv` and the `ACCESS-CM2/yearly_metrics.csv` it is
+built from are **local-only** (git-ignored for size); a fresh clone carries the
+builder, the committed evidence JSONs and their hashes, but not the artifacts.
 Production outdoor methods and composite membership have not changed.
+
+CarbonPlan's shade-WBGT method has a held-out validation against UHE-Daily: train 1985–1999, test 2000–2014, in Kerala, Rajasthan and Himachal Pradesh. It reproduces CarbonPlan's published series. It improves the seasonal cycle and ≥28/30 °C counts, but worsens Rajasthan ≥32 °C; its verdict is *proceed conditionally* to a national SPEC. See [the validation report](docs/diagnostics/wbgt_shade_carbonplan_validation/README.md). `shade-peak-v1` remains the deployed shade method.

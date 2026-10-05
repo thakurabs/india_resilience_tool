@@ -7,6 +7,27 @@ from tools.diagnostics.wbgt_route_b_report import period_metrics, paired_gaps, w
 from tools.diagnostics import wbgt_route_b_finish as finish
 
 
+def test_resume_costs_retain_measured_work_and_reject_tampering(tmp_path):
+    import hashlib
+    import json
+    from tools.diagnostics.wbgt_route_b_report import measured_timings
+
+    root = tmp_path / "model"
+    root.mkdir()
+    frame = pd.DataFrame({"kind": ["cell", "unit"], "series": [0, 0], "seconds": [20., 25.]})
+    initial = root / "initial_qdm_timings.csv"
+    frame.to_csv(initial, index=False)
+    frame.assign(seconds=0.).to_csv(root / "timings.csv", index=False)
+    frame.iloc[:1].to_csv(root / "probe_timings.csv", index=False)
+    (tmp_path / "solar_precision_cache_audit.json").write_text(json.dumps(
+        {"initial_timings_sha256": hashlib.sha256(initial.read_bytes()).hexdigest()}))
+    measured = measured_timings(root)
+    assert len(measured) == 2 and measured.seconds.sum() == 45.
+    initial.write_text(initial.read_text() + "\n")
+    with pytest.raises(ValueError, match="Changed original QDM timing"):
+        measured_timings(root)
+
+
 def test_period_mean_requires_all_years_and_values():
     frame = pd.DataFrame({"unit_index": 0, "scenario": "historical", "method": "grid_first_series",
                           "year": range(1990, 2011), "mean_c": 30., "max_c": 35.,

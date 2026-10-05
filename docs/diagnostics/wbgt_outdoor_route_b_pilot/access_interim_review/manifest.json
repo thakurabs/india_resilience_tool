@@ -1,0 +1,10 @@
+{
+  "scope": "ACCESS-CM2 only; second model pending",
+  "model_manifest_sha256": "886c620bf91f4ffd846399419191afe4e8130b24e7c160bd3189af7a36aae093",
+  "artifacts": {
+    "aggregation_gap_summary.csv": "e1395b84d7e8f2d4a44288b6a8d3b263d958ec1ddba39bda1b19bef60cdf8425",
+    "cost_evidence.csv": "92b1f82bee2e9df67ae88250933443a12e47e8157d85dd358efa5d9a27273e9a",
+    "heldout_error_comparison.csv": "d6c2c90d7e4a637cc697f3b5c47c32e13893f8fa2b78c6f7df07fa0ac4ac7a23",
+    "w1_matched_differences.csv": "8984cd792220044f73a09772abc9d742247ef269eb49f5ec0567d0224a0785ce"
+  }
+}
