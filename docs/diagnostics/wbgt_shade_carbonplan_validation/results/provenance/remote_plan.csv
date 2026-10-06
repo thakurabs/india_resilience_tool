@@ -1,0 +1,26 @@
+url,use,cached,bytes
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_CP.zarr/population/1.2,population,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_CP.zarr/population/2.2,population,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/elevation.zarr/elevation/1.0,elevation,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/elevation.zarr/elevation/2.0,elevation,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/wbgt-UHE-daily-historical.zarr/WBGT/0.6,uhe,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/wbgt-UHE-daily-historical.zarr/WBGT/0.7,uhe,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/wbgt-UHE-daily-historical.zarr/WBGT/0.8,uhe,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/wbgt-UHE-daily-historical.zarr/WBGT/0.18,uhe,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/wbgt-UHE-daily-historical.zarr/WBGT/0.19,uhe,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/wbgt-UHE-daily-historical.zarr/WBGT/0.20,uhe,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/historical-WBGT-shade.zarr/wbgt-shade/0.0.8,published historical,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/historical-WBGT-shade.zarr/wbgt-shade/0.0.9,published historical,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/historical-WBGT-shade.zarr/wbgt-shade/0.0.21,published historical,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/historical-WBGT-shade.zarr/wbgt-shade/0.0.22,published historical,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/historical-WBGT-shade.zarr/wbgt-shade/0.0.23,published historical,True,
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.8,published ssp245-2030,False,42746389.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.9,published ssp245-2030,False,42784724.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.21,published ssp245-2030,False,42837140.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.22,published ssp245-2030,False,41994105.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.23,published ssp245-2030,False,42144746.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.8,published ssp245-2050,False,42656554.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.9,published ssp245-2050,False,42678289.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.21,published ssp245-2050,False,42763597.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.22,published ssp245-2050,False,41900136.0
+https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.23,published ssp245-2050,False,42095588.0

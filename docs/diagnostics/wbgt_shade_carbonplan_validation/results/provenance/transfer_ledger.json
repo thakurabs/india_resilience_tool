@@ -1,0 +1,131 @@
+{
+ "cap_bytes": 2000000000,
+ "events": [
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/all_regions_and_cities.json",
+   "bytes": 190178657,
+   "kind": "geometry-stream",
+   "utc": "2026-10-03T07:33:03Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/.zmetadata",
+   "bytes": 3224,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:33:13Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/processing_id/0",
+   "bytes": 1638,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:33:14Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/processing_id/1",
+   "bytes": 1508,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:33:16Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/gcm/0",
+   "bytes": 475,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:33:18Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/.zmetadata",
+   "bytes": 3224,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:33:20Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/processing_id/0",
+   "bytes": 1638,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:33:22Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/processing_id/1",
+   "bytes": 1508,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:33:24Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/gcm/0",
+   "bytes": 475,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:33:26Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/time/0",
+   "bytes": 857,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:34:12Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.8",
+   "bytes": 42746389,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:34:22Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.9",
+   "bytes": 42784724,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:34:31Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.21",
+   "bytes": 42837140,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:34:40Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.22",
+   "bytes": 41994105,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:34:48Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2030-WBGT-shade.zarr/wbgt-shade/0.0.23",
+   "bytes": 42144746,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:34:55Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/time/0",
+   "bytes": 853,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:34:58Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.8",
+   "bytes": 42656554,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:35:05Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.9",
+   "bytes": 42678289,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:35:13Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.21",
+   "bytes": 42763597,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:35:21Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.22",
+   "bytes": 41900136,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:35:29Z"
+  },
+  {
+   "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/ssp245-2050-WBGT-shade.zarr/wbgt-shade/0.0.23",
+   "bytes": 42095588,
+   "kind": "zarr-object",
+   "utc": "2026-10-03T07:35:37Z"
+  }
+ ]
+}

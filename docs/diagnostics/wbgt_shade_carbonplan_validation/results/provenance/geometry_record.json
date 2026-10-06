@@ -1,0 +1,7 @@
+{
+  "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/all_regions_and_cities.json",
+  "bytes": 190178657,
+  "sha256": "54fb4914de8d36fe9057495e13d0b69c5687a222c22c9548ee1e62e07495f616",
+  "kept": 736,
+  "stored": "filtered subset only (CHG-0639 declared exception)"
+}

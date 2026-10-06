@@ -1,0 +1,50 @@
+dominant_district,seasonal_mean_abs_monthly_bias,p90_bias,p95_bias,p99_bias,days_ge_28_error,days_ge_30_error,days_ge_32_error,units
+Rajasthan / Ajmer,0,0,4,6,0,6,6,6
+Rajasthan / Alwar,0,0,0,0,0,0,8,13
+Rajasthan / Anoopgarh,0,0,3,4,0,0,4,4
+Rajasthan / Balotra,0,0,0,8,0,0,8,8
+Rajasthan / Banswara,0,0,0,15,7,1,15,15
+Rajasthan / Baran,0,0,4,13,8,1,16,16
+Rajasthan / Barmer,0,0,0,10,0,0,10,10
+Rajasthan / Beawar,0,1,6,7,0,6,7,7
+Rajasthan / Bharatpur,0,0,0,0,0,0,0,12
+Rajasthan / Bhilwara,0,0,11,12,0,12,12,12
+Rajasthan / Bikaner,0,4,7,9,0,0,9,9
+Rajasthan / Bundi,0,1,7,8,0,0,8,8
+Rajasthan / Chittorgarh,0,0,12,17,1,15,17,17
+Rajasthan / Churu,0,0,0,6,0,0,12,13
+Rajasthan / Dausa,0,0,0,1,0,0,10,13
+Rajasthan / Deeg,0,0,0,0,0,0,0,12
+Rajasthan / Dholpur,0,0,0,0,0,0,0,12
+Rajasthan / Didwana Kuchaman,0,0,0,6,0,0,10,10
+Rajasthan / Dudu,0,0,0,0,0,0,2,2
+Rajasthan / Dungarpur,0,0,0,13,0,0,13,13
+Rajasthan / Ganganagar,0,0,0,3,0,0,1,7
+Rajasthan / Gangapurcity,0,0,0,0,0,0,7,7
+Rajasthan / Hanumangarh,0,0,0,1,1,0,3,13
+Rajasthan / Jaipur,0,0,0,0,0,0,9,9
+Rajasthan / Jaipur Gramin,0,0,0,0,0,0,15,15
+Rajasthan / Jaisalmer,0,0,3,4,0,0,4,4
+Rajasthan / Jalore,0,0,1,14,0,0,14,14
+Rajasthan / Jhalawar,0,4,11,19,12,10,20,20
+Rajasthan / Jhunjhunu,0,0,0,0,0,0,13,13
+Rajasthan / Jodhpur,0,0,1,1,0,0,1,1
+Rajasthan / Jodhpur Gramin,0,0,10,13,0,0,13,13
+Rajasthan / Karauli,0,0,0,0,0,0,7,11
+Rajasthan / Kekri,0,0,1,5,0,1,6,6
+Rajasthan / Khairthal-Tijara,0,0,0,0,0,0,8,9
+Rajasthan / Kota,0,0,5,9,0,0,9,9
+Rajasthan / Kotputli-Behror,0,0,0,0,0,0,11,12
+Rajasthan / Nagaur,0,0,5,7,0,0,7,7
+Rajasthan / Neem Ka Thana,0,0,0,0,0,0,8,8
+Rajasthan / Pali,0,0,0,8,0,0,8,8
+Rajasthan / Phalodi,0,0,2,2,0,0,2,2
+Rajasthan / Pratapgarh,0,1,6,12,6,8,12,12
+Rajasthan / Rajsamand,0,1,6,12,1,12,11,12
+Rajasthan / Salumbar,0,0,0,0,0,0,3,3
+Rajasthan / Sawai Madhopur,0,0,0,4,0,0,4,4
+Rajasthan / Shahpura,0,0,5,6,0,3,6,6
+Rajasthan / Sikar,0,0,0,0,0,0,8,8
+Rajasthan / Sirohi,0,0,0,7,0,0,10,10
+Rajasthan / Tonk,0,0,1,5,0,0,9,9
+Rajasthan / Udaipur,0,0,2,6,0,10,12,15

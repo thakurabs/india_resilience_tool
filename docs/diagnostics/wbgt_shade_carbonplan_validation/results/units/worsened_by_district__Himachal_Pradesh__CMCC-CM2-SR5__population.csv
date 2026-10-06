@@ -1,0 +1,13 @@
+dominant_district,seasonal_mean_abs_monthly_bias,p90_bias,p95_bias,p99_bias,days_ge_28_error,days_ge_30_error,days_ge_32_error,units
+Himachal Pradesh / Bilaspur,0,1,0,0,0,0,0,3
+Himachal Pradesh / Chamba,0,1,3,3,0,0,0,9
+Himachal Pradesh / Hamirpur,0,2,2,1,1,0,0,5
+Himachal Pradesh / Kangra,0,1,2,0,0,1,0,19
+Himachal Pradesh / Kinnaur,0,1,1,1,0,0,0,7
+Himachal Pradesh / Kullu,0,3,2,3,0,0,0,5
+Himachal Pradesh / Lahul and Spiti,0,0,0,1,0,0,0,4
+Himachal Pradesh / Mandi,0,2,3,4,2,0,0,14
+Himachal Pradesh / Shimla,0,4,5,6,0,0,0,13
+Himachal Pradesh / Sirmaur,0,2,3,6,1,2,0,15
+Himachal Pradesh / Solan,0,2,3,2,0,0,0,9
+Himachal Pradesh / Una,0,2,0,0,0,0,0,5

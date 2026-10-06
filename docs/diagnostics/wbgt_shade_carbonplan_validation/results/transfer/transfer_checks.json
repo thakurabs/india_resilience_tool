@@ -1,0 +1,41 @@
+{
+  "unique_processing_ids": true,
+  "states": {
+    "Kerala": {
+      "admin_units": 166,
+      "weight_sum_max_dev": 2.220446049250313e-16,
+      "zero_coverage_units": [],
+      "double_counting": {
+        "max_double_counted_fraction": 0.003949816300109774,
+        "units_over_0.001": 2,
+        "districts_sharing_lgd_code": 0
+      },
+      "units_without_series": []
+    },
+    "Rajasthan": {
+      "admin_units": 397,
+      "weight_sum_max_dev": 2.220446049250313e-16,
+      "zero_coverage_units": [],
+      "double_counting": {
+        "max_double_counted_fraction": 2.891120093363152e-07,
+        "units_over_0.001": 0,
+        "districts_sharing_lgd_code": 29
+      },
+      "units_without_series": []
+    },
+    "Himachal Pradesh": {
+      "admin_units": 93,
+      "weight_sum_max_dev": 2.220446049250313e-16,
+      "zero_coverage_units": [],
+      "double_counting": {
+        "max_double_counted_fraction": 0.21447397922899697,
+        "units_over_0.001": 3,
+        "districts_sharing_lgd_code": 0
+      },
+      "units_without_series": []
+    }
+  },
+  "v1_unmatched": 0,
+  "seconds": 81.0,
+  "peak_rss_mb": 415.2
+}

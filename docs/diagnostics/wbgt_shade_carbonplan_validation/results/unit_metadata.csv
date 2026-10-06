@@ -1,0 +1,737 @@
+processing_id,hierid,unit_type,lat,lon,dominant_district,home_state
+6395,city:Jaisalmer,city,26.875,70.875,Rajasthan / Jaisalmer,Rajasthan
+6412,city:Gadra Road,city,25.625,70.625,Rajasthan / Barmer,Rajasthan
+6434,city:Ramsar,city,25.625,70.875,Rajasthan / Barmer,Rajasthan
+6461,city:Chauhatan,city,25.5,71.125,Rajasthan / Barmer,Rajasthan
+6462,city:Baisala,city,25.875,71.25,Rajasthan / Barmer,Rajasthan
+6479,city:Barmer,city,25.75,71.375,Rajasthan / Barmer,Rajasthan
+6486,city:Pokaran,city,26.875,71.875,Rajasthan / Jaisalmer,Rajasthan
+6498,city:Dhorimanna,city,25.125,71.375,Rajasthan / Barmer,Rajasthan
+6506,city:Baetu,city,25.875,71.875,Rajasthan / Balotra,Rajasthan
+6513,city:Phalodi,city,27.125,72.375,Rajasthan / Phalodi,Rajasthan
+6520,city:Gudha Milani,city,25.125,71.625,Rajasthan / Barmer,Rajasthan
+6525,city:Sindari,city,25.625,71.875,Rajasthan / Balotra,Rajasthan
+6533,city:Shergarh,city,26.375,72.375,Rajasthan / Jodhpur Gramin,Rajasthan
+6535,city:N/A,city,25.125,71.875,Rajasthan / Jalore,Rajasthan
+6537,city:Sri Ganganagar,city,29.875,73.875,Rajasthan / Ganganagar,Rajasthan
+6539,city:Kolayat,city,27.875,72.875,Rajasthan / Bikaner,Rajasthan
+6540,city:N/A,city,25.125,71.875,Rajasthan / Jalore,Rajasthan
+6543,city:Sanchore,city,24.75,71.875,Rajasthan / Jalore,Rajasthan
+6545,city:Balotra,city,25.875,72.25,Rajasthan / Balotra,Rajasthan
+6549,city:Balesar,city,26.375,72.5,Rajasthan / Jodhpur Gramin,Rajasthan
+6558,city:Bikaner,city,28.0,73.375,Rajasthan / Bikaner,Rajasthan
+6564,city:Siwana,city,25.625,72.375,Rajasthan / Balotra,Rajasthan
+6571,city:Osiyan,city,26.625,72.875,Rajasthan / Jodhpur Gramin,Rajasthan
+6573,city:Samdari,city,25.875,72.625,Rajasthan / Balotra,Rajasthan
+6574,city:Bhinmal,city,25.0,72.375,Rajasthan / Jalore,Rajasthan
+6576,city:Raniwar,city,24.75,72.125,Rajasthan / Jalore,Rajasthan
+6585,city:Hanumanangarh Junction,city,29.625,74.375,Rajasthan / Hanumangarh,Rajasthan
+6586,city:Marwar Mathaniya,city,26.625,73.0,Rajasthan / Jodhpur Gramin,Rajasthan
+6590,city:Pathankot,city,32.25,75.625,Himachal Pradesh / Kangra,Himachal Pradesh
+6593,city:Nokha,city,27.625,73.375,Rajasthan / Bikaner,Rajasthan
+6594,city:Jodhpur,city,26.25,73.0,Rajasthan / Jodhpur,Rajasthan
+6596,city:Jalore,city,25.375,72.625,Rajasthan / Jalore,Rajasthan
+6597,city:N/A,city,26.125,72.875,Rajasthan / Jodhpur Gramin,Rajasthan
+6603,city:N/A,city,26.75,73.375,Rajasthan / Jodhpur Gramin,Rajasthan
+6606,city:Ahore,city,25.375,72.875,Rajasthan / Jalore,Rajasthan
+6608,city:Khinwasar,city,26.875,73.375,Rajasthan / Nagaur,Rajasthan
+6614,city:Chamba,city,32.625,76.125,Himachal Pradesh / Chamba,Himachal Pradesh
+6618,city:Sri Dungargarh,city,28.125,74.0,Rajasthan / Bikaner,Rajasthan
+6622,city:Nagaur,city,27.125,73.75,Rajasthan / Nagaur,Rajasthan
+6624,city:Asop,city,26.875,73.625,Rajasthan / Jodhpur Gramin,Rajasthan
+6625,city:Sirohi,city,24.875,72.875,Rajasthan / Sirohi,Rajasthan
+6628,city:Abu Road,city,24.458333333333332,72.79166666666667,Rajasthan / Sirohi,Rajasthan
+6629,city:Pali,city,25.791666666666668,73.29166666666667,Rajasthan / Pali,Rajasthan
+6632,city:Piparcity,city,26.375,73.625,Rajasthan / Jodhpur Gramin,Rajasthan
+6634,city:Sumerpur,city,25.125,73.125,Rajasthan / Pali,Rajasthan
+6642,city:Sardarshahar,city,28.375,74.5,Rajasthan / Churu,Rajasthan
+6643,city:Pindwara,city,24.875,73.125,Rajasthan / Sirohi,Rajasthan
+6648,city:Dharamshala,city,32.125,76.375,Himachal Pradesh / Kangra,Himachal Pradesh
+6649,city:Kangra,city,32.125,76.25,Himachal Pradesh / Kangra,Himachal Pradesh
+6654,city:Bidasar,city,27.875,74.375,Rajasthan / Churu,Rajasthan
+6656,city:Nagrota Bagwan,city,32.125,76.375,Himachal Pradesh / Kangra,Himachal Pradesh
+6664,city:Sojat,city,25.875,73.625,Rajasthan / Pali,Rajasthan
+6666,city:Ladnun,city,27.625,74.375,Rajasthan / Didwana Kuchaman,Rajasthan
+6667,city:Palampur,city,32.125,76.5,Himachal Pradesh / Kangra,Himachal Pradesh
+6668,city:Ratangarh,city,28.125,74.625,Rajasthan / Churu,Rajasthan
+6669,city:Merta City,city,26.625,74.125,Rajasthan / Nagaur,Rajasthan
+6670,city:Sujangarh,city,27.625,74.375,Rajasthan / Churu,Rajasthan
+6675,city:Una,city,31.375,76.25,Himachal Pradesh / Una,Himachal Pradesh
+6680,city:Baijnath,city,32.125,76.625,Himachal Pradesh / Kangra,Himachal Pradesh
+6683,city:Hamirpur,city,31.625,76.5,Himachal Pradesh / Hamirpur,Himachal Pradesh
+6685,city:N/A,city,24.625,73.375,Rajasthan / Udaipur,Rajasthan
+6689,city:Churu,city,28.375,74.875,Rajasthan / Churu,Rajasthan
+6690,city:Didwana,city,27.375,74.625,Rajasthan / Didwana Kuchaman,Rajasthan
+6691,city:Gogunda,city,24.75,73.625,Rajasthan / Udaipur,Rajasthan
+6694,city:N/A,city,31.875,76.625,Himachal Pradesh / Mandi,Himachal Pradesh
+6698,city:Joginder Nagar,city,31.875,76.875,Himachal Pradesh / Mandi,Himachal Pradesh
+6699,city:N/A,city,24.375,73.375,Rajasthan / Udaipur,Rajasthan
+6700,city:Deogarh,city,25.625,73.875,Rajasthan / Rajsamand,Rajasthan
+6702,city:Fatehpur Shekhawati,city,28.0,74.875,Rajasthan / Sikar,Rajasthan
+6707,city:Kelwa,city,25.125,73.875,Rajasthan / Rajsamand,Rajasthan
+6708,city:Bhim,city,25.625,74.125,Rajasthan / Rajsamand,Rajasthan
+6711,city:Udaipur,city,24.625,73.75,Rajasthan / Udaipur,Rajasthan
+6713,city:Rajsamand,city,25.0,73.875,Rajasthan / Rajsamand,Rajasthan
+6714,city:Nathdwara,city,24.875,73.875,Rajasthan / Rajsamand,Rajasthan
+6717,city:Makrana,city,27.041666666666668,74.70833333333333,Rajasthan / Didwana Kuchaman,Rajasthan
+6718,city:Beawar,city,26.125,74.375,Rajasthan / Beawar,Rajasthan
+6719,city:Rajgarh,city,28.625,75.375,Rajasthan / Churu,Rajasthan
+6720,city:Laxmangarh,city,27.875,75.125,Rajasthan / Sikar,Rajasthan
+6724,city:Drang,city,31.875,76.875,Himachal Pradesh / Mandi,Himachal Pradesh
+6730,city:Mandi,city,31.625,76.875,Himachal Pradesh / Mandi,Himachal Pradesh
+6732,city:N/A,city,26.125,74.375,Rajasthan / Beawar,Rajasthan
+6733,city:Kherwara,city,23.875,73.625,Rajasthan / Udaipur,Rajasthan
+6735,city:Slapper,city,31.375,76.875,Himachal Pradesh / Bilaspur,Himachal Pradesh
+6737,city:Nerchowk,city,31.625,76.875,Himachal Pradesh / Mandi,Himachal Pradesh
+6739,city:Kuchaman,city,27.125,74.875,Rajasthan / Didwana Kuchaman,Rajasthan
+6740,city:Kullu,city,31.875,77.125,Himachal Pradesh / Kullu,Himachal Pradesh
+6741,city:Sundernagar,city,31.625,76.875,Himachal Pradesh / Mandi,Himachal Pradesh
+6742,city:Parbatsar,city,26.875,74.75,Rajasthan / Didwana Kuchaman,Rajasthan
+6743,city:Ajmer,city,26.5,74.625,Rajasthan / Ajmer,Rajasthan
+6744,city:Rishabdeo,city,24.125,73.625,Rajasthan / Udaipur,Rajasthan
+6745,city:Mukandgarh,city,27.875,75.125,Rajasthan / Jhunjhunu,Rajasthan
+6746,city:Asind,city,25.75,74.375,Rajasthan / Bhilwara,Rajasthan
+6751,city:Sikar,city,27.625,75.125,Rajasthan / Sikar,Rajasthan
+6755,city:Jhunjhunu,city,28.125,75.375,Rajasthan / Jhunjhunu,Rajasthan
+6756,city:Nawalgarh,city,27.875,75.25,Rajasthan / Jhunjhunu,Rajasthan
+6757,city:Dungarpur,city,23.875,73.625,Rajasthan / Dungarpur,Rajasthan
+6766,city:Gangapur,city,25.125,74.25,Rajasthan / Bhilwara,Rajasthan
+6767,city:Nawa,city,27.125,75.0,Rajasthan / Didwana Kuchaman,Rajasthan
+6768,city:Pilani,city,28.375,75.625,Rajasthan / Jhunjhunu,Rajasthan
+6769,city:Baddi,city,30.875,76.875,Himachal Pradesh / Solan,Himachal Pradesh
+6771,city:Kishangarh,city,26.625,74.875,Rajasthan / Ajmer,Rajasthan
+6773,city:Nasirabad,city,26.375,74.75,Rajasthan / Ajmer,Rajasthan
+6777,city:Simalwara,city,23.625,73.75,Rajasthan / Dungarpur,Rajasthan
+6780,city:Bijainagar,city,25.875,74.625,Rajasthan / Beawar,Rajasthan
+6781,city:Dhanbola,city,23.625,73.875,Rajasthan / Dungarpur,Rajasthan
+6784,city:Gulabpura,city,25.875,74.625,Rajasthan / Bhilwara,Rajasthan
+6787,city:Chirawa,city,28.25,75.625,Rajasthan / Jhunjhunu,Rajasthan
+6790,city:Salumbar,city,24.125,74.125,Rajasthan / Salumbar,Rajasthan
+6791,city:Kapasan,city,24.875,74.375,Rajasthan / Chittorgarh,Rajasthan
+6792,city:N/A,city,23.625,73.875,Rajasthan / Dungarpur,Rajasthan
+6794,city:Guda Gaurji,city,27.875,75.625,Rajasthan / Jhunjhunu,Rajasthan
+6795,city:Udaipurwati,city,27.625,75.375,Rajasthan / Neem Ka Thana,Rajasthan
+6800,city:Bhinder,city,24.5,74.125,Rajasthan / Udaipur,Rajasthan
+6803,city:Shakrodi,city,31.25,77.125,Himachal Pradesh / Mandi,Himachal Pradesh
+6804,city:Kalka,city,30.875,76.875,Himachal Pradesh / Solan,Himachal Pradesh
+6806,city:Mandal,city,25.375,74.625,Rajasthan / Bhilwara,Rajasthan
+6811,city:Renwal,city,27.125,75.25,Rajasthan / Jaipur Gramin,Rajasthan
+6816,city:Sambhar,city,26.875,75.125,Rajasthan / Jaipur Gramin,Rajasthan
+6820,city:Khandela,city,27.625,75.5,Rajasthan / Sikar,Rajasthan
+6821,city:Bhilwara,city,25.375,74.625,Rajasthan / Bhilwara,Rajasthan
+6822,city:Shimla,city,31.125,77.125,Himachal Pradesh / Shimla,Himachal Pradesh
+6824,city:Phulera,city,26.875,75.25,Rajasthan / Jaipur Gramin,Rajasthan
+6825,city:Sagwara,city,23.625,74.0,Rajasthan / Dungarpur,Rajasthan
+6829,city:Solan,city,30.875,77.125,Himachal Pradesh / Solan,Himachal Pradesh
+6834,city:Singhana,city,28.125,75.875,Rajasthan / Jhunjhunu,Rajasthan
+6835,city:Khetri,city,28.0,75.875,Rajasthan / Neem Ka Thana,Rajasthan
+6840,city:Sarwar,city,26.125,75.0,Rajasthan / Kekri,Rajasthan
+6841,city:Shri Madhopur,city,27.375,75.625,Rajasthan / Neem Ka Thana,Rajasthan
+6842,city:Ringas,city,27.375,75.625,Rajasthan / Neem Ka Thana,Rajasthan
+6846,city:Chittorgarh,city,24.875,74.625,Rajasthan / Chittorgarh,Rajasthan
+6847,city:Neem Ka Thana,city,27.625,75.75,Rajasthan / Neem Ka Thana,Rajasthan
+6848,city:Partapur,city,23.625,74.125,Rajasthan / Banswara,Rajasthan
+6854,city:Shahpura,city,25.625,74.875,Rajasthan / Shahpura,Rajasthan
+6856,city:Bari Sadri,city,24.375,74.375,Rajasthan / Chittorgarh,Rajasthan
+6857,city:N/A,city,23.875,74.375,Rajasthan / Pratapgarh,Rajasthan
+6860,city:N/A,city,30.625,77.125,Himachal Pradesh / Sirmaur,Himachal Pradesh
+6863,city:N/A,city,27.125,75.625,Rajasthan / Jaipur Gramin,Rajasthan
+6867,city:Kekri,city,26.0,75.125,Rajasthan / Kekri,Rajasthan
+6868,city:Dhariawad,city,24.125,74.375,Rajasthan / Pratapgarh,Rajasthan
+6872,city:N/A,city,30.541666666666668,77.20833333333333,Himachal Pradesh / Sirmaur,Himachal Pradesh
+6874,city:Bagru,city,26.875,75.625,Rajasthan / Jaipur,Rajasthan
+6876,city:Nimbahera,city,24.625,74.625,Rajasthan / Chittorgarh,Rajasthan
+6877,city:Pindarma,city,23.375,74.25,Rajasthan / Banswara,Rajasthan
+6878,city:Bagidora,city,23.375,74.375,Rajasthan / Banswara,Rajasthan
+6879,city:N/A,city,23.291666666666668,74.20833333333333,Rajasthan / Banswara,Rajasthan
+6882,city:Chomu,city,27.125,75.625,Rajasthan / Jaipur Gramin,Rajasthan
+6884,city:Malpura,city,26.375,75.375,Rajasthan / Tonk,Rajasthan
+6892,city:Jaipur,city,27.0,75.75,Rajasthan / Jaipur,Rajasthan
+6893,city:Chokla,city,23.375,74.375,Rajasthan / Banswara,Rajasthan
+6897,city:Banswara,city,23.625,74.375,Rajasthan / Banswara,Rajasthan
+6901,city:Dadahu,city,30.625,77.375,Himachal Pradesh / Sirmaur,Himachal Pradesh
+6903,city:Shahpur,city,27.375,75.875,Rajasthan / Jaipur Gramin,Rajasthan
+6904,city:Pipalkhunt,city,23.875,74.625,Rajasthan / Pratapgarh,Rajasthan
+6907,city:Manoharpur,city,27.375,75.875,Rajasthan / Jaipur Gramin,Rajasthan
+6909,city:Kansli,city,27.625,76.125,Rajasthan / Kotputli-Behror,Rajasthan
+6910,city:Jahazpur,city,25.625,75.375,Rajasthan / Shahpura,Rajasthan
+6914,city:Amer,city,27.0,75.875,Rajasthan / Jaipur,Rajasthan
+6916,city:Kotputli,city,27.625,76.125,Rajasthan / Kotputli-Behror,Rajasthan
+6917,city:Deoli,city,25.75,75.375,Rajasthan / Tonk,Rajasthan
+6919,city:N/A,city,27.125,75.875,Rajasthan / Jaipur,Rajasthan
+6920,city:Kushalgarh,city,23.125,74.375,Rajasthan / Banswara,Rajasthan
+6922,city:Behror,city,27.875,76.375,Rajasthan / Kotputli-Behror,Rajasthan
+6924,city:Sumeli,city,26.875,75.875,Rajasthan / Jaipur,Rajasthan
+6925,city:Padi Meena,city,26.875,75.875,Rajasthan / Jaipur,Rajasthan
+6926,city:Pratapgarh,city,24.125,74.75,Rajasthan / Pratapgarh,Rajasthan
+6933,city:Neemrana,city,27.875,76.375,Rajasthan / Kotputli-Behror,Rajasthan
+6938,city:Paonta Sahib,city,30.375,77.625,Himachal Pradesh / Sirmaur,Himachal Pradesh
+6942,city:Bansur,city,27.625,76.375,Rajasthan / Kotputli-Behror,Rajasthan
+6946,city:N/A,city,27.625,76.375,Rajasthan / Kotputli-Behror,Rajasthan
+6948,city:Bassi,city,26.875,76.125,Rajasthan / Jaipur Gramin,Rajasthan
+6949,city:Chaksu,city,26.625,75.875,Rajasthan / Jaipur Gramin,Rajasthan
+6957,city:Tonk,city,26.125,75.875,Rajasthan / Tonk,Rajasthan
+6962,city:Thanagazi,city,27.375,76.375,Rajasthan / Alwar,Rajasthan
+6968,city:Niwai,city,26.375,75.875,Rajasthan / Tonk,Rajasthan
+6977,city:Bhiwadi,city,28.25,76.875,Rajasthan / Khairthal-Tijara,Rajasthan
+6979,city:Bundi,city,25.375,75.625,Rajasthan / Bundi,Rajasthan
+6985,city:Khairthal,city,27.875,76.625,Rajasthan / Khairthal-Tijara,Rajasthan
+6988,city:Khushkhera,city,28.125,76.875,Rajasthan / Khairthal-Tijara,Rajasthan
+6994,city:Alwar,city,27.5,76.625,Rajasthan / Alwar,Rajasthan
+6995,city:Dausa,city,26.875,76.375,Rajasthan / Dausa,Rajasthan
+6996,city:Nainwa,city,25.875,75.875,Rajasthan / Bundi,Rajasthan
+7001,city:Kishangarh,city,27.875,76.625,Rajasthan / Khairthal-Tijara,Rajasthan
+7003,city:Rawatbhata,city,24.875,75.625,Rajasthan / Chittorgarh,Rajasthan
+7012,city:N/A,city,27.125,76.5,Rajasthan / Alwar,Rajasthan
+7019,city:N/A,city,25.625,75.875,Rajasthan / Bundi,Rajasthan
+7021,city:Rajgarh,city,27.25,76.625,Rajasthan / Alwar,Rajasthan
+7025,city:Lalsot,city,26.625,76.375,Rajasthan / Dausa,Rajasthan
+7027,city:Kota,city,25.125,75.875,Rajasthan / Kota,Rajasthan
+7030,city:Bandikui,city,27.125,76.625,Rajasthan / Dausa,Rajasthan
+7031,city:Sikandra,city,26.875,76.625,Rajasthan / Dausa,Rajasthan
+7033,city:Ramgarh,city,27.625,76.875,Rajasthan / Alwar,Rajasthan
+7048,city:N/A,city,26.375,76.375,Rajasthan / Dausa,Rajasthan
+7056,city:Lachhmangarh,city,27.375,76.875,Rajasthan / Alwar,Rajasthan
+7059,city:Lakheri,city,25.625,76.125,Rajasthan / Bundi,Rajasthan
+7061,city:Sakrai,city,26.875,76.625,Rajasthan / Dausa,Rajasthan
+7064,city:Bamanwas,city,26.625,76.625,Rajasthan / Gangapurcity,Rajasthan
+7065,city:Sawai Madhopur,city,26.0,76.375,Rajasthan / Sawai Madhopur,Rajasthan
+7070,city:Mandawar,city,27.125,76.875,Rajasthan / Dausa,Rajasthan
+7071,city:Pahari,city,27.625,77.125,Rajasthan / Deeg,Rajasthan
+7072,city:Govindgarh,city,27.5,77.0,Rajasthan / Alwar,Rajasthan
+7078,city:Gangdhar,city,23.875,75.625,Rajasthan / Jhalawar,Rajasthan
+7082,city:Sikari,city,27.625,77.125,Rajasthan / Deeg,Rajasthan
+7086,city:Todabhim,city,26.875,76.875,Rajasthan / Gangapurcity,Rajasthan
+7087,city:Bhawani Mandi,city,24.375,75.875,Rajasthan / Jhalawar,Rajasthan
+7096,city:Suket,city,24.625,76.0,Rajasthan / Kota,Rajasthan
+7098,city:Mahwa,city,27.125,76.875,Rajasthan / Dausa,Rajasthan
+7101,city:Nagar,city,27.375,77.125,Rajasthan / Deeg,Rajasthan
+7102,city:Gangapur,city,26.5,76.75,Rajasthan / Gangapurcity,Rajasthan
+7103,city:Kherli,city,27.125,77.125,Rajasthan / Alwar,Rajasthan
+7111,city:Itawa,city,25.625,76.375,Rajasthan / Kota,Rajasthan
+7115,city:Kaman,city,27.625,77.375,Rajasthan / Deeg,Rajasthan
+7116,city:Pipaliya,city,24.541666666666668,76.04166666666667,Rajasthan / Jhalawar,Rajasthan
+7122,city:Sri Mahaveer Ji,city,26.625,76.875,Rajasthan / Karauli,Rajasthan
+7123,city:Sapotra,city,26.375,76.75,Rajasthan / Karauli,Rajasthan
+7133,city:Mau,city,26.875,77.125,Rajasthan / Karauli,Rajasthan
+7135,city:Nadbai,city,27.125,77.125,Rajasthan / Bharatpur,Rajasthan
+7136,city:Jhalawar,city,24.625,76.125,Rajasthan / Jhalawar,Rajasthan
+7139,city:Deeg,city,27.375,77.375,Rajasthan / Deeg,Rajasthan
+7140,city:Hindaun,city,26.75,77.125,Rajasthan / Karauli,Rajasthan
+7142,city:Jhalrapatan,city,24.625,76.125,Rajasthan / Jhalawar,Rajasthan
+7143,city:Kali Devi,city,26.375,76.875,Rajasthan / Karauli,Rajasthan
+7149,city:Karauli,city,26.5,77.125,Rajasthan / Karauli,Rajasthan
+7156,city:Kumher,city,27.375,77.375,Rajasthan / Deeg,Rajasthan
+7160,city:Baran,city,25.125,76.5,Rajasthan / Baran,Rajasthan
+7170,city:Bayana,city,26.875,77.375,Rajasthan / Bharatpur,Rajasthan
+7181,city:Uchain,city,27.125,77.375,Rajasthan / Bharatpur,Rajasthan
+7183,city:Bharatpur,city,27.125,77.5,Rajasthan / Bharatpur,Rajasthan
+7221,city:Rupbas,city,27.0,77.625,Rajasthan / Bharatpur,Rajasthan
+7222,city:Aklera,city,24.375,76.625,Rajasthan / Jhalawar,Rajasthan
+7231,city:Baseri,city,26.75,77.625,Rajasthan / Dholpur,Rajasthan
+7239,city:Chhipabarod,city,24.625,76.625,Rajasthan / Baran,Rajasthan
+7254,city:Bari,city,26.625,77.625,Rajasthan / Dholpur,Rajasthan
+7257,city:N/A,city,24.75,76.875,Rajasthan / Baran,Rajasthan
+7259,city:Chhabra,city,24.625,76.875,Rajasthan / Baran,Rajasthan
+7284,city:Manoharthana,city,24.25,76.875,Rajasthan / Jhalawar,Rajasthan
+7297,city:Dhaulpur,city,26.625,77.875,Rajasthan / Dholpur,Rajasthan
+7301,city:Motipura Chauki,city,24.625,77.125,Rajasthan / Baran,Rajasthan
+7344,city:Rajakhera,city,26.875,78.125,Rajasthan / Dholpur,Rajasthan
+7523,city:Manjeshwar,city,12.75,74.875,Kerala / Kasaragod,Kerala
+7547,city:Neeleshwaram,city,12.425,75.025,Kerala / Kasaragod,Kerala
+7586,city:Payyanur,city,12.125,75.25,Kerala / Kannur,Kerala
+7608,city:Kannur,city,12.041666666666666,75.29166666666667,Kerala / Kannur,Kerala
+7640,city:Taliparamba,city,12.125,75.375,Kerala / Kannur,Kerala
+7668,city:Thalassery,city,11.675,75.525,Kerala / Kannur,Kerala
+7723,city:Kozhikode,city,11.25,75.875,Kerala / Kozhikode,Kerala
+7778,city:Guruvayur,city,10.825,75.975,Kerala / Malappuram,Kerala
+7784,city:Mananthavady,city,11.875,76.0,Kerala / Wayanad,Kerala
+7796,city:Malappuram,city,11.0,76.0,Kerala / Malappuram,Kerala
+7802,city:Kalpetta,city,11.625,76.125,Kerala / Wayanad,Kerala
+7808,city:Areecode,city,11.25,76.125,Kerala / Malappuram,Kerala
+7817,city:Nayadampoyil,city,11.375,76.125,Kerala / Malappuram,Kerala
+7823,city:Manjeri,city,11.125,76.125,Kerala / Malappuram,Kerala
+7824,city:Valanchery,city,10.875,76.125,Kerala / Malappuram,Kerala
+7827,city:Perumpilavu,city,10.625,76.125,Kerala / Thrissur,Kerala
+7829,city:Ambalavayal,city,11.625,76.125,Kerala / Wayanad,Kerala
+7838,city:Sulthan Bathery,city,11.625,76.25,Kerala / Wayanad,Kerala
+7839,city:Vadanappally,city,10.5,76.125,Kerala / Thrissur,Kerala
+7842,city:Vadapuram,city,11.25,76.125,Kerala / Malappuram,Kerala
+7851,city:Nilambur,city,11.375,76.125,Kerala / Malappuram,Kerala
+7852,city:Perinthalmanna,city,10.958333333333334,76.20833333333333,Kerala / Malappuram,Kerala
+7855,city:Pattambi,city,10.875,76.125,Kerala / Palakkad,Kerala
+7856,city:Triprayar,city,10.375,76.125,Kerala / Thrissur,Kerala
+7863,city:Thrissur,city,10.5,76.25,Kerala / Thrissur,Kerala
+7872,city:Kodungallur,city,10.25,76.125,Kerala / Thrissur,Kerala
+7876,city:Shoranur,city,10.791666666666666,76.29166666666667,Kerala / Palakkad,Kerala
+7877,city:Irinjalakuda,city,10.291666666666666,76.29166666666667,Kerala / Thrissur,Kerala
+7886,city:Kochi,city,10.025,76.325,Kerala / Ernakulam,Kerala
+7908,city:Mannarkkad,city,11.0,76.5,Kerala / Palakkad,Kerala
+7922,city:Alappuzha,city,9.625,76.375,Kerala / Alappuzha,Kerala
+7932,city:Vadakkenchery,city,10.625,76.5,Kerala / Palakkad,Kerala
+7941,city:Alathur,city,10.625,76.625,Kerala / Palakkad,Kerala
+7942,city:Vaikom,city,9.75,76.375,Kerala / Kottayam,Kerala
+7957,city:Palakkad,city,10.75,76.625,Kerala / Palakkad,Kerala
+7960,city:Nenmara,city,10.625,76.625,Kerala / Palakkad,Kerala
+7962,city:Kollam,city,9.175,76.525,Kerala / Kollam,Kerala
+7971,city:Muvattupuzha,city,10.0,76.625,Kerala / Ernakulam,Kerala
+7972,city:Ettumanoor,city,9.5,76.5,Kerala / Kottayam,Kerala
+7978,city:Kothamangalam,city,10.125,76.625,Kerala / Ernakulam,Kerala
+7985,city:Kollengode,city,10.625,76.625,Kerala / Palakkad,Kerala
+7989,city:Kanjikode,city,10.875,76.75,Kerala / Palakkad,Kerala
+8005,city:Pala,city,9.625,76.625,Kerala / Kottayam,Kerala
+8006,city:Chengannur,city,9.375,76.625,Kerala / Alappuzha,Kerala
+8014,city:Kozhinjapara,city,10.75,76.875,Kerala / Palakkad,Kerala
+8015,city:Thodupuzha,city,9.875,76.75,Kerala / Idukki,Kerala
+8029,city:Kozhencherry,city,9.375,76.75,Kerala / Pathanamthitta,Kerala
+8044,city:Kanjirapalli,city,9.625,76.75,Kerala / Kottayam,Kerala
+8045,city:Varkala,city,8.75,76.75,Kerala / Thiruvananthapuram,Kerala
+8056,city:Ranni,city,9.375,76.875,Kerala / Pathanamthitta,Kerala
+8058,city:Pathanamthitta,city,9.375,76.875,Kerala / Pathanamthitta,Kerala
+8065,city:Kottarakara,city,8.958333333333334,76.79166666666667,Kerala / Kollam,Kerala
+8070,city:Kallambalam,city,8.791666666666666,76.79166666666667,Kerala / Thiruvananthapuram,Kerala
+8071,city:Attingal,city,8.708333333333334,76.79166666666667,Kerala / Thiruvananthapuram,Kerala
+8082,city:Pathanapuram,city,9.125,76.875,Kerala / Kollam,Kerala
+8094,city:Thiruvananthapuram,city,8.5,77.0,Kerala / Thiruvananthapuram,Kerala
+8098,city:Punalur,city,9.0,76.875,Kerala / Kollam,Kerala
+8099,city:Anchal,city,8.875,76.875,Kerala / Kollam,Kerala
+8104,city:Venjaramoodu,city,8.625,76.875,Kerala / Thiruvananthapuram,Kerala
+8124,city:Kattappana,city,9.75,77.125,Kerala / Idukki,Kerala
+8136,city:Kovalam,city,8.375,77.0,Kerala / Thiruvananthapuram,Kerala
+8163,city:Pudukadai,city,8.25,77.125,Kerala / Thiruvananthapuram,Kerala
+8172,city:Kaliyikkavila,city,8.375,77.125,Kerala / Thiruvananthapuram,Kerala
+18242,IND.29.447.1791,region,27.125,75.0,Rajasthan / Didwana Kuchaman,Rajasthan
+18243,IND.29.424.1641,region,27.25,76.625,Rajasthan / Alwar,Rajasthan
+18244,IND.29.439.1744,region,27.125,76.05357142857143,Rajasthan / Jaipur Gramin,Rajasthan
+18245,IND.29.439.1741,region,27.1875,75.6875,Rajasthan / Jaipur Gramin,Rajasthan
+18246,IND.29.428.1668,region,27.25,77.25,Rajasthan / Bharatpur,Rajasthan
+18248,IND.29.447.1792,region,26.958333333333332,74.59722222222223,Rajasthan / Didwana Kuchaman,Rajasthan
+18249,IND.29.438.1731,region,29.09375,75.15625,Rajasthan / Hanumangarh,Rajasthan
+18253,IND.29.437.1722,region,29.0,73.125,Rajasthan / Anoopgarh,Rajasthan
+18260,IND.29.445.1778,region,26.303571428571427,76.875,Rajasthan / Karauli,Rajasthan
+18263,IND.29.453.1824,region,26.40625,75.90625,Rajasthan / Tonk,Rajasthan
+18271,IND.29.433.1709,region,28.625,74.95833333333333,Rajasthan / Churu,Rajasthan
+18275,IND.29.430.1683,region,28.34722222222222,72.95833333333333,Rajasthan / Bikaner,Rajasthan
+18276,IND.29.423.1628,region,26.0,74.375,Rajasthan / Beawar,Rajasthan
+18278,IND.29.453.1825,region,26.025,75.425,Rajasthan / Kekri,Rajasthan
+18281,IND.20.298.1127,region,25.925,77.25,Rajasthan / Karauli,Rajasthan
+18283,IND.29.450.1811,region,25.975,76.325,Rajasthan / Sawai Madhopur,Rajasthan
+18311,IND.17.226.813,region,12.875,74.9375,Kerala / Kasaragod,Kerala
+18314,IND.33.493.2008,region,26.825,78.525,Rajasthan / Dholpur,Rajasthan
+18318,IND.29.423.1630,region,26.625,74.875,Rajasthan / Ajmer,Rajasthan
+18319,IND.29.444.1772,region,26.625,73.0,Rajasthan / Jodhpur Gramin,Rajasthan
+18320,IND.29.447.1789,region,26.625,74.0,Rajasthan / Nagaur,Rajasthan
+18322,IND.29.445.1779,region,26.75,76.75,Rajasthan / Gangapurcity,Rajasthan
+18324,IND.29.434.1714,region,26.875,76.625,Rajasthan / Dausa,Rajasthan
+18339,IND.14.176.690,region,31.025,77.175,Himachal Pradesh / Shimla,Himachal Pradesh
+18342,IND.14.176.686,region,31.0,77.75,Himachal Pradesh / Shimla,Himachal Pradesh
+18344,IND.14.178.703,region,31.0,77.0,Himachal Pradesh / Solan,Himachal Pradesh
+18345,IND.14.176.693,region,31.125,77.125,Himachal Pradesh / Shimla,Himachal Pradesh
+18346,IND.14.178.704,region,30.958333333333332,76.95833333333333,Himachal Pradesh / Solan,Himachal Pradesh
+18350,IND.29.434.1713,region,27.0,76.875,Rajasthan / Dausa,Rajasthan
+18351,IND.14.171.658,region,32.25,76.25,Himachal Pradesh / Kangra,Himachal Pradesh
+18352,IND.14.171.661,region,32.025,75.825,Himachal Pradesh / Kangra,Himachal Pradesh
+18353,IND.14.171.665,region,32.0,76.5,Himachal Pradesh / Kangra,Himachal Pradesh
+18354,IND.14.171.659,region,32.125,75.75,Himachal Pradesh / Kangra,Himachal Pradesh
+18356,IND.14.171.657,region,31.875,76.125,Himachal Pradesh / Kangra,Himachal Pradesh
+18357,IND.14.172.668,region,31.975,78.575,Himachal Pradesh / Kinnaur,Himachal Pradesh
+18358,IND.28.412.1597,region,31.825,75.625,Himachal Pradesh / Kangra,Himachal Pradesh
+18360,IND.29.451.1813,region,27.65625,74.84375,Rajasthan / Sikar,Rajasthan
+18362,IND.29.433.1708,region,27.675,74.3,Rajasthan / Churu,Rajasthan
+18363,IND.29.440.1752,region,27.142241379310345,71.77155172413794,Rajasthan / Jaisalmer,Rajasthan
+18364,IND.29.430.1686,region,27.528846153846153,73.41346153846153,Rajasthan / Bikaner,Rajasthan
+18365,IND.33.542.2152,region,27.75,77.5,Rajasthan / Deeg,Rajasthan
+18366,IND.29.451.1814,region,27.696428571428573,75.875,Rajasthan / Neem Ka Thana,Rajasthan
+18370,IND.20.286.1080,region,24.446428571428573,74.875,Rajasthan / Pratapgarh,Rajasthan
+18373,IND.29.442.1762,region,24.416666666666668,75.91666666666667,Rajasthan / Jhalawar,Rajasthan
+18374,IND.29.454.1832,region,24.28125,73.40625,Rajasthan / Udaipur,Rajasthan
+18383,IND.29.439.1743,region,26.975,75.575,Rajasthan / Jaipur,Rajasthan
+18406,IND.14.175.682,region,31.625,76.75,Himachal Pradesh / Mandi,Himachal Pradesh
+18407,IND.14.173.673,region,31.75,77.375,Himachal Pradesh / Kullu,Himachal Pradesh
+18408,IND.14.172.667,region,31.59722222222222,78.48611111111111,Himachal Pradesh / Kinnaur,Himachal Pradesh
+18409,IND.14.179.707,region,31.75,76.0,Himachal Pradesh / Una,Himachal Pradesh
+18411,IND.14.175.681,region,31.675,76.975,Himachal Pradesh / Mandi,Himachal Pradesh
+18413,IND.14.170.654,region,31.75,76.375,Himachal Pradesh / Hamirpur,Himachal Pradesh
+18414,IND.20.283.1068,region,24.25,75.625,Rajasthan / Jhalawar,Rajasthan
+18417,IND.29.454.1833,region,24.09375,74.09375,Rajasthan / Salumbar,Rajasthan
+18419,IND.29.454.1831,region,24.09375,74.34375,Rajasthan / Pratapgarh,Rajasthan
+18428,IND.29.436.1718,region,23.833333333333332,74.08333333333333,Rajasthan / Dungarpur,Rajasthan
+18439,IND.17.233.861,region,12.125,75.875,Kerala / Kannur,Kerala
+18448,IND.15.188.717,region,33.86309523809524,77.96785714285714,Himachal Pradesh / Lahul and Spiti,Himachal Pradesh
+18450,IND.14.174.677,region,32.29545454545455,78.0,Himachal Pradesh / Lahul and Spiti,Himachal Pradesh
+18467,IND.18.249.957,region,9.725,76.675,Kerala / Kottayam,Kerala
+18468,IND.18.249.958,region,9.75,76.5,Kerala / Kottayam,Kerala
+18469,IND.18.243.932,region,9.791666666666666,76.29166666666667,Kerala / Alappuzha,Kerala
+18471,IND.15.185.714,region,33.8375,76.575,Himachal Pradesh / Lahul and Spiti,Himachal Pradesh
+18475,IND.15.183.712,region,33.439516129032256,75.91532258064517,Himachal Pradesh / Chamba,Himachal Pradesh
+18479,IND.29.428.1669,region,27.5,77.0,Rajasthan / Deeg,Rajasthan
+18481,IND.29.450.1809,region,26.5,76.75,Rajasthan / Gangapurcity,Rajasthan
+18483,IND.13.150.603,region,28.5,75.75,Rajasthan / Jhunjhunu,Rajasthan
+18486,IND.29.443.1767,region,27.875,75.25,Rajasthan / Jhunjhunu,Rajasthan
+18488,IND.29.444.1773,region,27.25,72.5,Rajasthan / Phalodi,Rajasthan
+18489,IND.29.447.1790,region,27.158333333333335,73.54166666666667,Rajasthan / Nagaur,Rajasthan
+18490,IND.29.447.1787,region,27.25,74.075,Rajasthan / Nagaur,Rajasthan
+18493,IND.14.174.676,region,32.69021739130435,77.08152173913044,Himachal Pradesh / Lahul and Spiti,Himachal Pradesh
+18494,IND.14.169.649,region,33.0,76.375,Himachal Pradesh / Chamba,Himachal Pradesh
+18497,IND.14.169.647,region,32.833333333333336,76.16666666666667,Himachal Pradesh / Chamba,Himachal Pradesh
+18498,IND.14.169.650,region,32.75,76.0,Himachal Pradesh / Chamba,Himachal Pradesh
+18499,IND.14.176.687,region,31.125,77.5,Himachal Pradesh / Shimla,Himachal Pradesh
+18502,IND.14.178.705,region,31.0,76.75,Himachal Pradesh / Solan,Himachal Pradesh
+18505,IND.14.178.706,region,30.958333333333332,76.95833333333333,Himachal Pradesh / Solan,Himachal Pradesh
+18506,IND.14.169.646,region,32.525,76.175,Himachal Pradesh / Chamba,Himachal Pradesh
+18507,IND.29.432.1695,region,24.325,74.725,Rajasthan / Pratapgarh,Rajasthan
+18508,IND.29.442.1763,region,24.291666666666668,75.95833333333333,Rajasthan / Jhalawar,Rajasthan
+18509,IND.12.127.411,region,24.303571428571427,72.41071428571429,Rajasthan / Sirohi,Rajasthan
+18512,IND.29.437.1726,region,29.625,73.69642857142857,Rajasthan / Ganganagar,Rajasthan
+18515,IND.29.438.1732,region,29.0,74.25,Rajasthan / Hanumangarh,Rajasthan
+18518,IND.15.186.715,region,32.575,75.55,Himachal Pradesh / Chamba,Himachal Pradesh
+18519,IND.14.169.645,region,32.40625,76.59375,Himachal Pradesh / Chamba,Himachal Pradesh
+18520,IND.14.169.648,region,32.425,76.025,Himachal Pradesh / Chamba,Himachal Pradesh
+18521,IND.28.411.1596,region,32.333333333333336,75.625,Himachal Pradesh / Kangra,Himachal Pradesh
+18522,IND.14.171.655,region,32.19642857142857,76.83928571428571,Himachal Pradesh / Kangra,Himachal Pradesh
+18523,IND.14.173.674,region,32.017857142857146,77.30357142857143,Himachal Pradesh / Kullu,Himachal Pradesh
+18524,IND.14.171.664,region,32.25,75.875,Himachal Pradesh / Kangra,Himachal Pradesh
+18525,IND.14.171.662,region,32.125,76.1875,Himachal Pradesh / Kangra,Himachal Pradesh
+18526,IND.14.175.679,region,31.916666666666668,76.83333333333333,Himachal Pradesh / Mandi,Himachal Pradesh
+18528,IND.14.171.656,region,32.0,76.25,Himachal Pradesh / Kangra,Himachal Pradesh
+18530,IND.14.171.660,region,32.0,76.5,Himachal Pradesh / Kangra,Himachal Pradesh
+18531,IND.14.171.663,region,31.875,76.0,Himachal Pradesh / Kangra,Himachal Pradesh
+18532,IND.14.172.670,region,31.775,78.425,Himachal Pradesh / Kinnaur,Himachal Pradesh
+18533,IND.14.170.653,region,31.75,76.5,Himachal Pradesh / Hamirpur,Himachal Pradesh
+18534,IND.14.172.669,region,31.65625,77.90625,Himachal Pradesh / Kinnaur,Himachal Pradesh
+18535,IND.14.170.652,region,31.625,76.625,Himachal Pradesh / Hamirpur,Himachal Pradesh
+18536,IND.14.175.684,region,31.5,77.25,Himachal Pradesh / Mandi,Himachal Pradesh
+18537,IND.14.179.708,region,31.5,76.25,Himachal Pradesh / Una,Himachal Pradesh
+18538,IND.14.176.691,region,31.375,77.625,Himachal Pradesh / Shimla,Himachal Pradesh
+18539,IND.14.172.666,region,31.5,78.25,Himachal Pradesh / Kinnaur,Himachal Pradesh
+18540,IND.14.175.678,region,31.5,77.0,Himachal Pradesh / Mandi,Himachal Pradesh
+18541,IND.14.173.675,region,31.5,77.5,Himachal Pradesh / Kullu,Himachal Pradesh
+18542,IND.14.170.651,region,31.5,76.5,Himachal Pradesh / Hamirpur,Himachal Pradesh
+18546,IND.14.168.644,region,31.4375,76.625,Himachal Pradesh / Bilaspur,Himachal Pradesh
+18547,IND.14.175.683,region,31.4375,76.875,Himachal Pradesh / Mandi,Himachal Pradesh
+18548,IND.14.173.672,region,31.5,77.375,Himachal Pradesh / Kullu,Himachal Pradesh
+18549,IND.14.172.671,region,31.3125,78.5,Himachal Pradesh / Kinnaur,Himachal Pradesh
+18550,IND.28.412.1598,region,31.25,76.125,Himachal Pradesh / Una,Himachal Pradesh
+18551,IND.34.575.2243,region,30.921875,78.921875,Himachal Pradesh / Kinnaur,Himachal Pradesh
+18552,IND.14.175.680,region,31.3125,77.125,Himachal Pradesh / Mandi,Himachal Pradesh
+18553,IND.28.421.1620,region,31.175,76.475,Himachal Pradesh / Una,Himachal Pradesh
+18555,IND.14.168.643,region,31.275,76.675,Himachal Pradesh / Bilaspur,Himachal Pradesh
+18556,IND.14.176.689,region,31.275,78.075,Himachal Pradesh / Shimla,Himachal Pradesh
+18558,IND.14.176.692,region,31.225,77.825,Himachal Pradesh / Shimla,Himachal Pradesh
+18560,IND.14.178.702,region,31.25,76.875,Himachal Pradesh / Solan,Himachal Pradesh
+18561,IND.14.176.688,region,31.25,77.375,Himachal Pradesh / Shimla,Himachal Pradesh
+18562,IND.14.176.694,region,31.25,77.125,Himachal Pradesh / Shimla,Himachal Pradesh
+18563,IND.34.575.2245,region,31.020833333333332,78.1875,Himachal Pradesh / Shimla,Himachal Pradesh
+18565,IND.14.176.695,region,31.125,77.3125,Himachal Pradesh / Shimla,Himachal Pradesh
+18566,IND.14.176.685,region,30.975,77.575,Himachal Pradesh / Shimla,Himachal Pradesh
+18569,IND.14.177.699,region,30.958333333333332,77.29166666666667,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18572,IND.28.418.1612,region,30.261363636363637,74.4659090909091,Rajasthan / Hanumangarh,Rajasthan
+18573,IND.14.177.698,region,30.5,77.625,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18576,IND.29.437.1730,region,29.145833333333332,73.79166666666667,Rajasthan / Ganganagar,Rajasthan
+18577,IND.29.438.1734,region,29.375,74.125,Rajasthan / Hanumangarh,Rajasthan
+18579,IND.29.423.1633,region,26.375,74.75,Rajasthan / Ajmer,Rajasthan
+18581,IND.29.453.1822,region,25.839285714285715,75.48214285714286,Rajasthan / Tonk,Rajasthan
+18584,IND.20.298.1128,region,25.645833333333332,76.83333333333333,Rajasthan / Kota,Rajasthan
+18586,IND.29.429.1673,region,25.575,74.725,Rajasthan / Shahpura,Rajasthan
+18587,IND.29.431.1688,region,25.53125,75.5625,Rajasthan / Bundi,Rajasthan
+18588,IND.29.442.1758,region,24.34375,76.59375,Rajasthan / Jhalawar,Rajasthan
+18591,IND.34.567.2222,region,30.75,77.875,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18593,IND.13.161.631,region,30.75,76.875,Himachal Pradesh / Solan,Himachal Pradesh
+18596,IND.14.177.697,region,30.75,77.125,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18597,IND.14.177.700,region,30.708333333333332,77.45833333333333,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18602,IND.14.177.701,region,30.75,77.5,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18605,IND.14.177.696,region,30.5,77.25,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18611,IND.13.149.599,region,30.475,77.075,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18616,IND.34.567.2223,region,30.26388888888889,78.04166666666667,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18617,IND.13.167.642,region,30.275,77.325,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18621,IND.33.552.2188,region,30.15625,77.59375,Himachal Pradesh / Sirmaur,Himachal Pradesh
+18627,IND.28.410.1590,region,30.0,74.125,Rajasthan / Ganganagar,Rajasthan
+18632,IND.29.437.1723,region,29.925,73.775,Rajasthan / Ganganagar,Rajasthan
+18640,IND.29.437.1724,region,29.825,73.525,Rajasthan / Ganganagar,Rajasthan
+18642,IND.13.165.637,region,29.75,74.625,Rajasthan / Hanumangarh,Rajasthan
+18644,IND.29.437.1728,region,29.75,74.125,Rajasthan / Ganganagar,Rajasthan
+18646,IND.29.438.1736,region,29.75,74.5,Rajasthan / Hanumangarh,Rajasthan
+18647,IND.13.165.638,region,29.53409090909091,75.01136363636364,Rajasthan / Hanumangarh,Rajasthan
+18652,IND.29.438.1737,region,29.4375,74.625,Rajasthan / Hanumangarh,Rajasthan
+18653,IND.29.437.1727,region,29.375,73.375,Rajasthan / Anoopgarh,Rajasthan
+18657,IND.29.438.1735,region,29.425,74.275,Rajasthan / Hanumangarh,Rajasthan
+18658,IND.13.152.608,region,29.430555555555557,75.40277777777777,Rajasthan / Hanumangarh,Rajasthan
+18664,IND.13.154.616,region,29.240384615384617,75.64423076923077,Rajasthan / Hanumangarh,Rajasthan
+18666,IND.29.437.1729,region,29.225,73.525,Rajasthan / Anoopgarh,Rajasthan
+18673,IND.29.438.1733,region,29.147727272727273,74.7159090909091,Rajasthan / Hanumangarh,Rajasthan
+18685,IND.29.430.1685,region,28.65277777777778,73.63888888888889,Rajasthan / Bikaner,Rajasthan
+18687,IND.29.433.1705,region,28.625,75.375,Rajasthan / Churu,Rajasthan
+18688,IND.13.150.604,region,28.775,75.675,Rajasthan / Churu,Rajasthan
+18689,IND.29.437.1725,region,28.775,72.925,Rajasthan / Anoopgarh,Rajasthan
+18701,IND.29.428.1671,region,27.025,77.075,Rajasthan / Bharatpur,Rajasthan
+18702,IND.29.434.1710,region,27.0,76.625,Rajasthan / Dausa,Rajasthan
+18706,IND.29.428.1670,region,27.0,77.5,Rajasthan / Bharatpur,Rajasthan
+18708,IND.29.429.1674,region,25.25,74.625,Rajasthan / Bhilwara,Rajasthan
+18709,IND.29.429.1681,region,25.291666666666668,74.20833333333333,Rajasthan / Bhilwara,Rajasthan
+18712,IND.29.441.1754,region,25.0625,72.22916666666667,Rajasthan / Jalore,Rajasthan
+18713,IND.29.449.1800,region,25.25,74.0,Rajasthan / Rajsamand,Rajasthan
+18714,IND.29.426.1655,region,25.166666666666668,76.41666666666667,Rajasthan / Baran,Rajasthan
+18715,IND.20.299.1130,region,25.125,77.625,Rajasthan / Baran,Rajasthan
+18749,IND.29.433.1707,region,28.528846153846153,74.47115384615384,Rajasthan / Churu,Rajasthan
+18755,IND.29.427.1657,region,25.916666666666668,71.54166666666667,Rajasthan / Balotra,Rajasthan
+18758,IND.29.429.1679,region,25.5,74.375,Rajasthan / Bhilwara,Rajasthan
+18763,IND.29.448.1793,region,25.175,73.125,Rajasthan / Pali,Rajasthan
+18764,IND.29.431.1687,region,25.291666666666668,75.65277777777777,Rajasthan / Bundi,Rajasthan
+18766,IND.29.448.1794,region,25.375,73.5,Rajasthan / Pali,Rajasthan
+18769,IND.20.274.1041,region,24.778846153846153,77.22115384615384,Rajasthan / Baran,Rajasthan
+18771,IND.29.454.1828,region,24.875,73.44642857142857,Rajasthan / Udaipur,Rajasthan
+18772,IND.29.446.1784,region,24.875,76.1875,Rajasthan / Kota,Rajasthan
+18773,IND.29.449.1804,region,24.875,73.75,Rajasthan / Rajsamand,Rajasthan
+18776,IND.29.441.1757,region,24.8125,71.64583333333333,Rajasthan / Jalore,Rajasthan
+18777,IND.20.286.1078,region,24.84375,75.0625,Rajasthan / Chittorgarh,Rajasthan
+18797,IND.18.243.926,region,9.5,76.375,Kerala / Alappuzha,Kerala
+18798,IND.18.249.954,region,9.458333333333334,76.54166666666667,Kerala / Kottayam,Kerala
+18804,IND.31.484.1968,region,9.0,77.125,Kerala / Kollam,Kerala
+18806,IND.18.248.950,region,9.0,76.75,Kerala / Kollam,Kerala
+18808,IND.18.248.953,region,8.875,76.75,Kerala / Kollam,Kerala
+18810,IND.18.254.976,region,8.75,76.75,Kerala / Thiruvananthapuram,Kerala
+18827,IND.29.433.1703,region,28.34375,74.90625,Rajasthan / Churu,Rajasthan
+18830,IND.29.443.1764,region,28.25,75.625,Rajasthan / Jhunjhunu,Rajasthan
+18831,IND.33.493.2010,region,26.910714285714285,77.69642857142857,Rajasthan / Bharatpur,Rajasthan
+18832,IND.29.428.1663,region,26.925,77.275,Rajasthan / Bharatpur,Rajasthan
+18841,IND.29.425.1649,region,23.3125,74.125,Rajasthan / Banswara,Rajasthan
+18845,IND.12.139.516,region,23.083333333333332,73.58333333333333,Rajasthan / Dungarpur,Rajasthan
+18846,IND.12.130.443,region,23.25,73.875,Rajasthan / Dungarpur,Rajasthan
+18887,IND.13.160.629,region,28.25,76.125,Rajasthan / Jhunjhunu,Rajasthan
+18890,IND.29.443.1765,region,28.125,75.30357142857143,Rajasthan / Jhunjhunu,Rajasthan
+18891,IND.13.163.634,region,28.25,76.625,Rajasthan / Kotputli-Behror,Rajasthan
+18892,IND.29.430.1684,region,27.864583333333332,72.53125,Rajasthan / Bikaner,Rajasthan
+18894,IND.29.433.1704,region,28.053571428571427,74.0,Rajasthan / Bikaner,Rajasthan
+18895,IND.29.443.1766,region,28.083333333333332,75.83333333333333,Rajasthan / Neem Ka Thana,Rajasthan
+18896,IND.13.153.613,region,28.075,76.975,Rajasthan / Khairthal-Tijara,Rajasthan
+18900,IND.29.428.1664,region,27.25,77.5,Rajasthan / Bharatpur,Rajasthan
+18902,IND.29.439.1748,region,27.053571428571427,75.26785714285714,Rajasthan / Jaipur Gramin,Rajasthan
+18903,IND.33.493.2011,region,27.125,77.675,Rajasthan / Bharatpur,Rajasthan
+18907,IND.20.284.1073,region,26.261363636363637,77.67045454545455,Rajasthan / Dholpur,Rajasthan
+18913,IND.29.453.1823,region,26.34375,75.34375,Rajasthan / Tonk,Rajasthan
+18917,IND.29.436.1719,region,23.75,73.625,Rajasthan / Dungarpur,Rajasthan
+18953,IND.13.163.633,region,28.041666666666668,76.54166666666667,Rajasthan / Kotputli-Behror,Rajasthan
+18955,IND.29.424.1638,region,27.875,76.75,Rajasthan / Khairthal-Tijara,Rajasthan
+18957,IND.29.443.1768,region,27.875,75.5,Rajasthan / Jhunjhunu,Rajasthan
+18959,IND.29.424.1640,region,27.875,76.5,Rajasthan / Khairthal-Tijara,Rajasthan
+18968,IND.29.433.1706,region,28.053571428571427,74.625,Rajasthan / Churu,Rajasthan
+18970,IND.29.424.1644,region,28.0,76.75,Rajasthan / Khairthal-Tijara,Rajasthan
+18971,IND.13.160.630,region,28.025,76.075,Rajasthan / Neem Ka Thana,Rajasthan
+18972,IND.29.451.1812,region,27.975,74.925,Rajasthan / Sikar,Rajasthan
+18975,IND.29.424.1636,region,28.0,76.25,Rajasthan / Kotputli-Behror,Rajasthan
+18979,IND.29.440.1751,region,27.025793650793652,70.57738095238095,Rajasthan / Jaisalmer,Rajasthan
+18980,IND.13.153.611,region,27.875,77.05357142857143,Rajasthan / Khairthal-Tijara,Rajasthan
+18986,IND.29.439.1745,region,27.575,76.025,Rajasthan / Kotputli-Behror,Rajasthan
+18988,IND.29.424.1637,region,27.625,76.25,Rajasthan / Kotputli-Behror,Rajasthan
+18991,IND.29.451.1816,region,27.5,75.175,Rajasthan / Sikar,Rajasthan
+18992,IND.29.428.1666,region,27.696428571428573,77.125,Rajasthan / Deeg,Rajasthan
+18996,IND.29.424.1642,region,27.553571428571427,76.875,Rajasthan / Alwar,Rajasthan
+18998,IND.29.424.1635,region,27.475,76.575,Rajasthan / Alwar,Rajasthan
+18999,IND.29.451.1815,region,27.5,75.625,Rajasthan / Sikar,Rajasthan
+19001,IND.29.447.1788,region,27.5,74.375,Rajasthan / Didwana Kuchaman,Rajasthan
+19002,IND.33.542.2154,region,27.375,77.625,Rajasthan / Deeg,Rajasthan
+19005,IND.29.428.1665,region,27.5,77.25,Rajasthan / Deeg,Rajasthan
+19006,IND.29.424.1639,region,27.333333333333332,76.91666666666667,Rajasthan / Alwar,Rajasthan
+19011,IND.29.439.1750,region,27.458333333333332,75.95833333333333,Rajasthan / Kotputli-Behror,Rajasthan
+19013,IND.29.447.1786,region,27.25,74.625,Rajasthan / Didwana Kuchaman,Rajasthan
+19015,IND.29.424.1643,region,27.25,76.25,Rajasthan / Alwar,Rajasthan
+19025,IND.29.439.1746,region,27.25,75.625,Rajasthan / Jaipur Gramin,Rajasthan
+19026,IND.29.428.1667,region,27.3125,77.3125,Rajasthan / Deeg,Rajasthan
+19031,IND.29.439.1738,region,27.0625,75.6875,Rajasthan / Jaipur,Rajasthan
+19032,IND.29.434.1711,region,26.875,76.30357142857143,Rajasthan / Dausa,Rajasthan
+19033,IND.33.493.2009,region,27.0,78.125,Rajasthan / Dholpur,Rajasthan
+19035,IND.29.447.1785,region,26.791666666666668,74.34722222222223,Rajasthan / Nagaur,Rajasthan
+19037,IND.29.435.1717,region,26.767857142857142,77.94642857142857,Rajasthan / Dholpur,Rajasthan
+19039,IND.29.439.1739,region,26.75,76.0,Rajasthan / Jaipur Gramin,Rajasthan
+19042,IND.29.444.1769,region,26.59375,73.59375,Rajasthan / Jodhpur Gramin,Rajasthan
+19043,IND.29.445.1777,region,26.666666666666668,76.58333333333333,Rajasthan / Gangapurcity,Rajasthan
+19044,IND.29.435.1716,region,26.59375,77.40625,Rajasthan / Dholpur,Rajasthan
+19045,IND.29.445.1775,region,26.75,77.0,Rajasthan / Karauli,Rajasthan
+19047,IND.20.284.1072,region,26.75,78.375,Rajasthan / Dholpur,Rajasthan
+19048,IND.29.444.1774,region,26.490384615384617,72.41346153846153,Rajasthan / Jodhpur Gramin,Rajasthan
+19050,IND.29.439.1742,region,26.696428571428573,75.125,Rajasthan / Dudu,Rajasthan
+19051,IND.29.439.1749,region,26.75,75.625,Rajasthan / Jaipur,Rajasthan
+19055,IND.29.445.1776,region,26.541666666666668,77.125,Rajasthan / Karauli,Rajasthan
+19059,IND.29.439.1747,region,26.583333333333332,75.54166666666667,Rajasthan / Dudu,Rajasthan
+19061,IND.29.439.1740,region,26.525,75.925,Rajasthan / Jaipur Gramin,Rajasthan
+19062,IND.29.435.1715,region,26.541666666666668,77.70833333333333,Rajasthan / Dholpur,Rajasthan
+19065,IND.29.434.1712,region,26.5,76.25,Rajasthan / Dausa,Rajasthan
+19066,IND.29.423.1627,region,26.40625,74.5,Rajasthan / Ajmer,Rajasthan
+19067,IND.20.284.1074,region,26.475,78.075,Rajasthan / Dholpur,Rajasthan
+19120,IND.18.247.947,region,12.275,75.175,Kerala / Kasaragod,Kerala
+19123,IND.18.255.984,region,10.6875,76.125,Kerala / Thrissur,Kerala
+19127,IND.18.255.983,region,10.5,76.25,Kerala / Thrissur,Kerala
+19135,IND.29.450.1807,region,26.375,76.5,Rajasthan / Gangapurcity,Rajasthan
+19136,IND.29.427.1661,region,26.016304347826086,70.91847826086956,Rajasthan / Barmer,Rajasthan
+19139,IND.29.444.1771,region,26.125,73.0,Rajasthan / Jodhpur Gramin,Rajasthan
+19140,IND.29.450.1808,region,26.208333333333332,76.25,Rajasthan / Sawai Madhopur,Rajasthan
+19141,IND.29.444.1770,region,26.25,73.625,Rajasthan / Jodhpur Gramin,Rajasthan
+19142,IND.29.453.1826,region,26.25,75.75,Rajasthan / Tonk,Rajasthan
+19144,IND.29.448.1795,region,26.275,74.075,Rajasthan / Beawar,Rajasthan
+19152,IND.20.284.1075,region,26.25,77.375,Rajasthan / Karauli,Rajasthan
+19160,IND.20.283.1069,region,24.25,75.125,Rajasthan / Pratapgarh,Rajasthan
+19186,IND.29.427.1660,region,25.990384615384617,72.27884615384616,Rajasthan / Balotra,Rajasthan
+19190,IND.29.423.1634,region,26.125,75.0,Rajasthan / Kekri,Rajasthan
+19192,IND.29.448.1798,region,26.125,74.125,Rajasthan / Beawar,Rajasthan
+19196,IND.29.450.1810,region,26.0,76.625,Rajasthan / Sawai Madhopur,Rajasthan
+19199,IND.29.423.1631,region,26.0,74.75,Rajasthan / Kekri,Rajasthan
+19203,IND.29.448.1799,region,25.9375,73.71875,Rajasthan / Pali,Rajasthan
+19204,IND.29.423.1629,region,25.875,75.19642857142857,Rajasthan / Kekri,Rajasthan
+19205,IND.29.453.1827,region,25.982142857142858,75.94642857142857,Rajasthan / Tonk,Rajasthan
+19213,IND.29.429.1675,region,25.25,74.25,Rajasthan / Bhilwara,Rajasthan
+19245,IND.29.448.1797,region,25.759615384615383,73.20192307692308,Rajasthan / Pali,Rajasthan
+19251,IND.29.429.1672,region,25.666666666666668,74.33333333333333,Rajasthan / Bhilwara,Rajasthan
+19257,IND.29.429.1676,region,25.775,74.575,Rajasthan / Bhilwara,Rajasthan
+19259,IND.20.299.1132,region,25.59375,77.3125,Rajasthan / Baran,Rajasthan
+19263,IND.29.427.1662,region,25.625,72.45833333333333,Rajasthan / Balotra,Rajasthan
+19265,IND.29.429.1682,region,25.696428571428573,74.875,Rajasthan / Shahpura,Rajasthan
+19268,IND.29.431.1690,region,25.696428571428573,75.875,Rajasthan / Bundi,Rajasthan
+19271,IND.29.427.1659,region,25.39423076923077,71.72115384615384,Rajasthan / Barmer,Rajasthan
+19272,IND.29.449.1801,region,25.708333333333332,74.04166666666667,Rajasthan / Rajsamand,Rajasthan
+19273,IND.29.423.1632,region,25.75,74.0,Rajasthan / Beawar,Rajasthan
+19310,IND.29.446.1782,region,25.65625,76.40625,Rajasthan / Kota,Rajasthan
+19314,IND.29.448.1796,region,25.625,73.69642857142857,Rajasthan / Pali,Rajasthan
+19316,IND.29.441.1753,region,25.541666666666668,72.84722222222223,Rajasthan / Jalore,Rajasthan
+19318,IND.29.429.1677,region,25.575,75.275,Rajasthan / Shahpura,Rajasthan
+19324,IND.29.427.1658,region,25.180555555555557,71.13888888888889,Rajasthan / Barmer,Rajasthan
+19325,IND.29.431.1689,region,25.458333333333332,76.04166666666667,Rajasthan / Bundi,Rajasthan
+19326,IND.29.449.1802,region,25.475,73.925,Rajasthan / Rajsamand,Rajasthan
+19332,IND.29.429.1678,region,25.34375,74.90625,Rajasthan / Shahpura,Rajasthan
+19338,IND.29.446.1780,region,25.291666666666668,76.15277777777777,Rajasthan / Kota,Rajasthan
+19340,IND.29.441.1755,region,25.28409090909091,72.39772727272727,Rajasthan / Jalore,Rajasthan
+19345,IND.29.426.1656,region,25.25,77.125,Rajasthan / Baran,Rajasthan
+19350,IND.29.429.1680,region,25.225,75.175,Rajasthan / Bhilwara,Rajasthan
+19354,IND.29.449.1803,region,25.166666666666668,73.66666666666667,Rajasthan / Rajsamand,Rajasthan
+19355,IND.29.426.1654,region,25.125,76.75,Rajasthan / Baran,Rajasthan
+19358,IND.29.452.1820,region,25.053571428571427,72.875,Rajasthan / Sirohi,Rajasthan
+19359,IND.29.446.1781,region,25.053571428571427,75.875,Rajasthan / Kota,Rajasthan
+19363,IND.29.426.1651,region,25.0,76.5,Rajasthan / Baran,Rajasthan
+19367,IND.29.432.1696,region,25.0,74.625,Rajasthan / Chittorgarh,Rajasthan
+19368,IND.29.432.1702,region,25.041666666666668,74.45833333333333,Rajasthan / Chittorgarh,Rajasthan
+19371,IND.29.432.1693,region,24.84722222222222,74.68055555555556,Rajasthan / Chittorgarh,Rajasthan
+19372,IND.29.449.1805,region,25.041666666666668,73.79166666666667,Rajasthan / Rajsamand,Rajasthan
+19374,IND.29.449.1806,region,25.0,74.125,Rajasthan / Rajsamand,Rajasthan
+19378,IND.29.432.1698,region,24.84722222222222,75.45833333333333,Rajasthan / Chittorgarh,Rajasthan
+19379,IND.29.452.1821,region,24.833333333333332,72.66666666666667,Rajasthan / Sirohi,Rajasthan
+19382,IND.29.432.1697,region,24.75,74.25,Rajasthan / Chittorgarh,Rajasthan
+19387,IND.29.452.1818,region,24.75,73.0,Rajasthan / Sirohi,Rajasthan
+19388,IND.29.454.1836,region,24.59722222222222,74.04166666666667,Rajasthan / Udaipur,Rajasthan
+19389,IND.29.426.1650,region,24.75,76.625,Rajasthan / Baran,Rajasthan
+19391,IND.29.442.1761,region,24.725,76.325,Rajasthan / Jhalawar,Rajasthan
+19392,IND.29.446.1783,region,24.708333333333332,75.95833333333333,Rajasthan / Kota,Rajasthan
+19394,IND.29.454.1830,region,24.5,73.175,Rajasthan / Udaipur,Rajasthan
+19396,IND.29.441.1756,region,24.75,72.25,Rajasthan / Jalore,Rajasthan
+19400,IND.29.432.1700,region,24.696428571428573,74.83928571428571,Rajasthan / Chittorgarh,Rajasthan
+19403,IND.29.452.1819,region,24.625,72.5,Rajasthan / Sirohi,Rajasthan
+19404,IND.29.432.1694,region,24.575,74.525,Rajasthan / Chittorgarh,Rajasthan
+19405,IND.20.283.1067,region,24.589285714285715,75.69642857142857,Rajasthan / Chittorgarh,Rajasthan
+19406,IND.29.426.1652,region,24.625,76.875,Rajasthan / Baran,Rajasthan
+19407,IND.29.454.1835,region,24.446428571428573,73.83928571428571,Rajasthan / Udaipur,Rajasthan
+19408,IND.20.286.1079,region,24.5,75.375,Rajasthan / Chittorgarh,Rajasthan
+19409,IND.29.452.1817,region,24.525,72.825,Rajasthan / Sirohi,Rajasthan
+19411,IND.12.127.407,region,24.5,72.125,Rajasthan / Sirohi,Rajasthan
+19413,IND.29.442.1760,region,24.375,76.25,Rajasthan / Jhalawar,Rajasthan
+19414,IND.29.432.1699,region,24.5,74.25,Rajasthan / Chittorgarh,Rajasthan
+19415,IND.12.127.412,region,24.525,71.675,Rajasthan / Jalore,Rajasthan
+19416,IND.12.127.414,region,24.34375,71.4375,Rajasthan / Jalore,Rajasthan
+19417,IND.29.426.1653,region,24.525,76.675,Rajasthan / Baran,Rajasthan
+19418,IND.20.274.1042,region,24.25,77.325,Rajasthan / Baran,Rajasthan
+19420,IND.20.274.1040,region,24.375,77.0,Rajasthan / Jhalawar,Rajasthan
+19424,IND.29.432.1692,region,24.325,74.525,Rajasthan / Chittorgarh,Rajasthan
+19425,IND.12.143.548,region,24.125,73.0,Rajasthan / Udaipur,Rajasthan
+19426,IND.29.454.1834,region,24.175,73.775,Rajasthan / Salumbar,Rajasthan
+19428,IND.20.297.1126,region,23.958333333333332,76.15277777777777,Rajasthan / Jhalawar,Rajasthan
+19434,IND.20.289.1094,region,24.0,76.70833333333333,Rajasthan / Jhalawar,Rajasthan
+19436,IND.29.432.1701,region,24.075,74.775,Rajasthan / Pratapgarh,Rajasthan
+19437,IND.20.283.1071,region,24.041666666666668,75.48611111111111,Rajasthan / Jhalawar,Rajasthan
+19438,IND.20.289.1092,region,24.0,76.375,Rajasthan / Jhalawar,Rajasthan
+19439,IND.29.454.1829,region,24.0,73.625,Rajasthan / Udaipur,Rajasthan
+19441,IND.20.283.1070,region,24.0,75.125,Rajasthan / Pratapgarh,Rajasthan
+19444,IND.29.442.1759,region,24.0,75.625,Rajasthan / Jhalawar,Rajasthan
+19445,IND.12.143.552,region,24.0,73.25,Rajasthan / Udaipur,Rajasthan
+19452,IND.29.432.1691,region,23.75,74.75,Rajasthan / Pratapgarh,Rajasthan
+19453,IND.20.297.1123,region,23.75,75.875,Rajasthan / Jhalawar,Rajasthan
+19454,IND.29.425.1647,region,23.767857142857142,74.55357142857143,Rajasthan / Banswara,Rajasthan
+19460,IND.12.143.545,region,23.725,73.325,Rajasthan / Dungarpur,Rajasthan
+19465,IND.20.290.1097,region,23.696428571428573,75.08928571428571,Rajasthan / Pratapgarh,Rajasthan
+19475,IND.29.425.1646,region,23.589285714285715,74.19642857142857,Rajasthan / Banswara,Rajasthan
+19480,IND.29.436.1721,region,23.5,73.75,Rajasthan / Dungarpur,Rajasthan
+19486,IND.29.436.1720,region,23.5,74.0,Rajasthan / Dungarpur,Rajasthan
+19488,IND.29.425.1645,region,23.525,74.575,Rajasthan / Banswara,Rajasthan
+19492,IND.12.143.549,region,23.5,73.5,Rajasthan / Dungarpur,Rajasthan
+19494,IND.20.290.1099,region,23.375,74.75,Rajasthan / Banswara,Rajasthan
+19498,IND.29.425.1648,region,23.303571428571427,74.375,Rajasthan / Banswara,Rajasthan
+19526,IND.20.280.1062,region,23.025,74.575,Rajasthan / Banswara,Rajasthan
+19563,IND.18.256.986,region,11.75,76.25,Kerala / Wayanad,Kerala
+19564,IND.31.472.1907,region,11.40625,76.59375,Kerala / Malappuram,Kerala
+19567,IND.18.251.962,region,11.225,76.15,Kerala / Malappuram,Kerala
+19587,IND.12.130.441,region,23.025,74.175,Rajasthan / Banswara,Rajasthan
+20075,IND.17.233.859,region,12.375,75.55357142857143,Kerala / Kannur,Kerala
+20087,IND.18.250.960,region,11.75,75.75,Kerala / Kozhikode,Kerala
+20088,IND.18.256.987,region,11.5,76.0,Kerala / Wayanad,Kerala
+20090,IND.31.472.1905,region,11.5,76.375,Kerala / Malappuram,Kerala
+20091,IND.18.250.961,region,11.5,75.75,Kerala / Kozhikode,Kerala
+20096,IND.31.461.1850,region,11.275,76.825,Kerala / Palakkad,Kerala
+20098,IND.31.472.1904,region,11.291666666666666,76.70833333333333,Kerala / Palakkad,Kerala
+20252,IND.17.226.811,region,12.825,75.025,Kerala / Kasaragod,Kerala
+20261,IND.17.226.814,region,12.75,75.375,Kerala / Kasaragod,Kerala
+20264,IND.18.247.948,region,12.553571428571429,75.08928571428571,Kerala / Kasaragod,Kerala
+20268,IND.17.226.815,region,12.5,75.5,Kerala / Kasaragod,Kerala
+20272,IND.27.403.1578,region,12.041666666666666,75.29166666666667,Kerala / Kannur,Kerala
+20285,IND.18.246.945,region,12.083333333333334,75.41666666666667,Kerala / Kannur,Kerala
+20286,IND.17.237.884,region,12.017857142857142,76.33928571428571,Kerala / Wayanad,Kerala
+20288,IND.31.484.1963,region,8.75,77.375,Kerala / Thiruvananthapuram,Kerala
+20289,IND.18.246.946,region,11.875,75.625,Kerala / Kannur,Kerala
+20292,IND.18.246.944,region,11.875,75.375,Kerala / Kannur,Kerala
+20294,IND.17.223.795,region,11.75,76.625,Kerala / Wayanad,Kerala
+20295,IND.18.256.985,region,11.75,76.0,Kerala / Wayanad,Kerala
+20296,IND.18.252.969,region,10.775,76.175,Kerala / Palakkad,Kerala
+20298,IND.18.244.938,region,10.041666666666666,76.20833333333333,Kerala / Ernakulam,Kerala
+20299,IND.18.243.929,region,9.5,76.375,Kerala / Alappuzha,Kerala
+20300,IND.31.488.1991,region,9.458333333333334,77.45833333333333,Kerala / Idukki,Kerala
+20311,IND.18.252.968,region,11.025,76.575,Kerala / Palakkad,Kerala
+20312,IND.31.461.1849,region,11.0,76.875,Kerala / Palakkad,Kerala
+20316,IND.18.250.959,region,11.416666666666666,75.91666666666667,Kerala / Kozhikode,Kerala
+20317,IND.18.251.965,region,11.0,76.0,Kerala / Malappuram,Kerala
+20320,IND.18.251.963,region,11.0,76.25,Kerala / Malappuram,Kerala
+20327,IND.18.252.970,region,10.75,76.625,Kerala / Palakkad,Kerala
+20331,IND.31.461.1851,region,10.5,77.0,Kerala / Palakkad,Kerala
+20332,IND.18.251.964,region,10.75,76.0,Kerala / Malappuram,Kerala
+20335,IND.18.252.967,region,10.575,76.775,Kerala / Palakkad,Kerala
+20336,IND.31.461.1853,region,10.5,77.25,Kerala / Idukki,Kerala
+20337,IND.18.252.966,region,10.625,76.5,Kerala / Palakkad,Kerala
+20338,IND.18.255.980,region,10.541666666666666,76.04166666666667,Kerala / Thrissur,Kerala
+20340,IND.18.255.981,region,10.267857142857142,76.44642857142857,Kerala / Thrissur,Kerala
+20343,IND.31.464.1867,region,10.225,77.425,Kerala / Idukki,Kerala
+20345,IND.18.255.982,region,10.25,76.125,Kerala / Thrissur,Kerala
+20346,IND.18.245.940,region,10.15625,76.90625,Kerala / Idukki,Kerala
+20351,IND.18.244.939,region,10.125,76.5,Kerala / Ernakulam,Kerala
+20353,IND.18.244.933,region,10.208333333333334,76.45833333333333,Kerala / Ernakulam,Kerala
+20355,IND.31.479.1939,region,9.875,77.5,Kerala / Idukki,Kerala
+20358,IND.18.244.936,region,10.041666666666666,76.70833333333333,Kerala / Ernakulam,Kerala
+20359,IND.31.479.1940,region,9.875,77.25,Kerala / Idukki,Kerala
+20362,IND.18.245.943,region,9.825,77.025,Kerala / Idukki,Kerala
+20364,IND.18.244.937,region,9.958333333333334,76.54166666666667,Kerala / Ernakulam,Kerala
+20366,IND.18.245.942,region,9.925,76.775,Kerala / Idukki,Kerala
+20368,IND.18.244.935,region,10.0,76.25,Kerala / Ernakulam,Kerala
+20370,IND.18.244.934,region,9.875,76.25,Kerala / Ernakulam,Kerala
+20372,IND.18.245.941,region,9.5,77.125,Kerala / Idukki,Kerala
+20374,IND.18.249.956,region,9.5,76.5,Kerala / Kottayam,Kerala
+20377,IND.18.249.955,region,9.5,76.75,Kerala / Kottayam,Kerala
+20380,IND.18.253.974,region,9.3125,76.9375,Kerala / Pathanamthitta,Kerala
+20381,IND.18.253.972,region,9.375,76.625,Kerala / Pathanamthitta,Kerala
+20382,IND.18.253.975,region,9.375,76.5,Kerala / Pathanamthitta,Kerala
+20383,IND.31.484.1969,region,9.275,77.325,Kerala / Pathanamthitta,Kerala
+20386,IND.18.253.973,region,9.25,76.875,Kerala / Pathanamthitta,Kerala
+20387,IND.18.243.927,region,9.291666666666666,76.54166666666667,Kerala / Alappuzha,Kerala
+20388,IND.18.243.928,region,9.25,76.375,Kerala / Alappuzha,Kerala
+20389,IND.18.243.930,region,9.25,76.5,Kerala / Alappuzha,Kerala
+20392,IND.18.253.971,region,9.125,76.75,Kerala / Pathanamthitta,Kerala
+20394,IND.31.484.1970,region,9.0,77.375,Kerala / Kollam,Kerala
+20395,IND.18.248.952,region,9.025,76.925,Kerala / Kollam,Kerala
+20396,IND.18.248.951,region,9.0,76.625,Kerala / Kollam,Kerala
+20397,IND.18.248.949,region,9.041666666666666,76.54166666666667,Kerala / Kollam,Kerala
+20398,IND.18.254.977,region,8.675,77.025,Kerala / Thiruvananthapuram,Kerala
+20400,IND.18.254.979,region,8.5,76.875,Kerala / Thiruvananthapuram,Kerala
+20404,IND.18.254.978,region,8.458333333333334,77.04166666666667,Kerala / Thiruvananthapuram,Kerala
+20405,IND.31.467.1885,region,8.425,77.225,Kerala / Thiruvananthapuram,Kerala

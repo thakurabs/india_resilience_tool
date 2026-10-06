@@ -1,0 +1,17 @@
+{
+ "Kerala": {
+  "max_double_counted_fraction": 0.003949816300109774,
+  "units_over_0.001": 2,
+  "districts_sharing_lgd_code": 0
+ },
+ "Rajasthan": {
+  "max_double_counted_fraction": 2.891120093363152e-07,
+  "units_over_0.001": 0,
+  "districts_sharing_lgd_code": 29
+ },
+ "Himachal Pradesh": {
+  "max_double_counted_fraction": 0.21447397922899697,
+  "units_over_0.001": 3,
+  "districts_sharing_lgd_code": 0
+ }
+}

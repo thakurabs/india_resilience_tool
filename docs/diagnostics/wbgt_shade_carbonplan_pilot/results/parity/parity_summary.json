@@ -1,0 +1,83 @@
+{
+  "ACCESS-CM2 historical": {
+    "units": 149,
+    "exact_count_units": 141,
+    "flip_days": 10,
+    "unexplained_flips": 0,
+    "flip_accounting_consistent": true,
+    "overlap_days_min": 10957,
+    "days_min": 10957,
+    "max_abs_c": 0.7526563977296732,
+    "median_unit_max_abs_c": 0.006728137820033453,
+    "pass": true,
+    "flip_explanations": {
+      "threshold_proximity": 8,
+      "tie_pair": 2
+    }
+  },
+  "ACCESS-CM2 ssp245-2030": {
+    "units": 149,
+    "exact_count_units": 146,
+    "flip_days": 7,
+    "unexplained_flips": 0,
+    "flip_accounting_consistent": true,
+    "overlap_days_min": 7305,
+    "days_min": 7305,
+    "max_abs_c": 0.5142482665644188,
+    "median_unit_max_abs_c": 7.876824574992725e-05,
+    "pass": true,
+    "flip_explanations": {
+      "tie_pair": 4,
+      "threshold_proximity": 3
+    }
+  },
+  "ACCESS-CM2 ssp245-2050": {
+    "units": 149,
+    "exact_count_units": 144,
+    "flip_days": 7,
+    "unexplained_flips": 0,
+    "flip_accounting_consistent": true,
+    "overlap_days_min": 7305,
+    "days_min": 7305,
+    "max_abs_c": 1.7100420715908449,
+    "median_unit_max_abs_c": 7.963180541992188e-05,
+    "pass": true,
+    "flip_explanations": {
+      "threshold_proximity": 5,
+      "tie_pair": 2
+    }
+  },
+  "CMCC-CM2-SR5 historical": {
+    "units": 149,
+    "exact_count_units": 145,
+    "flip_days": 4,
+    "unexplained_flips": 0,
+    "flip_accounting_consistent": true,
+    "overlap_days_min": 10957,
+    "days_min": 10957,
+    "max_abs_c": 0.5055753818745892,
+    "median_unit_max_abs_c": 8.487701416015625e-05,
+    "pass": true,
+    "flip_explanations": {
+      "threshold_proximity": 4
+    }
+  },
+  "G1": {
+    "ACCESS-CM2": {
+      "units": 736,
+      "max_abs_c": 0.0,
+      "pass": true
+    },
+    "CMCC-CM2-SR5": {
+      "units": 736,
+      "max_abs_c": 0.0,
+      "pass": true
+    }
+  },
+  "determinism": {
+    "historical": 7.105427357601002e-15,
+    "ssp245-2030": 7.105427357601002e-15,
+    "ssp245-2050": 7.105427357601002e-15,
+    "bit_identical": false
+  }
+}

@@ -1,0 +1,657 @@
+level,admin_key,district,block,coverage,reason,state,flag_below_0.95
+block,Kerala::Alappuzha::Ambalappuzha,Alappuzha,Ambalappuzha,1.000000015840869,,Kerala,False
+block,Kerala::Alappuzha::Aryad,Alappuzha,Aryad,0.6936618512946534,,Kerala,True
+block,Kerala::Alappuzha::Bharanicavu,Alappuzha,Bharanicavu,1.0000000000000002,,Kerala,False
+block,Kerala::Alappuzha::Champakulam,Alappuzha,Champakulam,0.9828327385046806,,Kerala,False
+block,Kerala::Alappuzha::Chengannur,Alappuzha,Chengannur,0.9999996694297357,,Kerala,False
+block,Kerala::Alappuzha::Harippad,Alappuzha,Harippad,1.0000000010555192,,Kerala,False
+block,Kerala::Alappuzha::Kanjikkuzhy,Alappuzha,Kanjikkuzhy,0.8395784638437349,,Kerala,True
+block,Kerala::Alappuzha::Mavelikkara,Alappuzha,Mavelikkara,0.9999998425499016,,Kerala,False
+block,Kerala::Alappuzha::Muthukulam,Alappuzha,Muthukulam,0.9999999999999986,,Kerala,False
+block,Kerala::Alappuzha::Pattanakkad,Alappuzha,Pattanakkad,0.9114061705938831,,Kerala,True
+block,Kerala::Alappuzha::Thycattussery,Alappuzha,Thycattussery,0.5479903948421566,,Kerala,True
+block,Kerala::Alappuzha::Veliyanad,Alappuzha,Veliyanad,0.9607054733690883,,Kerala,False
+block,Kerala::Ernakulam::Alangad,Ernakulam,Alangad,0.9999999999358788,,Kerala,False
+block,Kerala::Ernakulam::Angamali,Ernakulam,Angamali,0.9999999999999996,,Kerala,False
+block,Kerala::Ernakulam::Edappally,Ernakulam,Edappally,1.0000000307629386,,Kerala,False
+block,Kerala::Ernakulam::Koovappady,Ernakulam,Koovappady,1.0000000077715678,,Kerala,False
+block,Kerala::Ernakulam::Kothamangalam,Ernakulam,Kothamangalam,1.0039498162118605,,Kerala,False
+block,Kerala::Ernakulam::Mulanthuruthy,Ernakulam,Mulanthuruthy,0.9984103104567457,,Kerala,False
+block,Kerala::Ernakulam::Muvattupuzha,Ernakulam,Muvattupuzha,0.9999999846561802,,Kerala,False
+block,Kerala::Ernakulam::Palluruthy,Ernakulam,Palluruthy,0.9999856564254349,,Kerala,False
+block,Kerala::Ernakulam::Pampakuda,Ernakulam,Pampakuda,0.9999999999999986,,Kerala,False
+block,Kerala::Ernakulam::Parakkadav,Ernakulam,Parakkadav,1.0000000000000009,,Kerala,False
+block,Kerala::Ernakulam::Paravur,Ernakulam,Paravur,0.9533510517668892,,Kerala,False
+block,Kerala::Ernakulam::Vadavucode,Ernakulam,Vadavucode,0.9999999999999993,,Kerala,False
+block,Kerala::Ernakulam::Vazhakkulam,Ernakulam,Vazhakkulam,1.0000000000000007,,Kerala,False
+block,Kerala::Ernakulam::Vypeen,Ernakulam,Vypeen,0.8485322663314661,,Kerala,True
+block,Kerala::Idukki::Adimaly,Idukki,Adimaly,1.0000000000000004,,Kerala,False
+block,Kerala::Idukki::Azhutha,Idukki,Azhutha,0.9999999999999939,,Kerala,False
+block,Kerala::Idukki::Devikulam,Idukki,Devikulam,0.9999999999999954,,Kerala,False
+block,Kerala::Idukki::Elemdesam,Idukki,Elemdesam,1.0000000000000027,,Kerala,False
+block,Kerala::Idukki::Idukki,Idukki,Idukki,1.0000000000000004,,Kerala,False
+block,Kerala::Idukki::Kattappana,Idukki,Kattappana,0.9999999999999967,,Kerala,False
+block,Kerala::Idukki::Nedumkandom,Idukki,Nedumkandom,1.0000000000000004,,Kerala,False
+block,Kerala::Idukki::Thodupuzha,Idukki,Thodupuzha,1.0000000000000024,,Kerala,False
+block,Kerala::Kannur::Edakkad,Kannur,Edakkad,0.9996960815543662,,Kerala,False
+block,Kerala::Kannur::Irikkur,Kannur,Irikkur,1.0000000000000016,,Kerala,False
+block,Kerala::Kannur::Iritty,Kannur,Iritty,1.000000000000004,,Kerala,False
+block,Kerala::Kannur::Kalliasseri,Kannur,Kalliasseri,0.9740471279140225,,Kerala,False
+block,Kerala::Kannur::Kannur,Kannur,Kannur,0.9999874525912427,,Kerala,False
+block,Kerala::Kannur::Kuthuparamba,Kannur,Kuthuparamba,1.000000000000002,,Kerala,False
+block,Kerala::Kannur::Panoor,Kannur,Panoor,1.000000254025739,,Kerala,False
+block,Kerala::Kannur::Payyannur,Kannur,Payyannur,1.0000000006784973,,Kerala,False
+block,Kerala::Kannur::Peravoor,Kannur,Peravoor,0.9999999999999994,,Kerala,False
+block,Kerala::Kannur::Taliparamba,Kannur,Taliparamba,0.999754134663016,,Kerala,False
+block,Kerala::Kannur::Thalassery,Kannur,Thalassery,0.9989822007370096,,Kerala,False
+block,Kerala::Kasaragod::Kanhangad,Kasaragod,Kanhangad,1.0000000722631366,,Kerala,False
+block,Kerala::Kasaragod::Karadka,Kasaragod,Karadka,0.999999999999999,,Kerala,False
+block,Kerala::Kasaragod::Kasargod,Kasaragod,Kasargod,1.000000001589687,,Kerala,False
+block,Kerala::Kasaragod::Manjeshwar,Kasaragod,Manjeshwar,0.9999999877095503,,Kerala,False
+block,Kerala::Kasaragod::Nileshwar,Kasaragod,Nileshwar,0.9978586654044714,,Kerala,False
+block,Kerala::Kasaragod::Parappa,Kasaragod,Parappa,1.0000000000000016,,Kerala,False
+block,Kerala::Kollam::Anchal,Kollam,Anchal,0.9999999999999998,,Kerala,False
+block,Kerala::Kollam::Chadayamangalam,Kollam,Chadayamangalam,0.9999999999999996,,Kerala,False
+block,Kerala::Kollam::Chavara,Kollam,Chavara,1.0000000095371482,,Kerala,False
+block,Kerala::Kollam::Chittumala,Kollam,Chittumala,0.999999999444385,,Kerala,False
+block,Kerala::Kollam::Ithikkara,Kollam,Ithikkara,0.9999999997696281,,Kerala,False
+block,Kerala::Kollam::Kottarakkara,Kollam,Kottarakkara,1.0000000000000002,,Kerala,False
+block,Kerala::Kollam::Mukhathala,Kollam,Mukhathala,0.9999999983630549,,Kerala,False
+block,Kerala::Kollam::Oachira,Kollam,Oachira,1.000000000928828,,Kerala,False
+block,Kerala::Kollam::Pathanapuram,Kollam,Pathanapuram,1.00000001100057,,Kerala,False
+block,Kerala::Kollam::Sasthamcottah,Kollam,Sasthamcottah,1.0000000000000007,,Kerala,False
+block,Kerala::Kollam::Vettikkavala,Kollam,Vettikkavala,1.0000000000000009,,Kerala,False
+block,Kerala::Kottayam::Erattupetta,Kottayam,Erattupetta,1.0,,Kerala,False
+block,Kerala::Kottayam::Ettumanoor,Kottayam,Ettumanoor,0.9867814207264126,,Kerala,False
+block,Kerala::Kottayam::Kaduthuruthy,Kottayam,Kaduthuruthy,0.9999999999999968,,Kerala,False
+block,Kerala::Kottayam::Kanjirappally,Kottayam,Kanjirappally,1.0000000000000016,,Kerala,False
+block,Kerala::Kottayam::Lalam,Kottayam,Lalam,0.9999999999999982,,Kerala,False
+block,Kerala::Kottayam::Madappally,Kottayam,Madappally,0.9999999994659003,,Kerala,False
+block,Kerala::Kottayam::Pallom,Kottayam,Pallom,0.8964305459945747,,Kerala,True
+block,Kerala::Kottayam::Pampady,Kottayam,Pampady,0.9999999999999993,,Kerala,False
+block,Kerala::Kottayam::Uzhavoor,Kottayam,Uzhavoor,1.0000000000000027,,Kerala,False
+block,Kerala::Kottayam::Vaikom,Kottayam,Vaikom,0.9622317949256768,,Kerala,False
+block,Kerala::Kottayam::Vazhoor,Kottayam,Vazhoor,0.9999999892905164,,Kerala,False
+block,Kerala::Kozhikode::Balusseri,Kozhikode,Balusseri,1.000000002908676,,Kerala,False
+block,Kerala::Kozhikode::Chelannur,Kozhikode,Chelannur,1.0000000078942484,,Kerala,False
+block,Kerala::Kozhikode::Koduvally,Kozhikode,Koduvally,0.9999999942511998,,Kerala,False
+block,Kerala::Kozhikode::Kozhikode,Kozhikode,Kozhikode,1.0000000089261134,,Kerala,False
+block,Kerala::Kozhikode::Kunnamangalam,Kozhikode,Kunnamangalam,1.0000000000000016,,Kerala,False
+block,Kerala::Kozhikode::Kunnummal,Kozhikode,Kunnummal,0.9999999999999994,,Kerala,False
+block,Kerala::Kozhikode::Melday,Kozhikode,Melday,1.0000001542374581,,Kerala,False
+block,Kerala::Kozhikode::Panthalayani,Kozhikode,Panthalayani,1.0000000000000004,,Kerala,False
+block,Kerala::Kozhikode::Perambra,Kozhikode,Perambra,0.9999999999999998,,Kerala,False
+block,Kerala::Kozhikode::Thodannur,Kozhikode,Thodannur,0.9999999999999992,,Kerala,False
+block,Kerala::Kozhikode::Thuneri,Kozhikode,Thuneri,1.0000000131138267,,Kerala,False
+block,Kerala::Kozhikode::Vadakara,Kozhikode,Vadakara,1.000000000227519,,Kerala,False
+block,Kerala::Malappuram::Areakode,Malappuram,Areakode,1.0,,Kerala,False
+block,Kerala::Malappuram::Kalikavu,Malappuram,Kalikavu,1.0000000000000018,,Kerala,False
+block,Kerala::Malappuram::Kondotty,Malappuram,Kondotty,1.0000000000000009,,Kerala,False
+block,Kerala::Malappuram::Kuttippuram,Malappuram,Kuttippuram,1.0000000358097192,,Kerala,False
+block,Kerala::Malappuram::Malappuram,Malappuram,Malappuram,1.0000000089459127,,Kerala,False
+block,Kerala::Malappuram::Mankada,Malappuram,Mankada,1.000000046988535,,Kerala,False
+block,Kerala::Malappuram::Nilambur,Malappuram,Nilambur,0.9999999756256994,,Kerala,False
+block,Kerala::Malappuram::Perinthalmanna,Malappuram,Perinthalmanna,1.0000000000000009,,Kerala,False
+block,Kerala::Malappuram::Perumpadappu,Malappuram,Perumpadappu,0.9999999985408177,,Kerala,False
+block,Kerala::Malappuram::Ponnani,Malappuram,Ponnani,0.9999997267142591,,Kerala,False
+block,Kerala::Malappuram::Tanur,Malappuram,Tanur,0.9999997940527287,,Kerala,False
+block,Kerala::Malappuram::Tirur,Malappuram,Tirur,0.9999999502527858,,Kerala,False
+block,Kerala::Malappuram::Tirurangadi,Malappuram,Tirurangadi,0.9999999886556187,,Kerala,False
+block,Kerala::Malappuram::Vengara,Malappuram,Vengara,0.9999999864507424,,Kerala,False
+block,Kerala::Malappuram::Wandoor,Malappuram,Wandoor,0.9999999999999989,,Kerala,False
+block,Kerala::Palakkad::Alathur,Palakkad,Alathur,1.0000000000000009,,Kerala,False
+block,Kerala::Palakkad::Attappadi,Palakkad,Attappadi,1.0000000000000016,,Kerala,False
+block,Kerala::Palakkad::Chittur,Palakkad,Chittur,0.9999999999999991,,Kerala,False
+block,Kerala::Palakkad::Kollengode,Palakkad,Kollengode,0.9999999999999991,,Kerala,False
+block,Kerala::Palakkad::Kuzhalmannam,Palakkad,Kuzhalmannam,0.9999999999999982,,Kerala,False
+block,Kerala::Palakkad::Malampuzha,Palakkad,Malampuzha,1.0000000000000022,,Kerala,False
+block,Kerala::Palakkad::Mannarkad,Palakkad,Mannarkad,1.0000000000000027,,Kerala,False
+block,Kerala::Palakkad::Nemmara,Palakkad,Nemmara,0.9999999901986212,,Kerala,False
+block,Kerala::Palakkad::Ottappalam,Palakkad,Ottappalam,1.0000000001086031,,Kerala,False
+block,Kerala::Palakkad::Palakkad,Palakkad,Palakkad,0.9999999999999987,,Kerala,False
+block,Kerala::Palakkad::Pattambi,Palakkad,Pattambi,0.9999999838440166,,Kerala,False
+block,Kerala::Palakkad::Sreekrishnapuram,Palakkad,Sreekrishnapuram,1.0000000000000007,,Kerala,False
+block,Kerala::Palakkad::Trithala,Palakkad,Trithala,1.0000000011442867,,Kerala,False
+block,Kerala::Pathanamthitta::Elanthoor,Pathanamthitta,Elanthoor,0.9999999999999974,,Kerala,False
+block,Kerala::Pathanamthitta::Koipuram,Pathanamthitta,Koipuram,0.9999999878855237,,Kerala,False
+block,Kerala::Pathanamthitta::Konni,Pathanamthitta,Konni,1.0000000000000002,,Kerala,False
+block,Kerala::Pathanamthitta::Mallappally,Pathanamthitta,Mallappally,0.9999999999999982,,Kerala,False
+block,Kerala::Pathanamthitta::Pandlam,Pathanamthitta,Pandlam,1.000000000000001,,Kerala,False
+block,Kerala::Pathanamthitta::Parakode,Pathanamthitta,Parakode,1.0000000015193424,,Kerala,False
+block,Kerala::Pathanamthitta::Pulikeezhu,Pathanamthitta,Pulikeezhu,0.9999999348873565,,Kerala,False
+block,Kerala::Pathanamthitta::Ranni,Pathanamthitta,Ranni,1.0000000000000007,,Kerala,False
+block,Kerala::Thiruvananthapuram::Athiyannoor,Thiruvananthapuram,Athiyannoor,0.999999999273217,,Kerala,False
+block,Kerala::Thiruvananthapuram::Chirayinkeezhu,Thiruvananthapuram,Chirayinkeezhu,1.0000000060524854,,Kerala,False
+block,Kerala::Thiruvananthapuram::Kilimanoor,Thiruvananthapuram,Kilimanoor,1.0000000000000002,,Kerala,False
+block,Kerala::Thiruvananthapuram::Nedumangad,Thiruvananthapuram,Nedumangad,1.000000000000001,,Kerala,False
+block,Kerala::Thiruvananthapuram::Nemom,Thiruvananthapuram,Nemom,1.0000000006447098,,Kerala,False
+block,Kerala::Thiruvananthapuram::Parassala,Thiruvananthapuram,Parassala,1.0000000000000022,,Kerala,False
+block,Kerala::Thiruvananthapuram::Perumkadavila,Thiruvananthapuram,Perumkadavila,1.0000000000000002,,Kerala,False
+block,Kerala::Thiruvananthapuram::Pothencode,Thiruvananthapuram,Pothencode,0.9999999997498774,,Kerala,False
+block,Kerala::Thiruvananthapuram::Vamanapuram,Thiruvananthapuram,Vamanapuram,0.9999999999999994,,Kerala,False
+block,Kerala::Thiruvananthapuram::Varkala,Thiruvananthapuram,Varkala,0.9999999934944619,,Kerala,False
+block,Kerala::Thiruvananthapuram::Vellanad,Thiruvananthapuram,Vellanad,1.000000000163395,,Kerala,False
+block,Kerala::Thrissur::Anthikkad,Thrissur,Anthikkad,1.0000000007838232,,Kerala,False
+block,Kerala::Thrissur::Chalakkudy,Thrissur,Chalakkudy,1.000000000458256,,Kerala,False
+block,Kerala::Thrissur::Chavakkad,Thrissur,Chavakkad,0.9948200874056199,,Kerala,False
+block,Kerala::Thrissur::Cherpu,Thrissur,Cherpu,0.9999999999981182,,Kerala,False
+block,Kerala::Thrissur::Chowannur,Thrissur,Chowannur,1.0000000265754365,,Kerala,False
+block,Kerala::Thrissur::Irinjalakkuda,Thrissur,Irinjalakkuda,1.0000000000000002,,Kerala,False
+block,Kerala::Thrissur::Kodakara,Thrissur,Kodakara,1.0000000623697953,,Kerala,False
+block,Kerala::Thrissur::Mala,Thrissur,Mala,0.9999999999999998,,Kerala,False
+block,Kerala::Thrissur::Mathilakam,Thrissur,Mathilakam,1.000000054863992,,Kerala,False
+block,Kerala::Thrissur::Mullassery,Thrissur,Mullassery,0.9951995470110473,,Kerala,False
+block,Kerala::Thrissur::Ollukkara,Thrissur,Ollukkara,1.0000000013206094,,Kerala,False
+block,Kerala::Thrissur::Pazhayannur,Thrissur,Pazhayannur,0.9999999981603822,,Kerala,False
+block,Kerala::Thrissur::Puzhakkal,Thrissur,Puzhakkal,0.9999999985328445,,Kerala,False
+block,Kerala::Thrissur::Thalikkulam,Thrissur,Thalikkulam,0.9746410868016241,,Kerala,False
+block,Kerala::Thrissur::Vellangallur,Thrissur,Vellangallur,0.9999999999999988,,Kerala,False
+block,Kerala::Thrissur::Wadakkanchery,Thrissur,Wadakkanchery,1.0000000059094383,,Kerala,False
+block,Kerala::Wayanad::Kalpetta,Wayanad,Kalpetta,1.0000000000000018,,Kerala,False
+block,Kerala::Wayanad::Mananthavady,Wayanad,Mananthavady,1.0000000000000004,,Kerala,False
+block,Kerala::Wayanad::Panamaram,Wayanad,Panamaram,1.0000000000000007,,Kerala,False
+block,Kerala::Wayanad::Sulthan Bathery,Wayanad,Sulthan Bathery,1.000000000000001,,Kerala,False
+district,Kerala::Alappuzha,Alappuzha,,0.927099378745261,,Kerala,True
+district,Kerala::Ernakulam,Ernakulam,,0.9950978703778861,,Kerala,False
+district,Kerala::Idukki,Idukki,,0.9999999999999984,,Kerala,False
+district,Kerala::Kannur,Kannur,,0.9985012784787356,,Kerala,False
+district,Kerala::Kasaragod,Kasaragod,,0.9997790082216571,,Kerala,False
+district,Kerala::Kollam,Kollam,,1.0000000017631754,,Kerala,False
+district,Kerala::Kottayam,Kottayam,,0.9887609329515632,,Kerala,False
+district,Kerala::Kozhikode,Kozhikode,,1.000000006597404,,Kerala,False
+district,Kerala::Malappuram,Malappuram,,0.999999982563588,,Kerala,False
+district,Kerala::Palakkad,Palakkad,,0.9999999980163612,,Kerala,False
+district,Kerala::Pathanamthitta,Pathanamthitta,,0.9999999973462239,,Kerala,False
+district,Kerala::Thiruvananthapuram,Thiruvananthapuram,,0.9999999999674196,,Kerala,False
+district,Kerala::Thrissur,Thrissur,,0.9991568484965883,,Kerala,False
+district,Kerala::Wayanad,Wayanad,,0.999999999999999,,Kerala,False
+block,Rajasthan::Ajmer::Ajmer Rural,Ajmer,Ajmer Rural,1.0000000094329982,,Rajasthan,False
+block,Rajasthan::Ajmer::Arain,Ajmer,Arain,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Ajmer::Kishangarh Silora,Ajmer,Kishangarh Silora,0.9999999999999986,,Rajasthan,False
+block,Rajasthan::Ajmer::Pisangan,Ajmer,Pisangan,0.9999999999999984,,Rajasthan,False
+block,Rajasthan::Ajmer::Sawar,Ajmer,Sawar,0.9999999999999983,,Rajasthan,False
+block,Rajasthan::Ajmer::Srinagar,Ajmer,Srinagar,1.000000005000103,,Rajasthan,False
+block,Rajasthan::Alwar::Govindgarh,Alwar,Govindgarh,1.000000007870811,,Rajasthan,False
+block,Rajasthan::Alwar::Kathumar,Alwar,Kathumar,0.9999999393955169,,Rajasthan,False
+block,Rajasthan::Alwar::Laxmangarh,Alwar,Laxmangarh,0.9999999999999984,,Rajasthan,False
+block,Rajasthan::Alwar::Malkheda,Alwar,Malkheda,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Alwar::Rajgarh,Alwar,Rajgarh,1.0000000018122417,,Rajasthan,False
+block,Rajasthan::Alwar::Ramgarh,Alwar,Ramgarh,1.0000000000000024,,Rajasthan,False
+block,Rajasthan::Alwar::Reni,Alwar,Reni,1.0000000000000027,,Rajasthan,False
+block,Rajasthan::Alwar::Thanagazi,Alwar,Thanagazi,0.9999999999999997,,Rajasthan,False
+block,Rajasthan::Alwar::Umren,Alwar,Umren,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Anoopgarh::Anupgarh,Anoopgarh,Anupgarh,0.9994937557301018,,Rajasthan,False
+block,Rajasthan::Anoopgarh::Gharsana,Anoopgarh,Gharsana,0.99434455249297,,Rajasthan,False
+block,Rajasthan::Anoopgarh::Khajuwala,Anoopgarh,Khajuwala,0.9980642535664377,,Rajasthan,False
+block,Rajasthan::Anoopgarh::Raisinghnagar,Anoopgarh,Raisinghnagar,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Anoopgarh::Vijainagar,Anoopgarh,Vijainagar,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Balotra::Baltora,Balotra,Baltora,0.9999999999999968,,Rajasthan,False
+block,Rajasthan::Balotra::Baytoo,Balotra,Baytoo,0.999999999999999,,Rajasthan,False
+block,Rajasthan::Balotra::Gira,Balotra,Gira,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Balotra::Kalyanpur,Balotra,Kalyanpur,1.0000000000000029,,Rajasthan,False
+block,Rajasthan::Balotra::Panyla Kla,Balotra,Panyla Kla,0.9999999999999989,,Rajasthan,False
+block,Rajasthan::Balotra::Patodi,Balotra,Patodi,0.9999999999999996,,Rajasthan,False
+block,Rajasthan::Balotra::Samdari,Balotra,Samdari,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Balotra::Sindhari,Balotra,Sindhari,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Balotra::Siwana,Balotra,Siwana,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Banswara::Anandpuri,Banswara,Anandpuri,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Banswara::Arthuna,Banswara,Arthuna,1.0000000000000018,,Rajasthan,False
+block,Rajasthan::Banswara::Bagidora,Banswara,Bagidora,1.0000000081855562,,Rajasthan,False
+block,Rajasthan::Banswara::Banswara,Banswara,Banswara,0.999999999999997,,Rajasthan,False
+block,Rajasthan::Banswara::Chhoti Sarwan,Banswara,Chhoti Sarwan,1.0,,Rajasthan,False
+block,Rajasthan::Banswara::Gangar Talai,Banswara,Gangar Talai,0.999999322600589,,Rajasthan,False
+block,Rajasthan::Banswara::Garhi,Banswara,Garhi,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Banswara::Ghatol,Banswara,Ghatol,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Banswara::Kushalgarh,Banswara,Kushalgarh,0.9999999999999992,,Rajasthan,False
+block,Rajasthan::Banswara::Sajjangarh,Banswara,Sajjangarh,1.000000008337298,,Rajasthan,False
+block,Rajasthan::Banswara::Talwara,Banswara,Talwara,0.9999999986639481,,Rajasthan,False
+block,Rajasthan::Baran::Anta,Baran,Anta,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Baran::Atru,Baran,Atru,0.9999999999999986,,Rajasthan,False
+block,Rajasthan::Baran::Baran (Full),Baran,Baran (Full),0.9999999999999973,,Rajasthan,False
+block,Rajasthan::Baran::Chhabra,Baran,Chhabra,0.9999999687252591,,Rajasthan,False
+block,Rajasthan::Baran::Chhipabarod,Baran,Chhipabarod,0.9999999999999991,,Rajasthan,False
+block,Rajasthan::Baran::Kishanganj,Baran,Kishanganj,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Baran::Mangrol,Baran,Mangrol,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Baran::Shahbad,Baran,Shahbad,0.9999999999999981,,Rajasthan,False
+block,Rajasthan::Barmer::Aadel,Barmer,Aadel,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Barmer::Barmer,Barmer,Barmer,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Barmer::Barmer Rural,Barmer,Barmer Rural,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Barmer::Chohtan,Barmer,Chohtan,0.9999999999999991,,Rajasthan,False
+block,Rajasthan::Barmer::Dhanau,Barmer,Dhanau,0.9999999999999982,,Rajasthan,False
+block,Rajasthan::Barmer::Dhorimanna,Barmer,Dhorimanna,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Barmer::Fagliya,Barmer,Fagliya,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Barmer::Gadra Road,Barmer,Gadra Road,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Barmer::Gudhamalani,Barmer,Gudhamalani,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Barmer::Ramsar,Barmer,Ramsar,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Barmer::Sedwa,Barmer,Sedwa,0.9994417875306375,,Rajasthan,False
+block,Rajasthan::Barmer::Sheo,Barmer,Sheo,1.0000000000000029,,Rajasthan,False
+block,Rajasthan::Beawar::Badnor,Beawar,Badnor,0.9999999999999989,,Rajasthan,False
+block,Rajasthan::Beawar::Jaitaran,Beawar,Jaitaran,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Beawar::Jawaja,Beawar,Jawaja,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Beawar::Masooda,Beawar,Masooda,0.9999999745285176,,Rajasthan,False
+block,Rajasthan::Beawar::Raipur,Beawar,Raipur,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Bharatpur::Bayana,Bharatpur,Bayana,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Bharatpur::Bhusawar,Bharatpur,Bhusawar,0.9999999999999977,,Rajasthan,False
+block,Rajasthan::Bharatpur::Nadbai,Bharatpur,Nadbai,1.0000000000000018,,Rajasthan,False
+block,Rajasthan::Bharatpur::Rupbas,Bharatpur,Rupbas,1.0000000000000018,,Rajasthan,False
+block,Rajasthan::Bharatpur::Sewar,Bharatpur,Sewar,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Bharatpur::Uchain,Bharatpur,Uchain,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Bharatpur::Weir,Bharatpur,Weir,0.9999999999999982,,Rajasthan,False
+block,Rajasthan::Bhilwara::Asind,Bhilwara,Asind,0.9999999999999986,,Rajasthan,False
+block,Rajasthan::Bhilwara::Bijoliya,Bhilwara,Bijoliya,1.000000000000003,,Rajasthan,False
+block,Rajasthan::Bhilwara::Hurda,Bhilwara,Hurda,1.000000000033408,,Rajasthan,False
+block,Rajasthan::Bhilwara::Kareda,Bhilwara,Kareda,0.9999999999999991,,Rajasthan,False
+block,Rajasthan::Bhilwara::Mandal,Bhilwara,Mandal,0.9999999858265961,,Rajasthan,False
+block,Rajasthan::Bhilwara::Mandalgarh,Bhilwara,Mandalgarh,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Bhilwara::Raipur,Bhilwara,Raipur,1.0000000000000018,,Rajasthan,False
+block,Rajasthan::Bhilwara::Sahara,Bhilwara,Sahara,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Bhilwara::Suwana,Bhilwara,Suwana,1.0000000013565877,,Rajasthan,False
+block,Rajasthan::Bikaner::Bikaner,Bikaner,Bikaner,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Bikaner::Kolayat,Bikaner,Kolayat,0.998947703748414,,Rajasthan,False
+block,Rajasthan::Bikaner::Lunkaransar,Bikaner,Lunkaransar,1.0,,Rajasthan,False
+block,Rajasthan::Bikaner::Nokha,Bikaner,Nokha,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Bikaner::Panchoo,Bikaner,Panchoo,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Bikaner::Poogal,Bikaner,Poogal,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Bikaner::Sri Dungargarh,Bikaner,Sri Dungargarh,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Bundi::Bundi,Bundi,Bundi,0.9999999999999989,,Rajasthan,False
+block,Rajasthan::Bundi::Hindoli,Bundi,Hindoli,1.000000000000002,,Rajasthan,False
+block,Rajasthan::Bundi::Keshoraipatan,Bundi,Keshoraipatan,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Bundi::Nainwa,Bundi,Nainwa,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Bundi::Talera,Bundi,Talera,0.9999999993621057,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Bari Sadri,Chittorgarh,Bari Sadri,0.9999999999999991,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Begun,Chittorgarh,Begun,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Bhadesar,Chittorgarh,Bhadesar,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Bhainsrorgarh,Chittorgarh,Bhainsrorgarh,0.9999999999999997,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Bhopalsagar,Chittorgarh,Bhopalsagar,0.9999999999999997,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Chittorgarh,Chittorgarh,Chittorgarh,0.999999926893769,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Dungla,Chittorgarh,Dungla,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Gangrar,Chittorgarh,Gangrar,0.9999999931444267,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Kapasan,Chittorgarh,Kapasan,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Nimbahera,Chittorgarh,Nimbahera,0.999999531680762,,Rajasthan,False
+block,Rajasthan::Chittorgarh::Rashmi,Chittorgarh,Rashmi,0.9999999999999987,,Rajasthan,False
+block,Rajasthan::Churu::Bidasar,Churu,Bidasar,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Churu::Churu,Churu,Churu,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Churu::Rajgarh,Churu,Rajgarh,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Churu::Ratangarh,Churu,Ratangarh,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Churu::Sardarshahar,Churu,Sardarshahar,0.9999999999999982,,Rajasthan,False
+block,Rajasthan::Churu::Sujangarh,Churu,Sujangarh,0.999999999999999,,Rajasthan,False
+block,Rajasthan::Churu::Taranagar,Churu,Taranagar,0.9999999999999977,,Rajasthan,False
+block,Rajasthan::Dausa::Bandikui,Dausa,Bandikui,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Dausa::Baswa,Dausa,Baswa,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Dausa::Dausa,Dausa,Dausa,0.9999999999999987,,Rajasthan,False
+block,Rajasthan::Dausa::Lalsot,Dausa,Lalsot,1.0000000038904056,,Rajasthan,False
+block,Rajasthan::Dausa::Lawan,Dausa,Lawan,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Dausa::Mahwa,Dausa,Mahwa,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Dausa::Nangal Rajawatan,Dausa,Nangal Rajawatan,0.9999999999999978,,Rajasthan,False
+block,Rajasthan::Dausa::Ramgarh Pachwara,Dausa,Ramgarh Pachwara,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Dausa::Sikandara,Dausa,Sikandara,0.9999999969352139,,Rajasthan,False
+block,Rajasthan::Dausa::Sikrai,Dausa,Sikrai,0.999999999999998,,Rajasthan,False
+block,Rajasthan::Deeg::Deeg,Deeg,Deeg,1.0,,Rajasthan,False
+block,Rajasthan::Deeg::Kaman,Deeg,Kaman,1.0000000000000033,,Rajasthan,False
+block,Rajasthan::Deeg::Kumher,Deeg,Kumher,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Deeg::Nagar Pahari,Deeg,Nagar Pahari,0.999999999999997,,Rajasthan,False
+block,Rajasthan::Deeg::Pahari,Deeg,Pahari,1.0000000000000029,,Rajasthan,False
+block,Rajasthan::Dholpur::Bari,Dholpur,Bari,0.9999999879549417,,Rajasthan,False
+block,Rajasthan::Dholpur::Baseri,Dholpur,Baseri,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Dholpur::Dhaulpur,Dholpur,Dhaulpur,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Dholpur::Rajakhera,Dholpur,Rajakhera,1.0000000000000029,,Rajasthan,False
+block,Rajasthan::Dholpur::Saipau,Dholpur,Saipau,0.9999999999999989,,Rajasthan,False
+block,Rajasthan::Dholpur::Sarmathura,Dholpur,Sarmathura,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Didwana Kuchaman::Didwana,Didwana Kuchaman,Didwana,0.9999999999999983,,Rajasthan,False
+block,Rajasthan::Didwana Kuchaman::Kuchaman,Didwana Kuchaman,Kuchaman,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Didwana Kuchaman::Ladnu,Didwana Kuchaman,Ladnu,1.0,,Rajasthan,False
+block,Rajasthan::Didwana Kuchaman::Makrana,Didwana Kuchaman,Makrana,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Didwana Kuchaman::Molasar,Didwana Kuchaman,Molasar,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Didwana Kuchaman::Nawa,Didwana Kuchaman,Nawa,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Didwana Kuchaman::Parbatsar,Didwana Kuchaman,Parbatsar,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Dudu::Dudu,Dudu,Dudu,0.9999999999999979,,Rajasthan,False
+block,Rajasthan::Dudu::Madhorajpura,Dudu,Madhorajpura,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Dudu::Mauzamabad,Dudu,Mauzamabad,0.9999999999999984,,Rajasthan,False
+block,Rajasthan::Dudu::Phagi,Dudu,Phagi,0.9999999999999986,,Rajasthan,False
+block,Rajasthan::Dungarpur::Aspur,Dungarpur,Aspur,0.999999999999999,,Rajasthan,False
+block,Rajasthan::Dungarpur::Bichiwara,Dungarpur,Bichiwara,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Dungarpur::Chikhali,Dungarpur,Chikhali,0.9999999999999997,,Rajasthan,False
+block,Rajasthan::Dungarpur::Dovada,Dungarpur,Dovada,1.0000000000000029,,Rajasthan,False
+block,Rajasthan::Dungarpur::Dungarpur,Dungarpur,Dungarpur,0.9999999867119861,,Rajasthan,False
+block,Rajasthan::Dungarpur::Galiyakoat,Dungarpur,Galiyakoat,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Dungarpur::Jothari,Dungarpur,Jothari,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Dungarpur::Sabla,Dungarpur,Sabla,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Dungarpur::Sagwara,Dungarpur,Sagwara,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Dungarpur::Simalwara,Dungarpur,Simalwara,0.999999999999999,,Rajasthan,False
+block,Rajasthan::Ganganagar::Ganganagar,Ganganagar,Ganganagar,0.9940731416245325,,Rajasthan,False
+block,Rajasthan::Ganganagar::Karanpur,Ganganagar,Karanpur,0.9685844707946567,,Rajasthan,False
+block,Rajasthan::Ganganagar::Padampur,Ganganagar,Padampur,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Ganganagar::Sadulshahar,Ganganagar,Sadulshahar,0.9999999999999997,,Rajasthan,False
+block,Rajasthan::Ganganagar::Suratgarh,Ganganagar,Suratgarh,0.999999999999998,,Rajasthan,False
+block,Rajasthan::Gangapurcity::Bamanwas,Gangapurcity,Bamanwas,0.9999999999999992,,Rajasthan,False
+block,Rajasthan::Gangapurcity::Gangapur City,Gangapurcity,Gangapur City,1.000000000000002,,Rajasthan,False
+block,Rajasthan::Gangapurcity::Nadauti,Gangapurcity,Nadauti,0.9999999999999992,,Rajasthan,False
+block,Rajasthan::Gangapurcity::Todabhim,Gangapurcity,Todabhim,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Hanumangarh::Bhadra,Hanumangarh,Bhadra,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Hanumangarh::Hanumangarh,Hanumangarh,Hanumangarh,1.0,,Rajasthan,False
+block,Rajasthan::Hanumangarh::Nohar,Hanumangarh,Nohar,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Hanumangarh::Pilibanga,Hanumangarh,Pilibanga,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Hanumangarh::Rawatsar,Hanumangarh,Rawatsar,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Hanumangarh::Sangaria,Hanumangarh,Sangaria,1.0,,Rajasthan,False
+block,Rajasthan::Hanumangarh::Tibbi,Hanumangarh,Tibbi,0.9999999999999992,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Andhi,Jaipur Gramin,Andhi,1.0000000000000027,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Bassi,Jaipur Gramin,Bassi,1.0000000903001125,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Chaksu,Jaipur Gramin,Chaksu,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Govindgarh,Jaipur Gramin,Govindgarh,0.9999999653263251,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Jamwa Ramgarh,Jaipur Gramin,Jamwa Ramgarh,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Kishangarh Renwal,Jaipur Gramin,Kishangarh Renwal,0.9999999999999987,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Kotkhawda,Jaipur Gramin,Kotkhawda,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Sambhar,Jaipur Gramin,Sambhar,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Shahpura,Jaipur Gramin,Shahpura,1.000000230323804,,Rajasthan,False
+block,Rajasthan::Jaipur Gramin::Tunga,Jaipur Gramin,Tunga,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Jaipur::Amber,Jaipur,Amber,1.0000000213105813,,Rajasthan,False
+block,Rajasthan::Jaipur::Jalsu,Jaipur,Jalsu,0.9999999736569021,,Rajasthan,False
+block,Rajasthan::Jaipur::Jhotwara,Jaipur,Jhotwara,0.9999999869202131,,Rajasthan,False
+block,Rajasthan::Jaipur::Sanganer,Jaipur,Sanganer,0.9999999497314345,,Rajasthan,False
+block,Rajasthan::Jaisalmer::Bhaniyana,Jaisalmer,Bhaniyana,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Jaisalmer::Fatehgarh,Jaisalmer,Fatehgarh,1.0000000000000024,,Rajasthan,False
+block,Rajasthan::Jaisalmer::Jaisalmer,Jaisalmer,Jaisalmer,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Jaisalmer::Mohangarh,Jaisalmer,Mohangarh,0.985740136092678,,Rajasthan,False
+block,Rajasthan::Jaisalmer::Nachana,Jaisalmer,Nachana,0.9822546540825318,,Rajasthan,False
+block,Rajasthan::Jaisalmer::Sam,Jaisalmer,Sam,0.9907670829825715,,Rajasthan,False
+block,Rajasthan::Jaisalmer::Sankra,Jaisalmer,Sankra,0.9999999999999991,,Rajasthan,False
+block,Rajasthan::Jalore::Ahore,Jalore,Ahore,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Jalore::Bagoda,Jalore,Bagoda,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Jalore::Bhinmal,Jalore,Bhinmal,0.9999999999999971,,Rajasthan,False
+block,Rajasthan::Jalore::Chitalwana,Jalore,Chitalwana,0.9999999999125524,,Rajasthan,False
+block,Rajasthan::Jalore::Jalore,Jalore,Jalore,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Jalore::Jaswantpura,Jalore,Jaswantpura,0.9999999999999989,,Rajasthan,False
+block,Rajasthan::Jalore::Raniwara,Jalore,Raniwara,1.0000000005198817,,Rajasthan,False
+block,Rajasthan::Jalore::Sanchore,Jalore,Sanchore,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Jalore::Sarnau,Jalore,Sarnau,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Jalore::Sayla,Jalore,Sayla,0.9999999999999987,,Rajasthan,False
+block,Rajasthan::Jhalawar::Aklera,Jhalawar,Aklera,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Jhalawar::Bakani,Jhalawar,Bakani,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Jhalawar::Bhawani Mandi,Jhalawar,Bhawani Mandi,0.9999999970982383,,Rajasthan,False
+block,Rajasthan::Jhalawar::Dag,Jhalawar,Dag,0.9999999999999982,,Rajasthan,False
+block,Rajasthan::Jhalawar::Jhalrapatan,Jhalawar,Jhalrapatan,1.0000000295738425,,Rajasthan,False
+block,Rajasthan::Jhalawar::Khanpur,Jhalawar,Khanpur,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Jhalawar::Manoharthana,Jhalawar,Manoharthana,0.9999999999999992,,Rajasthan,False
+block,Rajasthan::Jhalawar::Pirawa (Sunel),Jhalawar,Pirawa (Sunel),1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Alsisar,Jhunjhunu,Alsisar,0.9999999999999989,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Buhana,Jhunjhunu,Buhana,0.9999999999999962,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Chirawa,Jhunjhunu,Chirawa,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Jhunjhunu,Jhunjhunu,Jhunjhunu,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Mandawa,Jhunjhunu,Mandawa,1.0000000000000033,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Nawalgarh,Jhunjhunu,Nawalgarh,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Pilani,Jhunjhunu,Pilani,1.000000000000002,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Singhana,Jhunjhunu,Singhana,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Jhunjhunu::Surajgarh,Jhunjhunu,Surajgarh,0.9999999999999976,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Balesar,Jodhpur Gramin,Balesar,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Bawadi,Jodhpur Gramin,Bawadi,1.000000059165072,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Bhopalgarh,Jodhpur Gramin,Bhopalgarh,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Bilara,Jodhpur Gramin,Bilara,0.9999999999999989,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Dhawa,Jodhpur Gramin,Dhawa,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Luni,Jodhpur Gramin,Luni,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Osian,Jodhpur Gramin,Osian,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Peepad Sahar,Jodhpur Gramin,Peepad Sahar,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Sekhala,Jodhpur Gramin,Sekhala,0.9999999999999996,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Shergarh,Jodhpur Gramin,Shergarh,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Jodhpur Gramin::Tinwari,Jodhpur Gramin,Tinwari,1.0000000000000018,,Rajasthan,False
+block,Rajasthan::Jodhpur::Keru,Jodhpur,Keru,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Jodhpur::Mandor,Jodhpur,Mandor,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Karauli::Hindaun,Karauli,Hindaun,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Karauli::Karauli,Karauli,Karauli,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Karauli::Mandrayal,Karauli,Mandrayal,1.0,,Rajasthan,False
+block,Rajasthan::Karauli::Masalpur,Karauli,Masalpur,1.0,,Rajasthan,False
+block,Rajasthan::Karauli::Sapotra,Karauli,Sapotra,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Karauli::Sri Mahaveer Ji,Karauli,Sri Mahaveer Ji,1.0,,Rajasthan,False
+block,Rajasthan::Kekri::Bhinay,Kekri,Bhinay,0.9999999999999991,,Rajasthan,False
+block,Rajasthan::Kekri::Kekri,Kekri,Kekri,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Kekri::Sarwar,Kekri,Sarwar,0.9999999999999986,,Rajasthan,False
+block,Rajasthan::Kekri::Todaraisingh,Kekri,Todaraisingh,1.0000000000000033,,Rajasthan,False
+block,Rajasthan::Khairthal-Tijara::Kishangarh Bas,Khairthal-Tijara,Kishangarh Bas,0.9999999898154214,,Rajasthan,False
+block,Rajasthan::Khairthal-Tijara::Kotkasim,Khairthal-Tijara,Kotkasim,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Khairthal-Tijara::Mandawar,Khairthal-Tijara,Mandawar,0.9999999933965836,,Rajasthan,False
+block,Rajasthan::Khairthal-Tijara::Tijara,Khairthal-Tijara,Tijara,1.0000001180161375,,Rajasthan,False
+block,Rajasthan::Kota::Itawa,Kota,Itawa,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Kota::Khairabad,Kota,Khairabad,0.9999999999999981,,Rajasthan,False
+block,Rajasthan::Kota::Ladpura,Kota,Ladpura,1.0000000001666836,,Rajasthan,False
+block,Rajasthan::Kota::Sangod,Kota,Sangod,1.0000000000000018,,Rajasthan,False
+block,Rajasthan::Kota::Sultanpur,Kota,Sultanpur,0.9999999999999987,,Rajasthan,False
+block,Rajasthan::Kotputli-Behror::Bansur,Kotputli-Behror,Bansur,0.9999999999999988,,Rajasthan,False
+block,Rajasthan::Kotputli-Behror::Behror,Kotputli-Behror,Behror,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Kotputli-Behror::Kotputli,Kotputli-Behror,Kotputli,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Kotputli-Behror::Neemrana,Kotputli-Behror,Neemrana,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Kotputli-Behror::Paota,Kotputli-Behror,Paota,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Kotputli-Behror::Viratnagar,Kotputli-Behror,Viratnagar,0.9999999999999988,,Rajasthan,False
+block,Rajasthan::Nagaur::Bherunda,Nagaur,Bherunda,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Nagaur::Degana,Nagaur,Degana,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Nagaur::Jayal,Nagaur,Jayal,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Nagaur::Khinvsar,Nagaur,Khinvsar,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Nagaur::Merta,Nagaur,Merta,1.0000000000000044,,Rajasthan,False
+block,Rajasthan::Nagaur::Mundwa,Nagaur,Mundwa,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Nagaur::Nagaur,Nagaur,Nagaur,0.9999999999999966,,Rajasthan,False
+block,Rajasthan::Nagaur::Riyan Badi,Nagaur,Riyan Badi,1.0000000000000024,,Rajasthan,False
+block,Rajasthan::Neem Ka Thana::Ajeetgarh,Neem Ka Thana,Ajeetgarh,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Neem Ka Thana::Khetri,Neem Ka Thana,Khetri,0.9999999999999997,,Rajasthan,False
+block,Rajasthan::Neem Ka Thana::Neem Ka Thana,Neem Ka Thana,Neem Ka Thana,0.9999999999999982,,Rajasthan,False
+block,Rajasthan::Neem Ka Thana::Patan,Neem Ka Thana,Patan,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Neem Ka Thana::Sri Madhopur,Neem Ka Thana,Sri Madhopur,0.9999999999999981,,Rajasthan,False
+block,Rajasthan::Neem Ka Thana::Udaipurwati,Neem Ka Thana,Udaipurwati,0.9999999999999992,,Rajasthan,False
+block,Rajasthan::Pali::Bali,Pali,Bali,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Pali::Desuri,Pali,Desuri,0.9999999999999996,,Rajasthan,False
+block,Rajasthan::Pali::Kharchi(Mar.Jun),Pali,Kharchi(Mar.Jun),0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Pali::Pali,Pali,Pali,1.000000000000003,,Rajasthan,False
+block,Rajasthan::Pali::Rani Station,Pali,Rani Station,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Pali::Rohat,Pali,Rohat,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Pali::Sojat,Pali,Sojat,0.9999999999999986,,Rajasthan,False
+block,Rajasthan::Pali::Sumerpur,Pali,Sumerpur,0.9999999963266533,,Rajasthan,False
+block,Rajasthan::Phalodi::Aau,Phalodi,Aau,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Phalodi::Bap,Phalodi,Bap,0.9999999999999978,,Rajasthan,False
+block,Rajasthan::Phalodi::Bapini,Phalodi,Bapini,1.000000000000003,,Rajasthan,False
+block,Rajasthan::Phalodi::Dechu,Phalodi,Dechu,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Phalodi::Ghantiyali,Phalodi,Ghantiyali,0.9999999999999977,,Rajasthan,False
+block,Rajasthan::Phalodi::Lohawat,Phalodi,Lohawat,0.9999999999999973,,Rajasthan,False
+block,Rajasthan::Phalodi::Phalodi,Phalodi,Phalodi,0.9999999999999986,,Rajasthan,False
+block,Rajasthan::Pratapgarh::Arnod,Pratapgarh,Arnod,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Pratapgarh::Chhoti Sadri,Pratapgarh,Chhoti Sadri,1.0000000000000018,,Rajasthan,False
+block,Rajasthan::Pratapgarh::Dalot,Pratapgarh,Dalot,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Pratapgarh::Dhamotar,Pratapgarh,Dhamotar,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Pratapgarh::Dhariawad,Pratapgarh,Dhariawad,0.9999999999999964,,Rajasthan,False
+block,Rajasthan::Pratapgarh::Peepal Khoont,Pratapgarh,Peepal Khoont,0.9999999999999987,,Rajasthan,False
+block,Rajasthan::Pratapgarh::Pratapgarh,Pratapgarh,Pratapgarh,1.0000000000000016,,Rajasthan,False
+block,Rajasthan::Pratapgarh::Suhagpura,Pratapgarh,Suhagpura,0.9999999999999992,,Rajasthan,False
+block,Rajasthan::Rajsamand::Amet,Rajsamand,Amet,1.0000000000000062,,Rajasthan,False
+block,Rajasthan::Rajsamand::Bhim,Rajsamand,Bhim,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Rajsamand::Delwada,Rajsamand,Delwada,1.0000000000000004,,Rajasthan,False
+block,Rajasthan::Rajsamand::Deogarh,Rajsamand,Deogarh,0.9999999999999996,,Rajasthan,False
+block,Rajasthan::Rajsamand::Khamnor,Rajsamand,Khamnor,0.9999999210866437,,Rajasthan,False
+block,Rajasthan::Rajsamand::Kumbhalgarh,Rajsamand,Kumbhalgarh,0.9999999999999991,,Rajasthan,False
+block,Rajasthan::Rajsamand::Railmagra,Rajsamand,Railmagra,1.0,,Rajasthan,False
+block,Rajasthan::Rajsamand::Rajsamand,Rajsamand,Rajsamand,0.9999999577763261,,Rajasthan,False
+block,Rajasthan::Salumbar::Jaisamand,Salumbar,Jaisamand,0.9999999999999976,,Rajasthan,False
+block,Rajasthan::Salumbar::Jhallara,Salumbar,Jhallara,1.0,,Rajasthan,False
+block,Rajasthan::Salumbar::Lasadiya,Salumbar,Lasadiya,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Salumbar::Salumbar,Salumbar,Salumbar,1.0000000000000013,,Rajasthan,False
+block,Rajasthan::Salumbar::Sarada,Salumbar,Sarada,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Salumbar::Semari,Salumbar,Semari,1.0000000000000022,,Rajasthan,False
+block,Rajasthan::Sawai Madhopur::Bonli,Sawai Madhopur,Bonli,0.9999999999999981,,Rajasthan,False
+block,Rajasthan::Sawai Madhopur::Chauth Ka Barwara,Sawai Madhopur,Chauth Ka Barwara,0.9999999999999991,,Rajasthan,False
+block,Rajasthan::Sawai Madhopur::Khandar,Sawai Madhopur,Khandar,1.0000000000000058,,Rajasthan,False
+block,Rajasthan::Sawai Madhopur::Malarna Doongar,Sawai Madhopur,Malarna Doongar,0.9999999999999997,,Rajasthan,False
+block,Rajasthan::Sawai Madhopur::Sawai Madhopur,Sawai Madhopur,Sawai Madhopur,0.9999999999999976,,Rajasthan,False
+block,Rajasthan::Shahpura::Banera,Shahpura,Banera,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Shahpura::Jahazpur,Shahpura,Jahazpur,0.9999999693485092,,Rajasthan,False
+block,Rajasthan::Shahpura::Kotri,Shahpura,Kotri,1.0000000000000027,,Rajasthan,False
+block,Rajasthan::Shahpura::Shahpura,Shahpura,Shahpura,1.000000000000003,,Rajasthan,False
+block,Rajasthan::Sikar::Danta Ramgarh,Sikar,Danta Ramgarh,1.0000000000000029,,Rajasthan,False
+block,Rajasthan::Sikar::Dhod,Sikar,Dhod,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Sikar::Fatehpur,Sikar,Fatehpur,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Sikar::Khandela,Sikar,Khandela,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Sikar::Lachhmangarh,Sikar,Lachhmangarh,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Sikar::Nechwa,Sikar,Nechwa,1.0000000000000002,,Rajasthan,False
+block,Rajasthan::Sikar::Palsana,Sikar,Palsana,0.9999999999999999,,Rajasthan,False
+block,Rajasthan::Sikar::Piprali,Sikar,Piprali,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Sirohi::Abu Road,Sirohi,Abu Road,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Sirohi::Pindwara,Sirohi,Pindwara,0.9999999999999998,,Rajasthan,False
+block,Rajasthan::Sirohi::Reodar,Sirohi,Reodar,0.9999999999999973,,Rajasthan,False
+block,Rajasthan::Sirohi::Sheoganj,Sirohi,Sheoganj,0.9999999661177308,,Rajasthan,False
+block,Rajasthan::Sirohi::Sirohi,Sirohi,Sirohi,0.9999999999999986,,Rajasthan,False
+block,Rajasthan::Tonk::Deoli,Tonk,Deoli,0.999999983801942,,Rajasthan,False
+block,Rajasthan::Tonk::Malpura,Tonk,Malpura,0.9999999999999996,,Rajasthan,False
+block,Rajasthan::Tonk::Newai,Tonk,Newai,0.9999999999999972,,Rajasthan,False
+block,Rajasthan::Tonk::Peeplu,Tonk,Peeplu,0.9999999999999994,,Rajasthan,False
+block,Rajasthan::Tonk::Tonk,Tonk,Tonk,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Tonk::Uniara,Tonk,Uniara,0.999999999999999,,Rajasthan,False
+block,Rajasthan::Udaipur::Bargaon,Udaipur,Bargaon,1.000000280783085,,Rajasthan,False
+block,Rajasthan::Udaipur::Bhinder,Udaipur,Bhinder,0.999999999999999,,Rajasthan,False
+block,Rajasthan::Udaipur::Girwa,Udaipur,Girwa,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Udaipur::Gogunda,Udaipur,Gogunda,1.000000000000002,,Rajasthan,False
+block,Rajasthan::Udaipur::Jhadol,Udaipur,Jhadol,1.000000000000001,,Rajasthan,False
+block,Rajasthan::Udaipur::Kherwara,Udaipur,Kherwara,0.9999999461515284,,Rajasthan,False
+block,Rajasthan::Udaipur::Kotra,Udaipur,Kotra,1.0000000000000022,,Rajasthan,False
+block,Rajasthan::Udaipur::Kurabad,Udaipur,Kurabad,1.0000000000000007,,Rajasthan,False
+block,Rajasthan::Udaipur::Mavli,Udaipur,Mavli,1.0000000000000009,,Rajasthan,False
+block,Rajasthan::Udaipur::Nayagaon,Udaipur,Nayagaon,1.0,,Rajasthan,False
+block,Rajasthan::Udaipur::Phalasiya,Udaipur,Phalasiya,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Udaipur::Rishbhdeo,Udaipur,Rishbhdeo,0.9999999537035233,,Rajasthan,False
+block,Rajasthan::Udaipur::Sayra,Udaipur,Sayra,0.9999999999999993,,Rajasthan,False
+block,Rajasthan::Udaipur::Vallabhnagar,Udaipur,Vallabhnagar,1.0000000000000007,,Rajasthan,False
+district,Rajasthan::Ajmer,Ajmer,,1.0000000025092368,,Rajasthan,False
+district,Rajasthan::Alwar,Alwar,,0.9999999931999396,,Rajasthan,False
+district,Rajasthan::Anoopgarh,Anoopgarh,,0.9981396560887907,,Rajasthan,False
+district,Rajasthan::Balotra,Balotra,,0.9999999999999978,,Rajasthan,False
+district,Rajasthan::Banswara,Banswara,,0.9999999684586116,,Rajasthan,False
+district,Rajasthan::Baran,Baran,,0.9999999964213945,,Rajasthan,False
+district,Rajasthan::Barmer,Barmer,,0.9999772576642433,,Rajasthan,False
+district,Rajasthan::Beawar,Beawar,,0.999999995016577,,Rajasthan,False
+district,Rajasthan::Bharatpur,Bharatpur,,0.9999999999999992,,Rajasthan,False
+district,Rajasthan::Bhilwara,Bhilwara,,0.9999999987215306,,Rajasthan,False
+district,Rajasthan::Bikaner,Bikaner,,0.9996658707432388,,Rajasthan,False
+district,Rajasthan::Bundi,Bundi,,0.9999999998972695,,Rajasthan,False
+district,Rajasthan::Chittorgarh,Chittorgarh,,0.9999999401566285,,Rajasthan,False
+district,Rajasthan::Churu,Churu,,0.9999999999999963,,Rajasthan,False
+district,Rajasthan::Dausa,Dausa,,1.0000000006050906,,Rajasthan,False
+district,Rajasthan::Deeg,Deeg,,1.0000000000000044,,Rajasthan,False
+district,Rajasthan::Dholpur,Dholpur,,0.9999999968438931,,Rajasthan,False
+district,Rajasthan::Didwana Kuchaman,Didwana Kuchaman,,0.9999999999999986,,Rajasthan,False
+district,Rajasthan::Dudu,Dudu,,1.0000000000000007,,Rajasthan,False
+district,Rajasthan::Dungarpur,Dungarpur,,0.9999999988656292,,Rajasthan,False
+district,Rajasthan::Ganganagar,Ganganagar,,0.9949230009292396,,Rajasthan,False
+district,Rajasthan::Gangapurcity,Gangapurcity,,0.9999999999999992,,Rajasthan,False
+district,Rajasthan::Hanumangarh,Hanumangarh,,1.0000000000000009,,Rajasthan,False
+district,Rajasthan::Jaipur,Jaipur,,0.9999999790704965,,Rajasthan,False
+district,Rajasthan::Jaipur Gramin,Jaipur Gramin,,1.0000000252330679,,Rajasthan,False
+district,Rajasthan::Jaisalmer,Jaisalmer,,0.992274091857114,,Rajasthan,False
+district,Rajasthan::Jalore,Jalore,,1.0000000000308953,,Rajasthan,False
+district,Rajasthan::Jhalawar,Jhalawar,,1.0000000036971244,,Rajasthan,False
+district,Rajasthan::Jhunjhunu,Jhunjhunu,,1.000000000000001,,Rajasthan,False
+district,Rajasthan::Jodhpur,Jodhpur,,1.000000000000002,,Rajasthan,False
+district,Rajasthan::Jodhpur Gramin,Jodhpur Gramin,,1.0000000064133057,,Rajasthan,False
+district,Rajasthan::Karauli,Karauli,,0.9999999999999992,,Rajasthan,False
+district,Rajasthan::Kekri,Kekri,,0.9999999999999984,,Rajasthan,False
+district,Rajasthan::Khairthal-Tijara,Khairthal-Tijara,,1.0000000371394244,,Rajasthan,False
+district,Rajasthan::Kota,Kota,,1.0000000000479528,,Rajasthan,False
+district,Rajasthan::Kotputli-Behror,Kotputli-Behror,,1.0,,Rajasthan,False
+district,Rajasthan::Nagaur,Nagaur,,0.9999999999999997,,Rajasthan,False
+district,Rajasthan::Neem Ka Thana,Neem Ka Thana,,1.000000000000001,,Rajasthan,False
+district,Rajasthan::Pali,Pali,,0.9999999996402258,,Rajasthan,False
+district,Rajasthan::Phalodi,Phalodi,,1.0000000000000047,,Rajasthan,False
+district,Rajasthan::Pratapgarh,Pratapgarh,,0.9999999999999966,,Rajasthan,False
+district,Rajasthan::Rajsamand,Rajsamand,,0.9999999846017849,,Rajasthan,False
+district,Rajasthan::Salumbar,Salumbar,,1.0000000000000018,,Rajasthan,False
+district,Rajasthan::Sawai Madhopur,Sawai Madhopur,,1.0000000000000009,,Rajasthan,False
+district,Rajasthan::Shahpura,Shahpura,,0.999999991302204,,Rajasthan,False
+district,Rajasthan::Sikar,Sikar,,0.9999999999999993,,Rajasthan,False
+district,Rajasthan::Sirohi,Sirohi,,0.9999999941689796,,Rajasthan,False
+district,Rajasthan::Tonk,Tonk,,0.9999999967932491,,Rajasthan,False
+district,Rajasthan::Udaipur,Udaipur,,1.0000000067928538,,Rajasthan,False
+block,Himachal Pradesh::Bilaspur::Bilaspur Sadar,Bilaspur,Bilaspur Sadar,1.000000037226502,,Himachal Pradesh,False
+block,Himachal Pradesh::Bilaspur::Ghumarwin,Bilaspur,Ghumarwin,0.9999999999999993,,Himachal Pradesh,False
+block,Himachal Pradesh::Bilaspur::Jhandutta,Bilaspur,Jhandutta,0.9999999999999991,,Himachal Pradesh,False
+block,Himachal Pradesh::Bilaspur::Shree Naina Devi,Bilaspur,Shree Naina Devi,1.0,,Himachal Pradesh,False
+block,Himachal Pradesh::Chamba::Bharmour,Chamba,Bharmour,0.9999999999999991,,Himachal Pradesh,False
+block,Himachal Pradesh::Chamba::Bhattiyat,Chamba,Bhattiyat,0.9999999999999982,,Himachal Pradesh,False
+block,Himachal Pradesh::Chamba::Chamba,Chamba,Chamba,0.9999999999999989,,Himachal Pradesh,False
+block,Himachal Pradesh::Chamba::Mehla,Chamba,Mehla,1.000000000000002,,Himachal Pradesh,False
+block,Himachal Pradesh::Chamba::Pangi,Chamba,Pangi,0.9999999999999993,,Himachal Pradesh,False
+block,Himachal Pradesh::Chamba::Saluni,Chamba,Saluni,0.9999999999999989,,Himachal Pradesh,False
+block,Himachal Pradesh::Chamba::Tisa,Chamba,Tisa,1.0000000000000007,,Himachal Pradesh,False
+block,Himachal Pradesh::Hamirpur::Bamson,Hamirpur,Bamson,0.9999999999999979,,Himachal Pradesh,False
+block,Himachal Pradesh::Hamirpur::Bhoranj,Hamirpur,Bhoranj,0.9999999999999984,,Himachal Pradesh,False
+block,Himachal Pradesh::Hamirpur::Bijhri,Hamirpur,Bijhri,1.0000000000000009,,Himachal Pradesh,False
+block,Himachal Pradesh::Hamirpur::Hamirpur,Hamirpur,Hamirpur,0.9999999900306078,,Himachal Pradesh,False
+block,Himachal Pradesh::Hamirpur::Nadaun,Hamirpur,Nadaun,0.9999999999202711,,Himachal Pradesh,False
+block,Himachal Pradesh::Hamirpur::Tira Sujanpur,Hamirpur,Tira Sujanpur,0.9999999999999994,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Baijnath,Kangra,Baijnath,0.9999999999999973,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Bhawarna,Kangra,Bhawarna,1.0000000000000004,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Dehra Gopipur,Kangra,Dehra Gopipur,1.0000000000000002,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Dharamshala,Kangra,Dharamshala,1.0000000000000044,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Fatehpur,Kangra,Fatehpur,1.0000000000000018,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Indora,Kangra,Indora,1.0000000025805567,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Kangra,Kangra,Kangra,0.9999999999999977,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Lambagaon,Kangra,Lambagaon,1.000000000000002,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Nagrota Bagwan,Kangra,Nagrota Bagwan,1.0000000087746017,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Nagrota Surian,Kangra,Nagrota Surian,1.0000000000000004,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Nurpur,Kangra,Nurpur,1.0000000000000002,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Panchrukhi,Kangra,Panchrukhi,1.0000000000000009,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Pragpur,Kangra,Pragpur,1.0000000000000002,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Rait,Kangra,Rait,1.000000000000002,,Himachal Pradesh,False
+block,Himachal Pradesh::Kangra::Sulah,Kangra,Sulah,1.0,,Himachal Pradesh,False
+block,Himachal Pradesh::Kinnaur::Kalpa,Kinnaur,Kalpa,0.9715612809440303,,Himachal Pradesh,False
+block,Himachal Pradesh::Kinnaur::Nichar,Kinnaur,Nichar,0.9999999999999972,,Himachal Pradesh,False
+block,Himachal Pradesh::Kinnaur::Pooh,Kinnaur,Pooh,0.9251925648461848,,Himachal Pradesh,True
+block,Himachal Pradesh::Kullu::Anni,Kullu,Anni,0.9999999999999986,,Himachal Pradesh,False
+block,Himachal Pradesh::Kullu::Banjar,Kullu,Banjar,0.9999999999999994,,Himachal Pradesh,False
+block,Himachal Pradesh::Kullu::Kullu,Kullu,Kullu,1.0000000000000027,,Himachal Pradesh,False
+block,Himachal Pradesh::Kullu::Naggar,Kullu,Naggar,1.0,,Himachal Pradesh,False
+block,Himachal Pradesh::Kullu::Nirmand,Kullu,Nirmand,0.9999999999999984,,Himachal Pradesh,False
+block,Himachal Pradesh::Lahul and Spiti::Lahul,Lahul and Spiti,Lahul,1.0000000000000022,,Himachal Pradesh,False
+block,Himachal Pradesh::Lahul and Spiti::Spiti,Lahul and Spiti,Spiti,0.9734431970346459,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Balh,Mandi,Balh,1.0000000000000009,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Bali Chowki,Mandi,Bali Chowki,0.9999999999999992,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Chauntra,Mandi,Chauntra,1.0000000000000009,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Dharmpur,Mandi,Dharmpur,1.0000000000000016,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Drang,Mandi,Drang,1.000000000000005,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Gohar,Mandi,Gohar,1.0000000000000002,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Gopalpur,Mandi,Gopalpur,0.9999999999999983,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Karsog,Mandi,Karsog,0.9999999999999986,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Mandi Sadar,Mandi,Mandi Sadar,0.9999999999999998,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Seraj,Mandi,Seraj,1.0000000000000004,,Himachal Pradesh,False
+block,Himachal Pradesh::Mandi::Sundarnagar,Mandi,Sundarnagar,1.00000001386167,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Basantpur,Shimla,Basantpur,1.214473979229,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Chauhara,Shimla,Chauhara,0.9999999999999987,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Chaupal,Shimla,Chaupal,1.0000000000000002,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Jubbal,Shimla,Jubbal,1.0000000000000022,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Kotkhai,Shimla,Kotkhai,0.9999999999999996,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Kupvi,Shimla,Kupvi,1.0000000000000009,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Mashobra,Shimla,Mashobra,1.012065484760594,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Nankhari,Shimla,Nankhari,0.9999999999999988,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Narkanda,Shimla,Narkanda,0.9999999999999999,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Rampur,Shimla,Rampur,1.0000000000000018,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Rohru,Shimla,Rohru,0.999999999999999,,Himachal Pradesh,False
+block,Himachal Pradesh::Shimla::Theog,Shimla,Theog,0.9999999999999989,,Himachal Pradesh,False
+block,Himachal Pradesh::Sirmaur::Nahan,Sirmaur,Nahan,0.9999999999999979,,Himachal Pradesh,False
+block,Himachal Pradesh::Sirmaur::Pachhad,Sirmaur,Pachhad,0.9999999999999999,,Himachal Pradesh,False
+block,Himachal Pradesh::Sirmaur::Paonta Sahib,Sirmaur,Paonta Sahib,1.0000000191038327,,Himachal Pradesh,False
+block,Himachal Pradesh::Sirmaur::Rajgarh,Sirmaur,Rajgarh,0.9999999999999999,,Himachal Pradesh,False
+block,Himachal Pradesh::Sirmaur::Sangrah,Sirmaur,Sangrah,1.0000000000000018,,Himachal Pradesh,False
+block,Himachal Pradesh::Sirmaur::Shillai,Sirmaur,Shillai,1.0000000000000009,,Himachal Pradesh,False
+block,Himachal Pradesh::Solan::Dharampur,Solan,Dharampur,1.0,,Himachal Pradesh,False
+block,Himachal Pradesh::Solan::Kandaghat,Solan,Kandaghat,0.999999999999999,,Himachal Pradesh,False
+block,Himachal Pradesh::Solan::Kunihar,Solan,Kunihar,0.999999999999998,,Himachal Pradesh,False
+block,Himachal Pradesh::Solan::Nalagarh,Solan,Nalagarh,1.0000000453173188,,Himachal Pradesh,False
+block,Himachal Pradesh::Solan::Solan,Solan,Solan,0.9999995676555296,,Himachal Pradesh,False
+block,Himachal Pradesh::Una::Amb,Una,Amb,1.0000000000000013,,Himachal Pradesh,False
+block,Himachal Pradesh::Una::Bangana,Una,Bangana,1.0,,Himachal Pradesh,False
+block,Himachal Pradesh::Una::Gagret,Una,Gagret,1.0000000000000013,,Himachal Pradesh,False
+block,Himachal Pradesh::Una::Haroli,Una,Haroli,1.000000000000001,,Himachal Pradesh,False
+block,Himachal Pradesh::Una::Una,Una,Una,1.000000000000002,,Himachal Pradesh,False
+district,Himachal Pradesh::Bilaspur,Bilaspur,,1.00000000894607,,Himachal Pradesh,False
+district,Himachal Pradesh::Chamba,Chamba,,1.000000000000001,,Himachal Pradesh,False
+district,Himachal Pradesh::Hamirpur,Hamirpur,,0.9999999978145332,,Himachal Pradesh,False
+district,Himachal Pradesh::Kangra,Kangra,,1.0000000006277465,,Himachal Pradesh,False
+district,Himachal Pradesh::Kinnaur,Kinnaur,,0.9512416226929769,,Himachal Pradesh,False
+district,Himachal Pradesh::Kullu,Kullu,,0.999999999999999,,Himachal Pradesh,False
+district,Himachal Pradesh::Lahul and Spiti,Lahul and Spiti,,0.9862182511225266,,Himachal Pradesh,False
+district,Himachal Pradesh::Mandi,Mandi,,1.000000001820585,,Himachal Pradesh,False
+district,Himachal Pradesh::Shimla,Shimla,,1.0024332278893524,,Himachal Pradesh,False
+district,Himachal Pradesh::Sirmaur,Sirmaur,,1.0000000051835938,,Himachal Pradesh,False
+district,Himachal Pradesh::Solan,Solan,,0.9999999605071808,,Himachal Pradesh,False
+district,Himachal Pradesh::Una,Una,,0.9999999999999981,,Himachal Pradesh,False

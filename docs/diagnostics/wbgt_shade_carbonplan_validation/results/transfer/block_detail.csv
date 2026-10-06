@@ -1,0 +1,657 @@
+level,admin_key,district,block,contributing_units,dominant_processing_id,dominant_hierid,dominant_weight,coverage,shared_vector_group_size,state
+block,Kerala::Alappuzha::Ambalappuzha,Alappuzha,Ambalappuzha,4,20299,IND.18.243.929,0.45516375383202584,1.000000015840869,1,Kerala
+block,Kerala::Alappuzha::Aryad,Alappuzha,Aryad,5,7922,city:Alappuzha,0.9392129384033295,0.6936618512946534,1,Kerala
+block,Kerala::Alappuzha::Bharanicavu,Alappuzha,Bharanicavu,6,20389,IND.18.243.930,0.536114778018466,1.0000000000000002,1,Kerala
+block,Kerala::Alappuzha::Champakulam,Alappuzha,Champakulam,4,20299,IND.18.243.929,0.8769289714898204,0.9828327385046806,1,Kerala
+block,Kerala::Alappuzha::Chengannur,Alappuzha,Chengannur,5,20387,IND.18.243.927,0.39582034316421455,0.9999996694297357,1,Kerala
+block,Kerala::Alappuzha::Harippad,Alappuzha,Harippad,6,7962,city:Kollam,0.4174441181377719,1.0000000010555192,1,Kerala
+block,Kerala::Alappuzha::Kanjikkuzhy,Alappuzha,Kanjikkuzhy,3,7922,city:Alappuzha,0.6302799131372225,0.8395784638437349,1,Kerala
+block,Kerala::Alappuzha::Mavelikkara,Alappuzha,Mavelikkara,5,7962,city:Kollam,0.7474385083134871,0.9999998425499016,1,Kerala
+block,Kerala::Alappuzha::Muthukulam,Alappuzha,Muthukulam,3,7962,city:Kollam,0.8889409375131303,0.9999999999999986,1,Kerala
+block,Kerala::Alappuzha::Pattanakkad,Alappuzha,Pattanakkad,3,18469,IND.18.243.932,0.5311394403430476,0.9114061705938831,1,Kerala
+block,Kerala::Alappuzha::Thycattussery,Alappuzha,Thycattussery,4,20368,IND.18.244.935,0.3112477677719394,0.5479903948421566,1,Kerala
+block,Kerala::Alappuzha::Veliyanad,Alappuzha,Veliyanad,5,20299,IND.18.243.929,0.5591508713117006,0.9607054733690883,1,Kerala
+block,Kerala::Ernakulam::Alangad,Ernakulam,Alangad,5,7886,city:Kochi,0.9698128172018645,0.9999999999358788,1,Kerala
+block,Kerala::Ernakulam::Angamali,Ernakulam,Angamali,5,20351,IND.18.244.939,0.4561996699657649,0.9999999999999996,1,Kerala
+block,Kerala::Ernakulam::Edappally,Ernakulam,Edappally,5,7886,city:Kochi,0.8905445180210477,1.0000000307629386,1,Kerala
+block,Kerala::Ernakulam::Koovappady,Ernakulam,Koovappady,6,20351,IND.18.244.939,0.6175832734162086,1.0000000077715678,1,Kerala
+block,Kerala::Ernakulam::Kothamangalam,Ernakulam,Kothamangalam,8,20346,IND.18.245.940,0.6826849780548419,1.0039498162118605,1,Kerala
+block,Kerala::Ernakulam::Mulanthuruthy,Ernakulam,Mulanthuruthy,5,7886,city:Kochi,0.5412191301624444,0.9984103104567457,1,Kerala
+block,Kerala::Ernakulam::Muvattupuzha,Ernakulam,Muvattupuzha,6,20364,IND.18.244.937,0.5407445530321399,0.9999999846561802,1,Kerala
+block,Kerala::Ernakulam::Palluruthy,Ernakulam,Palluruthy,3,7886,city:Kochi,0.8709350495786707,0.9999856564254349,1,Kerala
+block,Kerala::Ernakulam::Pampakuda,Ernakulam,Pampakuda,4,20364,IND.18.244.937,0.8767212127448295,0.9999999999999986,1,Kerala
+block,Kerala::Ernakulam::Parakkadav,Ernakulam,Parakkadav,5,20353,IND.18.244.933,0.427996732768715,1.0000000000000009,1,Kerala
+block,Kerala::Ernakulam::Paravur,Ernakulam,Paravur,4,20298,IND.18.244.938,0.4735431672247964,0.9533510517668892,1,Kerala
+block,Kerala::Ernakulam::Vadavucode,Ernakulam,Vadavucode,4,20351,IND.18.244.939,0.7973374991768327,0.9999999999999993,1,Kerala
+block,Kerala::Ernakulam::Vazhakkulam,Ernakulam,Vazhakkulam,3,20351,IND.18.244.939,0.5820759248771545,1.0000000000000007,1,Kerala
+block,Kerala::Ernakulam::Vypeen,Ernakulam,Vypeen,4,7886,city:Kochi,0.684587900476672,0.8485322663314661,1,Kerala
+block,Kerala::Idukki::Adimaly,Idukki,Adimaly,2,20346,IND.18.245.940,0.6602093178201768,1.0000000000000004,1,Kerala
+block,Kerala::Idukki::Azhutha,Idukki,Azhutha,9,20372,IND.18.245.941,0.7877460012228908,0.9999999999999939,1,Kerala
+block,Kerala::Idukki::Devikulam,Idukki,Devikulam,6,20346,IND.18.245.940,0.7262590640946873,0.9999999999999954,1,Kerala
+block,Kerala::Idukki::Elemdesam,Idukki,Elemdesam,4,20366,IND.18.245.942,0.8971886484896444,1.0000000000000027,1,Kerala
+block,Kerala::Idukki::Idukki,Idukki,Idukki,3,20366,IND.18.245.942,0.4982850184521836,1.0000000000000004,1,Kerala
+block,Kerala::Idukki::Kattappana,Idukki,Kattappana,5,20362,IND.18.245.943,0.852421280606131,0.9999999999999967,1,Kerala
+block,Kerala::Idukki::Nedumkandom,Idukki,Nedumkandom,2,20362,IND.18.245.943,0.8119959429641892,1.0000000000000004,1,Kerala
+block,Kerala::Idukki::Thodupuzha,Idukki,Thodupuzha,4,20366,IND.18.245.942,0.7324255121508503,1.0000000000000024,1,Kerala
+block,Kerala::Kannur::Edakkad,Kannur,Edakkad,5,20289,IND.18.246.946,0.44284826167632907,0.9996960815543662,1,Kerala
+block,Kerala::Kannur::Irikkur,Kannur,Irikkur,6,20285,IND.18.246.945,0.8383602055254015,1.0000000000000016,1,Kerala
+block,Kerala::Kannur::Iritty,Kannur,Iritty,3,20289,IND.18.246.946,0.7485427363504449,1.000000000000004,1,Kerala
+block,Kerala::Kannur::Kalliasseri,Kannur,Kalliasseri,5,7608,city:Kannur,0.4182245833916342,0.9740471279140225,1,Kerala
+block,Kerala::Kannur::Kannur,Kannur,Kannur,3,7608,city:Kannur,0.9527291828340071,0.9999874525912427,1,Kerala
+block,Kerala::Kannur::Kuthuparamba,Kannur,Kuthuparamba,4,20289,IND.18.246.946,0.8586947591003476,1.000000000000002,1,Kerala
+block,Kerala::Kannur::Panoor,Kannur,Panoor,3,20289,IND.18.246.946,0.4838895659420501,1.000000254025739,1,Kerala
+block,Kerala::Kannur::Payyannur,Kannur,Payyannur,6,20285,IND.18.246.945,0.631697343020437,1.0000000006784973,1,Kerala
+block,Kerala::Kannur::Peravoor,Kannur,Peravoor,3,20289,IND.18.246.946,0.9060609153959591,0.9999999999999994,1,Kerala
+block,Kerala::Kannur::Taliparamba,Kannur,Taliparamba,6,20285,IND.18.246.945,0.8464481973373535,0.999754134663016,1,Kerala
+block,Kerala::Kannur::Thalassery,Kannur,Thalassery,3,7668,city:Thalassery,0.5903160548108293,0.9989822007370096,1,Kerala
+block,Kerala::Kasaragod::Kanhangad,Kasaragod,Kanhangad,3,19120,IND.18.247.947,0.6072429171322828,1.0000000722631366,1,Kerala
+block,Kerala::Kasaragod::Karadka,Kasaragod,Karadka,5,20264,IND.18.247.948,0.8393037177367515,0.999999999999999,1,Kerala
+block,Kerala::Kasaragod::Kasargod,Kasaragod,Kasargod,3,20264,IND.18.247.948,0.5232403816291541,1.000000001589687,1,Kerala
+block,Kerala::Kasaragod::Manjeshwar,Kasaragod,Manjeshwar,5,20264,IND.18.247.948,0.6424803113806159,0.9999999877095503,1,Kerala
+block,Kerala::Kasaragod::Nileshwar,Kasaragod,Nileshwar,4,19120,IND.18.247.947,0.5017065458102911,0.9978586654044714,1,Kerala
+block,Kerala::Kasaragod::Parappa,Kasaragod,Parappa,5,19120,IND.18.247.947,0.8418163429340371,1.0000000000000016,1,Kerala
+block,Kerala::Kollam::Anchal,Kollam,Anchal,7,20395,IND.18.248.952,0.8021635814554607,0.9999999999999998,1,Kerala
+block,Kerala::Kollam::Chadayamangalam,Kollam,Chadayamangalam,4,18806,IND.18.248.950,0.6100336791700892,0.9999999999999996,1,Kerala
+block,Kerala::Kollam::Chavara,Kollam,Chavara,6,7962,city:Kollam,0.7589955530682481,1.0000000095371482,1,Kerala
+block,Kerala::Kollam::Chittumala,Kollam,Chittumala,4,7962,city:Kollam,0.5401482272875049,0.999999999444385,1,Kerala
+block,Kerala::Kollam::Ithikkara,Kollam,Ithikkara,6,18806,IND.18.248.950,0.2986671737611188,0.9999999997696281,1,Kerala
+block,Kerala::Kollam::Kottarakkara,Kollam,Kottarakkara,3,18806,IND.18.248.950,0.794712735875897,1.0000000000000002,1,Kerala
+block,Kerala::Kollam::Mukhathala,Kollam,Mukhathala,3,7962,city:Kollam,0.7404393571136506,0.9999999983630549,1,Kerala
+block,Kerala::Kollam::Oachira,Kollam,Oachira,4,7962,city:Kollam,0.6764047048968083,1.000000000928828,1,Kerala
+block,Kerala::Kollam::Pathanapuram,Kollam,Pathanapuram,6,20395,IND.18.248.952,0.7478629622264394,1.00000001100057,1,Kerala
+block,Kerala::Kollam::Sasthamcottah,Kollam,Sasthamcottah,5,20396,IND.18.248.951,0.6316467538607581,1.0000000000000007,1,Kerala
+block,Kerala::Kollam::Vettikkavala,Kollam,Vettikkavala,5,18806,IND.18.248.950,0.4797781909705428,1.0000000000000009,1,Kerala
+block,Kerala::Kottayam::Erattupetta,Kottayam,Erattupetta,4,18467,IND.18.249.957,0.6689875851964228,1.0,1,Kerala
+block,Kerala::Kottayam::Ettumanoor,Kottayam,Ettumanoor,4,20374,IND.18.249.956,0.4494375919042767,0.9867814207264126,1,Kerala
+block,Kerala::Kottayam::Kaduthuruthy,Kottayam,Kaduthuruthy,4,18468,IND.18.249.958,0.6656723324599637,0.9999999999999968,1,Kerala
+block,Kerala::Kottayam::Kanjirappally,Kottayam,Kanjirappally,4,20377,IND.18.249.955,0.5379877353348865,1.0000000000000016,1,Kerala
+block,Kerala::Kottayam::Lalam,Kottayam,Lalam,3,18467,IND.18.249.957,0.8666169068193403,0.9999999999999982,1,Kerala
+block,Kerala::Kottayam::Madappally,Kottayam,Madappally,4,7972,city:Ettumanoor,0.4361930946236199,0.9999999994659003,1,Kerala
+block,Kerala::Kottayam::Pallom,Kottayam,Pallom,4,20374,IND.18.249.956,0.5936862400500013,0.8964305459945747,1,Kerala
+block,Kerala::Kottayam::Pampady,Kottayam,Pampady,5,20374,IND.18.249.956,0.6378649677298547,0.9999999999999993,1,Kerala
+block,Kerala::Kottayam::Uzhavoor,Kottayam,Uzhavoor,5,18467,IND.18.249.957,0.8219930782982197,1.0000000000000027,1,Kerala
+block,Kerala::Kottayam::Vaikom,Kottayam,Vaikom,4,18468,IND.18.249.958,0.8053477956303274,0.9622317949256768,1,Kerala
+block,Kerala::Kottayam::Vazhoor,Kottayam,Vazhoor,5,20377,IND.18.249.955,0.5418556295488359,0.9999999892905164,1,Kerala
+block,Kerala::Kozhikode::Balusseri,Kozhikode,Balusseri,3,20091,IND.18.250.961,0.8675598989602615,1.000000002908676,1,Kerala
+block,Kerala::Kozhikode::Chelannur,Kozhikode,Chelannur,3,20316,IND.18.250.959,0.5957569433249255,1.0000000078942484,1,Kerala
+block,Kerala::Kozhikode::Koduvally,Kozhikode,Koduvally,5,20316,IND.18.250.959,0.8132347783255756,0.9999999942511998,1,Kerala
+block,Kerala::Kozhikode::Kozhikode,Kozhikode,Kozhikode,4,7723,city:Kozhikode,0.9736106184096475,1.0000000089261134,1,Kerala
+block,Kerala::Kozhikode::Kunnamangalam,Kozhikode,Kunnamangalam,5,20316,IND.18.250.959,0.8177718171140345,1.0000000000000016,1,Kerala
+block,Kerala::Kozhikode::Kunnummal,Kozhikode,Kunnummal,3,20087,IND.18.250.960,0.7696786362717978,0.9999999999999994,1,Kerala
+block,Kerala::Kozhikode::Melday,Kozhikode,Melday,3,20091,IND.18.250.961,0.6115020208125572,1.0000001542374581,1,Kerala
+block,Kerala::Kozhikode::Panthalayani,Kozhikode,Panthalayani,3,20091,IND.18.250.961,0.7252898765305837,1.0000000000000004,1,Kerala
+block,Kerala::Kozhikode::Perambra,Kozhikode,Perambra,5,20091,IND.18.250.961,0.7647838224869424,0.9999999999999998,1,Kerala
+block,Kerala::Kozhikode::Thodannur,Kozhikode,Thodannur,3,20087,IND.18.250.960,0.8621190349229002,0.9999999999999992,1,Kerala
+block,Kerala::Kozhikode::Thuneri,Kozhikode,Thuneri,4,20087,IND.18.250.960,0.8151641105169697,1.0000000131138267,1,Kerala
+block,Kerala::Kozhikode::Vadakara,Kozhikode,Vadakara,3,7668,city:Thalassery,0.7461805086452536,1.000000000227519,1,Kerala
+block,Kerala::Malappuram::Areakode,Malappuram,Areakode,5,19567,IND.18.251.962,0.905668847935761,1.0,1,Kerala
+block,Kerala::Malappuram::Kalikavu,Malappuram,Kalikavu,5,19567,IND.18.251.962,0.8610707013777131,1.0000000000000018,1,Kerala
+block,Kerala::Malappuram::Kondotty,Malappuram,Kondotty,4,7723,city:Kozhikode,0.4813997392107387,1.0000000000000009,1,Kerala
+block,Kerala::Malappuram::Kuttippuram,Malappuram,Kuttippuram,7,20317,IND.18.251.965,0.3856010317927256,1.0000000358097192,1,Kerala
+block,Kerala::Malappuram::Malappuram,Malappuram,Malappuram,6,19567,IND.18.251.962,0.45345881934832477,1.0000000089459127,1,Kerala
+block,Kerala::Malappuram::Mankada,Malappuram,Mankada,5,20320,IND.18.251.963,0.5156190941815484,1.000000046988535,1,Kerala
+block,Kerala::Malappuram::Nilambur,Malappuram,Nilambur,7,19567,IND.18.251.962,0.8110159703663297,0.9999999756256994,1,Kerala
+block,Kerala::Malappuram::Perinthalmanna,Malappuram,Perinthalmanna,6,20320,IND.18.251.963,0.645201958796668,1.0000000000000009,1,Kerala
+block,Kerala::Malappuram::Perumpadappu,Malappuram,Perumpadappu,4,20332,IND.18.251.964,0.5981623483835725,0.9999999985408177,1,Kerala
+block,Kerala::Malappuram::Ponnani,Malappuram,Ponnani,4,7778,city:Guruvayur,0.5799887591996582,0.9999997267142591,1,Kerala
+block,Kerala::Malappuram::Tanur,Malappuram,Tanur,4,20317,IND.18.251.965,0.554381912367108,0.9999997940527287,1,Kerala
+block,Kerala::Malappuram::Tirur,Malappuram,Tirur,4,7778,city:Guruvayur,0.5542563354480686,0.9999999502527858,1,Kerala
+block,Kerala::Malappuram::Tirurangadi,Malappuram,Tirurangadi,6,7723,city:Kozhikode,0.38164898436877215,0.9999999886556187,1,Kerala
+block,Kerala::Malappuram::Vengara,Malappuram,Vengara,5,7723,city:Kozhikode,0.4271121215584533,0.9999999864507424,1,Kerala
+block,Kerala::Malappuram::Wandoor,Malappuram,Wandoor,4,19567,IND.18.251.962,0.9081010198666886,0.9999999999999989,1,Kerala
+block,Kerala::Palakkad::Alathur,Palakkad,Alathur,5,20337,IND.18.252.966,0.7724120337043124,1.0000000000000009,1,Kerala
+block,Kerala::Palakkad::Attappadi,Palakkad,Attappadi,6,20311,IND.18.252.968,0.8003869910002032,1.0000000000000016,1,Kerala
+block,Kerala::Palakkad::Chittur,Palakkad,Chittur,5,20335,IND.18.252.967,0.7372036387198815,0.9999999999999991,1,Kerala
+block,Kerala::Palakkad::Kollengode,Palakkad,Kollengode,5,20335,IND.18.252.967,0.7529743116464205,0.9999999999999991,1,Kerala
+block,Kerala::Palakkad::Kuzhalmannam,Palakkad,Kuzhalmannam,5,20337,IND.18.252.966,0.6000987637372737,0.9999999999999982,1,Kerala
+block,Kerala::Palakkad::Malampuzha,Palakkad,Malampuzha,6,20327,IND.18.252.970,0.692763231942011,1.0000000000000022,1,Kerala
+block,Kerala::Palakkad::Mannarkad,Palakkad,Mannarkad,7,20311,IND.18.252.968,0.871349177497286,1.0000000000000027,1,Kerala
+block,Kerala::Palakkad::Nemmara,Palakkad,Nemmara,5,20335,IND.18.252.967,0.8954583017016903,0.9999999901986212,1,Kerala
+block,Kerala::Palakkad::Ottappalam,Palakkad,Ottappalam,5,20296,IND.18.252.969,0.5970724327883956,1.0000000001086031,1,Kerala
+block,Kerala::Palakkad::Palakkad,Palakkad,Palakkad,5,20327,IND.18.252.970,0.8000060076922446,0.9999999999999987,1,Kerala
+block,Kerala::Palakkad::Pattambi,Palakkad,Pattambi,7,20296,IND.18.252.969,0.7020224685889236,0.9999999838440166,1,Kerala
+block,Kerala::Palakkad::Sreekrishnapuram,Palakkad,Sreekrishnapuram,4,20296,IND.18.252.969,0.7068873098409806,1.0000000000000007,1,Kerala
+block,Kerala::Palakkad::Trithala,Palakkad,Trithala,5,20296,IND.18.252.969,0.6006719148204813,1.0000000011442867,1,Kerala
+block,Kerala::Pathanamthitta::Elanthoor,Pathanamthitta,Elanthoor,8,20386,IND.18.253.973,0.644752258575437,0.9999999999999974,1,Kerala
+block,Kerala::Pathanamthitta::Koipuram,Pathanamthitta,Koipuram,9,20381,IND.18.253.972,0.4202269908505077,0.9999999878855237,1,Kerala
+block,Kerala::Pathanamthitta::Konni,Pathanamthitta,Konni,6,20386,IND.18.253.973,0.7813543000024987,1.0000000000000002,1,Kerala
+block,Kerala::Pathanamthitta::Mallappally,Pathanamthitta,Mallappally,5,20381,IND.18.253.972,0.4978385674115861,0.9999999999999982,1,Kerala
+block,Kerala::Pathanamthitta::Pandlam,Pathanamthitta,Pandlam,2,20386,IND.18.253.973,0.6614644880416143,1.000000000000001,1,Kerala
+block,Kerala::Pathanamthitta::Parakode,Pathanamthitta,Parakode,6,20392,IND.18.253.971,0.6750260167126609,1.0000000015193424,1,Kerala
+block,Kerala::Pathanamthitta::Pulikeezhu,Pathanamthitta,Pulikeezhu,7,20382,IND.18.253.975,0.4031897586961306,0.9999999348873565,1,Kerala
+block,Kerala::Pathanamthitta::Ranni,Pathanamthitta,Ranni,6,20380,IND.18.253.974,0.7668585066922458,1.0000000000000007,1,Kerala
+block,Kerala::Thiruvananthapuram::Athiyannoor,Thiruvananthapuram,Athiyannoor,4,20404,IND.18.254.978,0.5828735483172611,0.999999999273217,1,Kerala
+block,Kerala::Thiruvananthapuram::Chirayinkeezhu,Thiruvananthapuram,Chirayinkeezhu,4,8071,city:Attingal,0.5940159205363941,1.0000000060524854,1,Kerala
+block,Kerala::Thiruvananthapuram::Kilimanoor,Thiruvananthapuram,Kilimanoor,7,18810,IND.18.254.976,0.4114055287150093,1.0000000000000002,1,Kerala
+block,Kerala::Thiruvananthapuram::Nedumangad,Thiruvananthapuram,Nedumangad,3,20398,IND.18.254.977,0.559701722004255,1.000000000000001,1,Kerala
+block,Kerala::Thiruvananthapuram::Nemom,Thiruvananthapuram,Nemom,4,8094,city:Thiruvananthapuram,0.5455983417599479,1.0000000006447098,1,Kerala
+block,Kerala::Thiruvananthapuram::Parassala,Thiruvananthapuram,Parassala,5,20404,IND.18.254.978,0.6191516524313873,1.0000000000000022,1,Kerala
+block,Kerala::Thiruvananthapuram::Perumkadavila,Thiruvananthapuram,Perumkadavila,5,20404,IND.18.254.978,0.6627073406199975,1.0000000000000002,1,Kerala
+block,Kerala::Thiruvananthapuram::Pothencode,Thiruvananthapuram,Pothencode,7,8094,city:Thiruvananthapuram,0.7127809913603783,0.9999999997498774,1,Kerala
+block,Kerala::Thiruvananthapuram::Vamanapuram,Thiruvananthapuram,Vamanapuram,6,20398,IND.18.254.977,0.7319999861665786,0.9999999999999994,1,Kerala
+block,Kerala::Thiruvananthapuram::Varkala,Thiruvananthapuram,Varkala,5,8045,city:Varkala,0.4949761879935671,0.9999999934944619,1,Kerala
+block,Kerala::Thiruvananthapuram::Vellanad,Thiruvananthapuram,Vellanad,4,20398,IND.18.254.977,0.7454364835966749,1.000000000163395,1,Kerala
+block,Kerala::Thrissur::Anthikkad,Thrissur,Anthikkad,5,19127,IND.18.255.983,0.8735559330602246,1.0000000007838232,1,Kerala
+block,Kerala::Thrissur::Chalakkudy,Thrissur,Chalakkudy,7,20340,IND.18.255.981,0.7318765752014509,1.000000000458256,1,Kerala
+block,Kerala::Thrissur::Chavakkad,Thrissur,Chavakkad,6,7778,city:Guruvayur,0.9029577172965547,0.9948200874056199,1,Kerala
+block,Kerala::Thrissur::Cherpu,Thrissur,Cherpu,3,19127,IND.18.255.983,0.7168158372823024,0.9999999999981182,1,Kerala
+block,Kerala::Thrissur::Chowannur,Thrissur,Chowannur,6,7778,city:Guruvayur,0.5290217092413727,1.0000000265754365,1,Kerala
+block,Kerala::Thrissur::Irinjalakkuda,Thrissur,Irinjalakkuda,3,20340,IND.18.255.981,0.5737130558380379,1.0000000000000002,1,Kerala
+block,Kerala::Thrissur::Kodakara,Thrissur,Kodakara,4,20340,IND.18.255.981,0.7187484893923547,1.0000000623697953,1,Kerala
+block,Kerala::Thrissur::Mala,Thrissur,Mala,4,20340,IND.18.255.981,0.7477936275118173,0.9999999999999998,1,Kerala
+block,Kerala::Thrissur::Mathilakam,Thrissur,Mathilakam,5,20340,IND.18.255.981,0.2923273113316579,1.000000054863992,1,Kerala
+block,Kerala::Thrissur::Mullassery,Thrissur,Mullassery,5,19127,IND.18.255.983,0.4706023262445032,0.9951995470110473,1,Kerala
+block,Kerala::Thrissur::Ollukkara,Thrissur,Ollukkara,5,19127,IND.18.255.983,0.5735164969932158,1.0000000013206094,1,Kerala
+block,Kerala::Thrissur::Pazhayannur,Thrissur,Pazhayannur,5,19123,IND.18.255.984,0.6384832420151426,0.9999999981603822,1,Kerala
+block,Kerala::Thrissur::Puzhakkal,Thrissur,Puzhakkal,4,19127,IND.18.255.983,0.4894622831252777,0.9999999985328445,1,Kerala
+block,Kerala::Thrissur::Thalikkulam,Thrissur,Thalikkulam,7,7839,city:Vadanappally,0.4301696468157208,0.9746410868016241,1,Kerala
+block,Kerala::Thrissur::Vellangallur,Thrissur,Vellangallur,4,20340,IND.18.255.981,0.7267367569958425,0.9999999999999988,1,Kerala
+block,Kerala::Thrissur::Wadakkanchery,Thrissur,Wadakkanchery,9,19123,IND.18.255.984,0.8532162790260914,1.0000000059094383,1,Kerala
+block,Kerala::Wayanad::Kalpetta,Wayanad,Kalpetta,7,20088,IND.18.256.987,0.7904052202144382,1.0000000000000018,1,Kerala
+block,Kerala::Wayanad::Mananthavady,Wayanad,Mananthavady,7,20295,IND.18.256.985,0.8432278516497748,1.0000000000000004,1,Kerala
+block,Kerala::Wayanad::Panamaram,Wayanad,Panamaram,4,19563,IND.18.256.986,0.6693371766484627,1.0000000000000007,1,Kerala
+block,Kerala::Wayanad::Sulthan Bathery,Wayanad,Sulthan Bathery,7,19563,IND.18.256.986,0.7769391988070854,1.000000000000001,1,Kerala
+district,Kerala::Alappuzha,Alappuzha,,19,20299,IND.18.243.929,0.21565933151929556,0.927099378745261,1,Kerala
+district,Kerala::Ernakulam,Ernakulam,,19,20346,IND.18.245.940,0.2269667209095038,0.9950978703778861,1,Kerala
+district,Kerala::Idukki,Idukki,,17,20346,IND.18.245.940,0.24832334764581063,0.9999999999999984,1,Kerala
+district,Kerala::Kannur,Kannur,,13,20285,IND.18.246.945,0.3916427272841843,0.9985012784787356,1,Kerala
+district,Kerala::Kasaragod,Kasaragod,,11,20264,IND.18.247.948,0.37325316866657227,0.9997790082216571,1,Kerala
+district,Kerala::Kollam,Kollam,,21,20395,IND.18.248.952,0.4530755169871859,1.0000000017631754,1,Kerala
+district,Kerala::Kottayam,Kottayam,,15,18467,IND.18.249.957,0.31447883861265824,0.9887609329515632,1,Kerala
+district,Kerala::Kozhikode,Kozhikode,,11,20316,IND.18.250.959,0.30517039809727203,1.000000006597404,1,Kerala
+district,Kerala::Malappuram,Malappuram,,21,19567,IND.18.251.962,0.5068096426364922,0.999999982563588,1,Kerala
+district,Kerala::Palakkad,Palakkad,,27,20311,IND.18.252.968,0.23933302984733604,0.9999999980163612,1,Kerala
+district,Kerala::Pathanamthitta,Pathanamthitta,,23,20380,IND.18.253.974,0.3711322717539477,0.9999999973462239,1,Kerala
+district,Kerala::Thiruvananthapuram,Thiruvananthapuram,,17,20398,IND.18.254.977,0.343141242549611,0.9999999999674196,1,Kerala
+district,Kerala::Thrissur,Thrissur,,21,20340,IND.18.255.981,0.32870112375006777,0.9991568484965883,1,Kerala
+district,Kerala::Wayanad,Wayanad,,14,19563,IND.18.256.986,0.3259968749343684,0.999999999999999,1,Kerala
+block,Rajasthan::Ajmer::Ajmer Rural,Ajmer,Ajmer Rural,8,19066,IND.29.423.1627,0.5156562389489192,1.0000000094329982,1,Rajasthan
+block,Rajasthan::Ajmer::Arain,Ajmer,Arain,5,18318,IND.29.423.1630,0.8744562986282244,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Ajmer::Kishangarh Silora,Ajmer,Kishangarh Silora,5,18318,IND.29.423.1630,0.8502304377584271,0.9999999999999986,1,Rajasthan
+block,Rajasthan::Ajmer::Pisangan,Ajmer,Pisangan,8,19066,IND.29.423.1627,0.6604072895217206,0.9999999999999984,1,Rajasthan
+block,Rajasthan::Ajmer::Sawar,Ajmer,Sawar,5,18318,IND.29.423.1630,0.8634341146365412,0.9999999999999983,1,Rajasthan
+block,Rajasthan::Ajmer::Srinagar,Ajmer,Srinagar,6,18579,IND.29.423.1633,0.6922828334153861,1.000000005000103,1,Rajasthan
+block,Rajasthan::Alwar::Govindgarh,Alwar,Govindgarh,4,18996,IND.29.424.1642,0.5126590018059863,1.000000007870811,1,Rajasthan
+block,Rajasthan::Alwar::Kathumar,Alwar,Kathumar,8,19006,IND.29.424.1639,0.8458307562477058,0.9999999393955169,1,Rajasthan
+block,Rajasthan::Alwar::Laxmangarh,Alwar,Laxmangarh,8,19006,IND.29.424.1639,0.7905406724109109,0.9999999999999984,1,Rajasthan
+block,Rajasthan::Alwar::Malkheda,Alwar,Malkheda,4,18998,IND.29.424.1635,0.9306898336074284,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Alwar::Rajgarh,Alwar,Rajgarh,7,18243,IND.29.424.1641,0.6288812310979197,1.0000000018122417,1,Rajasthan
+block,Rajasthan::Alwar::Ramgarh,Alwar,Ramgarh,9,18996,IND.29.424.1642,0.6640543458555873,1.0000000000000024,1,Rajasthan
+block,Rajasthan::Alwar::Reni,Alwar,Reni,6,18243,IND.29.424.1641,0.8497301865897681,1.0000000000000027,1,Rajasthan
+block,Rajasthan::Alwar::Thanagazi,Alwar,Thanagazi,6,19015,IND.29.424.1643,0.8681825406070489,0.9999999999999997,1,Rajasthan
+block,Rajasthan::Alwar::Umren,Alwar,Umren,7,18998,IND.29.424.1635,0.8210914061905414,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Anoopgarh::Anupgarh,Anoopgarh,Anupgarh,5,18253,IND.29.437.1722,0.6481846184929818,0.9994937557301018,1,Rajasthan
+block,Rajasthan::Anoopgarh::Gharsana,Anoopgarh,Gharsana,4,18689,IND.29.437.1725,0.6643691167453973,0.99434455249297,1,Rajasthan
+block,Rajasthan::Anoopgarh::Khajuwala,Anoopgarh,Khajuwala,7,18275,IND.29.430.1683,0.7041770275918586,0.9980642535664377,1,Rajasthan
+block,Rajasthan::Anoopgarh::Raisinghnagar,Anoopgarh,Raisinghnagar,5,18653,IND.29.437.1727,0.8706599693461179,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Anoopgarh::Vijainagar,Anoopgarh,Vijainagar,5,18666,IND.29.437.1729,0.5045999122561218,1.000000000000001,1,Rajasthan
+block,Rajasthan::Balotra::Baltora,Balotra,Baltora,5,19186,IND.29.427.1660,0.9607619575094993,0.9999999999999968,1,Rajasthan
+block,Rajasthan::Balotra::Baytoo,Balotra,Baytoo,4,18755,IND.29.427.1657,0.6584151488450888,0.999999999999999,1,Rajasthan
+block,Rajasthan::Balotra::Gira,Balotra,Gira,5,18755,IND.29.427.1657,0.8449486905756859,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Balotra::Kalyanpur,Balotra,Kalyanpur,3,19186,IND.29.427.1660,0.92616481694705,1.0000000000000029,1,Rajasthan
+block,Rajasthan::Balotra::Panyla Kla,Balotra,Panyla Kla,4,19271,IND.29.427.1659,0.9912019420451421,0.9999999999999989,1,Rajasthan
+block,Rajasthan::Balotra::Patodi,Balotra,Patodi,3,19186,IND.29.427.1660,0.9229171668804913,0.9999999999999996,1,Rajasthan
+block,Rajasthan::Balotra::Samdari,Balotra,Samdari,6,19263,IND.29.427.1662,0.6733676298671532,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Balotra::Sindhari,Balotra,Sindhari,6,19271,IND.29.427.1659,0.8561624268411616,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Balotra::Siwana,Balotra,Siwana,6,19263,IND.29.427.1662,0.9143744630227518,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Banswara::Anandpuri,Banswara,Anandpuri,5,18841,IND.29.425.1649,0.9382318448332491,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Banswara::Arthuna,Banswara,Arthuna,4,19475,IND.29.425.1646,0.9661258825007286,1.0000000000000018,1,Rajasthan
+block,Rajasthan::Banswara::Bagidora,Banswara,Bagidora,7,19498,IND.29.425.1648,0.7636345413964599,1.0000000081855562,1,Rajasthan
+block,Rajasthan::Banswara::Banswara,Banswara,Banswara,5,19488,IND.29.425.1645,0.892451884154924,0.999999999999997,1,Rajasthan
+block,Rajasthan::Banswara::Chhoti Sarwan,Banswara,Chhoti Sarwan,4,19488,IND.29.425.1645,0.9238169438088825,1.0,1,Rajasthan
+block,Rajasthan::Banswara::Gangar Talai,Banswara,Gangar Talai,4,18841,IND.29.425.1649,0.88426872698292,0.999999322600589,1,Rajasthan
+block,Rajasthan::Banswara::Garhi,Banswara,Garhi,7,19475,IND.29.425.1646,0.8995873652673229,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Banswara::Ghatol,Banswara,Ghatol,6,19454,IND.29.425.1647,0.833804753922748,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Banswara::Kushalgarh,Banswara,Kushalgarh,5,19498,IND.29.425.1648,0.9205305072038336,0.9999999999999992,1,Rajasthan
+block,Rajasthan::Banswara::Sajjangarh,Banswara,Sajjangarh,4,19498,IND.29.425.1648,0.9698158912870317,1.000000008337298,1,Rajasthan
+block,Rajasthan::Banswara::Talwara,Banswara,Talwara,5,19488,IND.29.425.1645,0.6465012434465529,0.9999999986639481,1,Rajasthan
+block,Rajasthan::Baran::Anta,Baran,Anta,4,18714,IND.29.426.1655,0.9498305375203618,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Baran::Atru,Baran,Atru,5,19389,IND.29.426.1650,0.57224858866258,0.9999999999999986,1,Rajasthan
+block,Rajasthan::Baran::Baran (Full),Baran,Baran (Full),5,19363,IND.29.426.1651,0.6443910150186225,0.9999999999999973,1,Rajasthan
+block,Rajasthan::Baran::Chhabra,Baran,Chhabra,9,19406,IND.29.426.1652,0.7077010617447602,0.9999999687252591,1,Rajasthan
+block,Rajasthan::Baran::Chhipabarod,Baran,Chhipabarod,6,19417,IND.29.426.1653,0.7007756688691382,0.9999999999999991,1,Rajasthan
+block,Rajasthan::Baran::Kishanganj,Baran,Kishanganj,7,19355,IND.29.426.1654,0.8779829699221152,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Baran::Mangrol,Baran,Mangrol,6,18714,IND.29.426.1655,0.8811726065918919,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Baran::Shahbad,Baran,Shahbad,6,19345,IND.29.426.1656,0.9119996814108091,0.9999999999999981,1,Rajasthan
+block,Rajasthan::Barmer::Aadel,Barmer,Aadel,1,19271,IND.29.427.1659,1.0,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Barmer::Barmer,Barmer,Barmer,6,18755,IND.29.427.1657,0.32260923174813516,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Barmer::Barmer Rural,Barmer,Barmer Rural,4,19271,IND.29.427.1659,0.4258865468265617,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Barmer::Chohtan,Barmer,Chohtan,2,19324,IND.29.427.1658,0.9955423391025766,0.9999999999999991,1,Rajasthan
+block,Rajasthan::Barmer::Dhanau,Barmer,Dhanau,2,19324,IND.29.427.1658,0.9910289530018158,0.9999999999999982,1,Rajasthan
+block,Rajasthan::Barmer::Dhorimanna,Barmer,Dhorimanna,4,19324,IND.29.427.1658,0.6687545469063293,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Barmer::Fagliya,Barmer,Fagliya,2,19324,IND.29.427.1658,0.9707575865877287,1.000000000000001,1,Rajasthan
+block,Rajasthan::Barmer::Gadra Road,Barmer,Gadra Road,4,19136,IND.29.427.1661,0.9621172437585828,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Barmer::Gudhamalani,Barmer,Gudhamalani,5,19271,IND.29.427.1659,0.9261292435252011,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Barmer::Ramsar,Barmer,Ramsar,4,18755,IND.29.427.1657,0.49630615304673226,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Barmer::Sedwa,Barmer,Sedwa,1,19324,IND.29.427.1658,1.0,0.9994417875306375,1,Rajasthan
+block,Rajasthan::Barmer::Sheo,Barmer,Sheo,3,19136,IND.29.427.1661,0.9567606530561713,1.0000000000000029,1,Rajasthan
+block,Rajasthan::Beawar::Badnor,Beawar,Badnor,5,19251,IND.29.429.1672,0.7950574222689243,0.9999999999999989,1,Rajasthan
+block,Rajasthan::Beawar::Jaitaran,Beawar,Jaitaran,5,19144,IND.29.448.1795,0.9147045286553547,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Beawar::Jawaja,Beawar,Jawaja,8,18276,IND.29.423.1628,0.5998156051117787,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Beawar::Masooda,Beawar,Masooda,7,18276,IND.29.423.1628,0.8364765620045088,0.9999999745285176,1,Rajasthan
+block,Rajasthan::Beawar::Raipur,Beawar,Raipur,6,19192,IND.29.448.1798,0.8415724997807201,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Bharatpur::Bayana,Bharatpur,Bayana,9,18832,IND.29.428.1663,0.7362156600381164,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Bharatpur::Bhusawar,Bharatpur,Bhusawar,5,18701,IND.29.428.1671,0.9412360430709881,0.9999999999999977,1,Rajasthan
+block,Rajasthan::Bharatpur::Nadbai,Bharatpur,Nadbai,10,18246,IND.29.428.1668,0.607067158778479,1.0000000000000018,1,Rajasthan
+block,Rajasthan::Bharatpur::Rupbas,Bharatpur,Rupbas,5,18706,IND.29.428.1670,0.805637926465912,1.0000000000000018,1,Rajasthan
+block,Rajasthan::Bharatpur::Sewar,Bharatpur,Sewar,7,18900,IND.29.428.1664,0.7855337401179382,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Bharatpur::Uchain,Bharatpur,Uchain,4,18706,IND.29.428.1670,0.8032800213151081,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Bharatpur::Weir,Bharatpur,Weir,3,18701,IND.29.428.1671,0.7013226155218222,0.9999999999999982,1,Rajasthan
+block,Rajasthan::Bhilwara::Asind,Bhilwara,Asind,5,19251,IND.29.429.1672,0.7882330472832793,0.9999999999999986,1,Rajasthan
+block,Rajasthan::Bhilwara::Bijoliya,Bhilwara,Bijoliya,6,19350,IND.29.429.1680,0.9166540932095721,1.000000000000003,1,Rajasthan
+block,Rajasthan::Bhilwara::Hurda,Bhilwara,Hurda,7,19257,IND.29.429.1676,0.8524606471198967,1.000000000033408,1,Rajasthan
+block,Rajasthan::Bhilwara::Kareda,Bhilwara,Kareda,6,18758,IND.29.429.1679,0.875739168546691,0.9999999999999991,1,Rajasthan
+block,Rajasthan::Bhilwara::Mandal,Bhilwara,Mandal,5,18758,IND.29.429.1679,0.7300827975311494,0.9999999858265961,1,Rajasthan
+block,Rajasthan::Bhilwara::Mandalgarh,Bhilwara,Mandalgarh,5,19350,IND.29.429.1680,0.7676114008026735,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Bhilwara::Raipur,Bhilwara,Raipur,4,18709,IND.29.429.1681,0.7228585204913998,1.0000000000000018,1,Rajasthan
+block,Rajasthan::Bhilwara::Sahara,Bhilwara,Sahara,8,19213,IND.29.429.1675,0.8174593116635869,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Bhilwara::Suwana,Bhilwara,Suwana,10,18708,IND.29.429.1674,0.8234466479533642,1.0000000013565877,1,Rajasthan
+block,Rajasthan::Bikaner::Bikaner,Bikaner,Bikaner,6,18275,IND.29.430.1683,0.7923223116367581,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Bikaner::Kolayat,Bikaner,Kolayat,6,18892,IND.29.430.1684,0.9159866435549437,0.998947703748414,1,Rajasthan
+block,Rajasthan::Bikaner::Lunkaransar,Bikaner,Lunkaransar,6,18685,IND.29.430.1685,0.9500957213778921,1.0,1,Rajasthan
+block,Rajasthan::Bikaner::Nokha,Bikaner,Nokha,8,18364,IND.29.430.1686,0.7871129975096154,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Bikaner::Panchoo,Bikaner,Panchoo,4,18364,IND.29.430.1686,0.933939070581018,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Bikaner::Poogal,Bikaner,Poogal,2,18275,IND.29.430.1683,0.9862761858603631,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Bikaner::Sri Dungargarh,Bikaner,Sri Dungargarh,7,18894,IND.29.433.1704,0.9732407041263073,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Bundi::Bundi,Bundi,Bundi,6,18764,IND.29.431.1687,0.8956806217289489,0.9999999999999989,1,Rajasthan
+block,Rajasthan::Bundi::Hindoli,Bundi,Hindoli,6,18587,IND.29.431.1688,0.921591305223427,1.000000000000002,1,Rajasthan
+block,Rajasthan::Bundi::Keshoraipatan,Bundi,Keshoraipatan,8,19325,IND.29.431.1689,0.552018248050403,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Bundi::Nainwa,Bundi,Nainwa,9,19268,IND.29.431.1690,0.9034403727363779,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Bundi::Talera,Bundi,Talera,6,18764,IND.29.431.1687,0.851001914539268,0.9999999993621057,1,Rajasthan
+block,Rajasthan::Chittorgarh::Bari Sadri,Chittorgarh,Bari Sadri,7,19424,IND.29.432.1692,0.6312339791750374,0.9999999999999991,1,Rajasthan
+block,Rajasthan::Chittorgarh::Begun,Chittorgarh,Begun,5,19371,IND.29.432.1693,0.8856558870744664,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Chittorgarh::Bhadesar,Chittorgarh,Bhadesar,5,19371,IND.29.432.1693,0.5421266015113124,1.000000000000001,1,Rajasthan
+block,Rajasthan::Chittorgarh::Bhainsrorgarh,Chittorgarh,Bhainsrorgarh,9,19378,IND.29.432.1698,0.8960788412454406,0.9999999999999997,1,Rajasthan
+block,Rajasthan::Chittorgarh::Bhopalsagar,Chittorgarh,Bhopalsagar,5,19382,IND.29.432.1697,0.9724269420790929,0.9999999999999997,1,Rajasthan
+block,Rajasthan::Chittorgarh::Chittorgarh,Chittorgarh,Chittorgarh,7,19371,IND.29.432.1693,0.4296753646677521,0.999999926893769,1,Rajasthan
+block,Rajasthan::Chittorgarh::Dungla,Chittorgarh,Dungla,6,19414,IND.29.432.1699,0.6346940519226172,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Chittorgarh::Gangrar,Chittorgarh,Gangrar,6,19367,IND.29.432.1696,0.8793793829147301,0.9999999931444267,1,Rajasthan
+block,Rajasthan::Chittorgarh::Kapasan,Chittorgarh,Kapasan,6,19382,IND.29.432.1697,0.5657864521977584,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Chittorgarh::Nimbahera,Chittorgarh,Nimbahera,7,19400,IND.29.432.1700,0.7258563575337204,0.999999531680762,1,Rajasthan
+block,Rajasthan::Chittorgarh::Rashmi,Chittorgarh,Rashmi,5,19368,IND.29.432.1702,0.8953560949840225,0.9999999999999987,1,Rajasthan
+block,Rajasthan::Churu::Bidasar,Churu,Bidasar,5,18362,IND.29.433.1708,0.7452999430586551,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Churu::Churu,Churu,Churu,7,18827,IND.29.433.1703,0.888384651087044,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Churu::Rajgarh,Churu,Rajgarh,7,18687,IND.29.433.1705,0.8691984945710947,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Churu::Ratangarh,Churu,Ratangarh,7,18968,IND.29.433.1706,0.7941237870172558,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Churu::Sardarshahar,Churu,Sardarshahar,9,18749,IND.29.433.1707,0.940268625610043,0.9999999999999982,1,Rajasthan
+block,Rajasthan::Churu::Sujangarh,Churu,Sujangarh,7,18362,IND.29.433.1708,0.8112952787093122,0.999999999999999,1,Rajasthan
+block,Rajasthan::Churu::Taranagar,Churu,Taranagar,6,18271,IND.29.433.1709,0.8969447553716688,0.9999999999999977,1,Rajasthan
+block,Rajasthan::Dausa::Bandikui,Dausa,Bandikui,3,18702,IND.29.434.1710,0.7722371063700225,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Dausa::Baswa,Dausa,Baswa,6,18702,IND.29.434.1710,0.790791413077672,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Dausa::Dausa,Dausa,Dausa,7,19032,IND.29.434.1711,0.9337026584231514,0.9999999999999987,1,Rajasthan
+block,Rajasthan::Dausa::Lalsot,Dausa,Lalsot,9,19065,IND.29.434.1712,0.6999195650084661,1.0000000038904056,1,Rajasthan
+block,Rajasthan::Dausa::Lawan,Dausa,Lawan,3,19032,IND.29.434.1711,0.9756043729827867,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Dausa::Mahwa,Dausa,Mahwa,8,18350,IND.29.434.1713,0.7440347886944998,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Dausa::Nangal Rajawatan,Dausa,Nangal Rajawatan,2,19032,IND.29.434.1711,0.9862971929006885,0.9999999999999978,1,Rajasthan
+block,Rajasthan::Dausa::Ramgarh Pachwara,Dausa,Ramgarh Pachwara,3,19065,IND.29.434.1712,0.8147768088096649,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Dausa::Sikandara,Dausa,Sikandara,5,18324,IND.29.434.1714,0.6113260088889446,0.9999999969352139,1,Rajasthan
+block,Rajasthan::Dausa::Sikrai,Dausa,Sikrai,6,18324,IND.29.434.1714,0.6237894763125796,0.999999999999998,1,Rajasthan
+block,Rajasthan::Deeg::Deeg,Deeg,Deeg,7,19005,IND.29.428.1665,0.641309821004853,1.0,1,Rajasthan
+block,Rajasthan::Deeg::Kaman,Deeg,Kaman,4,18992,IND.29.428.1666,0.7765038348549874,1.0000000000000033,1,Rajasthan
+block,Rajasthan::Deeg::Kumher,Deeg,Kumher,6,19026,IND.29.428.1667,0.5233232446256679,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Deeg::Nagar Pahari,Deeg,Nagar Pahari,7,18479,IND.29.428.1669,0.527343356553212,0.999999999999997,1,Rajasthan
+block,Rajasthan::Deeg::Pahari,Deeg,Pahari,3,18992,IND.29.428.1666,0.9236441795902497,1.0000000000000029,1,Rajasthan
+block,Rajasthan::Dholpur::Bari,Dholpur,Bari,6,19062,IND.29.435.1715,0.48250861201961726,0.9999999879549417,1,Rajasthan
+block,Rajasthan::Dholpur::Baseri,Dholpur,Baseri,5,19044,IND.29.435.1716,0.9422309106880496,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Dholpur::Dhaulpur,Dholpur,Dhaulpur,5,19037,IND.29.435.1717,0.7952263458743122,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Dholpur::Rajakhera,Dholpur,Rajakhera,8,19037,IND.29.435.1717,0.8253115504792061,1.0000000000000029,1,Rajasthan
+block,Rajasthan::Dholpur::Saipau,Dholpur,Saipau,3,19037,IND.29.435.1717,0.8689577401949974,0.9999999999999989,1,Rajasthan
+block,Rajasthan::Dholpur::Sarmathura,Dholpur,Sarmathura,5,19044,IND.29.435.1716,0.9678708637103556,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Didwana Kuchaman::Didwana,Didwana Kuchaman,Didwana,6,19013,IND.29.447.1786,0.8798657297971247,0.9999999999999983,1,Rajasthan
+block,Rajasthan::Didwana Kuchaman::Kuchaman,Didwana Kuchaman,Kuchaman,5,18242,IND.29.447.1791,0.8645319227123697,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Didwana Kuchaman::Ladnu,Didwana Kuchaman,Ladnu,7,19001,IND.29.447.1788,0.904321841761425,1.0,1,Rajasthan
+block,Rajasthan::Didwana Kuchaman::Makrana,Didwana Kuchaman,Makrana,5,18248,IND.29.447.1792,0.8804335525280279,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Didwana Kuchaman::Molasar,Didwana Kuchaman,Molasar,4,19013,IND.29.447.1786,0.8716292305229707,1.000000000000001,1,Rajasthan
+block,Rajasthan::Didwana Kuchaman::Nawa,Didwana Kuchaman,Nawa,4,18242,IND.29.447.1791,0.8703116187496588,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Didwana Kuchaman::Parbatsar,Didwana Kuchaman,Parbatsar,6,18248,IND.29.447.1792,0.9088734799053015,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Dudu::Dudu,Dudu,Dudu,4,19050,IND.29.439.1742,0.9632573337526107,0.9999999999999979,1,Rajasthan
+block,Rajasthan::Dudu::Madhorajpura,Dudu,Madhorajpura,5,19059,IND.29.439.1747,0.8396535382974559,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Dudu::Mauzamabad,Dudu,Mauzamabad,6,19050,IND.29.439.1742,0.7851381479982158,0.9999999999999984,1,Rajasthan
+block,Rajasthan::Dudu::Phagi,Dudu,Phagi,5,19059,IND.29.439.1747,0.9226585060295979,0.9999999999999986,1,Rajasthan
+block,Rajasthan::Dungarpur::Aspur,Dungarpur,Aspur,4,18428,IND.29.436.1718,0.8577017311957232,0.999999999999999,1,Rajasthan
+block,Rajasthan::Dungarpur::Bichiwara,Dungarpur,Bichiwara,5,18917,IND.29.436.1719,0.9279955430886166,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Dungarpur::Chikhali,Dungarpur,Chikhali,5,19486,IND.29.436.1720,0.8650738612252978,0.9999999999999997,1,Rajasthan
+block,Rajasthan::Dungarpur::Dovada,Dungarpur,Dovada,5,18917,IND.29.436.1719,0.8910097517064417,1.0000000000000029,1,Rajasthan
+block,Rajasthan::Dungarpur::Dungarpur,Dungarpur,Dungarpur,6,18917,IND.29.436.1719,0.8903504553718415,0.9999999867119861,1,Rajasthan
+block,Rajasthan::Dungarpur::Galiyakoat,Dungarpur,Galiyakoat,3,19486,IND.29.436.1720,0.9248967986011711,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Dungarpur::Jothari,Dungarpur,Jothari,2,19480,IND.29.436.1721,0.904632918878445,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Dungarpur::Sabla,Dungarpur,Sabla,4,18428,IND.29.436.1718,0.9032828103570725,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Dungarpur::Sagwara,Dungarpur,Sagwara,7,19486,IND.29.436.1720,0.35820988402117765,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Dungarpur::Simalwara,Dungarpur,Simalwara,8,19480,IND.29.436.1721,0.9177211164414981,0.999999999999999,1,Rajasthan
+block,Rajasthan::Ganganagar::Ganganagar,Ganganagar,Ganganagar,6,18632,IND.29.437.1723,0.8186119541816717,0.9940731416245325,1,Rajasthan
+block,Rajasthan::Ganganagar::Karanpur,Ganganagar,Karanpur,4,18640,IND.29.437.1724,0.8595117427364338,0.9685844707946567,1,Rajasthan
+block,Rajasthan::Ganganagar::Padampur,Ganganagar,Padampur,5,18512,IND.29.437.1726,0.8917479925316657,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Ganganagar::Sadulshahar,Ganganagar,Sadulshahar,4,18644,IND.29.437.1728,0.9192779803865624,0.9999999999999997,1,Rajasthan
+block,Rajasthan::Ganganagar::Suratgarh,Ganganagar,Suratgarh,7,18576,IND.29.437.1730,0.913251142643637,0.999999999999998,1,Rajasthan
+block,Rajasthan::Gangapurcity::Bamanwas,Gangapurcity,Bamanwas,6,19135,IND.29.450.1807,0.665716282649141,0.9999999999999992,1,Rajasthan
+block,Rajasthan::Gangapurcity::Gangapur City,Gangapurcity,Gangapur City,8,18481,IND.29.450.1809,0.5264929882818643,1.000000000000002,1,Rajasthan
+block,Rajasthan::Gangapurcity::Nadauti,Gangapurcity,Nadauti,4,19043,IND.29.445.1777,0.9071949079292664,0.9999999999999992,1,Rajasthan
+block,Rajasthan::Gangapurcity::Todabhim,Gangapurcity,Todabhim,5,18322,IND.29.445.1779,0.7316936896752821,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Hanumangarh::Bhadra,Hanumangarh,Bhadra,8,18249,IND.29.438.1731,0.7647487217772799,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Hanumangarh::Hanumangarh,Hanumangarh,Hanumangarh,7,18657,IND.29.438.1735,0.6977633773379326,1.0,1,Rajasthan
+block,Rajasthan::Hanumangarh::Nohar,Hanumangarh,Nohar,7,18673,IND.29.438.1733,0.8411518664680395,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Hanumangarh::Pilibanga,Hanumangarh,Pilibanga,5,18577,IND.29.438.1734,0.46690275265195375,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Hanumangarh::Rawatsar,Hanumangarh,Rawatsar,8,18515,IND.29.438.1732,0.5118759423778371,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Hanumangarh::Sangaria,Hanumangarh,Sangaria,6,18646,IND.29.438.1736,0.7566662507028971,1.0,1,Rajasthan
+block,Rajasthan::Hanumangarh::Tibbi,Hanumangarh,Tibbi,5,18652,IND.29.438.1737,0.5691846747395742,0.9999999999999992,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Andhi,Jaipur Gramin,Andhi,4,18244,IND.29.439.1744,0.8597231216769102,1.0000000000000027,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Bassi,Jaipur Gramin,Bassi,8,19039,IND.29.439.1739,0.3709178990016325,1.0000000903001125,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Chaksu,Jaipur Gramin,Chaksu,5,19061,IND.29.439.1740,0.940483799475843,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Govindgarh,Jaipur Gramin,Govindgarh,6,18245,IND.29.439.1741,0.48603133594062503,0.9999999653263251,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Jamwa Ramgarh,Jaipur Gramin,Jamwa Ramgarh,6,18244,IND.29.439.1744,0.9222593390460437,1.000000000000001,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Kishangarh Renwal,Jaipur Gramin,Kishangarh Renwal,7,18902,IND.29.439.1748,0.8753302197639081,0.9999999999999987,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Kotkhawda,Jaipur Gramin,Kotkhawda,4,19061,IND.29.439.1740,0.7861467110308191,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Sambhar,Jaipur Gramin,Sambhar,10,18902,IND.29.439.1748,0.828557624912869,1.000000000000001,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Shahpura,Jaipur Gramin,Shahpura,8,19011,IND.29.439.1750,0.5295946015155814,1.000000230323804,1,Rajasthan
+block,Rajasthan::Jaipur Gramin::Tunga,Jaipur Gramin,Tunga,5,19039,IND.29.439.1739,0.8700150531400489,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Jaipur::Amber,Jaipur,Amber,10,19031,IND.29.439.1738,0.3601146537335119,1.0000000213105813,1,Rajasthan
+block,Rajasthan::Jaipur::Jalsu,Jaipur,Jalsu,6,19031,IND.29.439.1738,0.8063790439775732,0.9999999736569021,1,Rajasthan
+block,Rajasthan::Jaipur::Jhotwara,Jaipur,Jhotwara,5,18383,IND.29.439.1743,0.5637531410095805,0.9999999869202131,1,Rajasthan
+block,Rajasthan::Jaipur::Sanganer,Jaipur,Sanganer,8,19051,IND.29.439.1749,0.5067375213412006,0.9999999497314345,1,Rajasthan
+block,Rajasthan::Jaisalmer::Bhaniyana,Jaisalmer,Bhaniyana,4,18363,IND.29.440.1752,0.956716736684916,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Jaisalmer::Fatehgarh,Jaisalmer,Fatehgarh,3,18979,IND.29.440.1751,0.9698183002941186,1.0000000000000024,1,Rajasthan
+block,Rajasthan::Jaisalmer::Jaisalmer,Jaisalmer,Jaisalmer,3,18979,IND.29.440.1751,0.9716595700793458,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Jaisalmer::Mohangarh,Jaisalmer,Mohangarh,2,18979,IND.29.440.1751,0.9599001134425711,0.985740136092678,1,Rajasthan
+block,Rajasthan::Jaisalmer::Nachana,Jaisalmer,Nachana,4,18363,IND.29.440.1752,0.959414167375115,0.9822546540825318,1,Rajasthan
+block,Rajasthan::Jaisalmer::Sam,Jaisalmer,Sam,2,18979,IND.29.440.1751,0.9998698099145658,0.9907670829825715,1,Rajasthan
+block,Rajasthan::Jaisalmer::Sankra,Jaisalmer,Sankra,6,18363,IND.29.440.1752,0.940205408291683,0.9999999999999991,1,Rajasthan
+block,Rajasthan::Jalore::Ahore,Jalore,Ahore,7,19316,IND.29.441.1753,0.9035023845958265,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Jalore::Bagoda,Jalore,Bagoda,4,18712,IND.29.441.1754,0.9325454675664361,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Jalore::Bhinmal,Jalore,Bhinmal,3,18712,IND.29.441.1754,0.9507212089096121,0.9999999999999971,1,Rajasthan
+block,Rajasthan::Jalore::Chitalwana,Jalore,Chitalwana,6,18776,IND.29.441.1757,0.8699386284343938,0.9999999999125524,1,Rajasthan
+block,Rajasthan::Jalore::Jalore,Jalore,Jalore,4,19340,IND.29.441.1755,0.7641466484460615,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Jalore::Jaswantpura,Jalore,Jaswantpura,5,18712,IND.29.441.1754,0.9132912467970719,0.9999999999999989,1,Rajasthan
+block,Rajasthan::Jalore::Raniwara,Jalore,Raniwara,4,18712,IND.29.441.1754,0.5332439912008136,1.0000000005198817,1,Rajasthan
+block,Rajasthan::Jalore::Sanchore,Jalore,Sanchore,5,18776,IND.29.441.1757,0.8464266112696557,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Jalore::Sarnau,Jalore,Sarnau,4,18776,IND.29.441.1757,0.7676865023933811,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Jalore::Sayla,Jalore,Sayla,5,19340,IND.29.441.1755,0.9220861853129698,0.9999999999999987,1,Rajasthan
+block,Rajasthan::Jhalawar::Aklera,Jhalawar,Aklera,6,18588,IND.29.442.1758,0.9602565030721641,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Jhalawar::Bakani,Jhalawar,Bakani,4,19413,IND.29.442.1760,0.8576440866662169,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Jhalawar::Bhawani Mandi,Jhalawar,Bhawani Mandi,10,18373,IND.29.442.1762,0.6176130700721554,0.9999999970982383,1,Rajasthan
+block,Rajasthan::Jhalawar::Dag,Jhalawar,Dag,6,19444,IND.29.442.1759,0.8802041359166013,0.9999999999999982,1,Rajasthan
+block,Rajasthan::Jhalawar::Jhalrapatan,Jhalawar,Jhalrapatan,9,19413,IND.29.442.1760,0.6962981134234125,1.0000000295738425,1,Rajasthan
+block,Rajasthan::Jhalawar::Khanpur,Jhalawar,Khanpur,6,19391,IND.29.442.1761,0.8470770843666293,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Jhalawar::Manoharthana,Jhalawar,Manoharthana,5,18588,IND.29.442.1758,0.8449367302612658,0.9999999999999992,1,Rajasthan
+block,Rajasthan::Jhalawar::Pirawa (Sunel),Jhalawar,Pirawa (Sunel),6,18508,IND.29.442.1763,0.9035814265349915,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Alsisar,Jhunjhunu,Alsisar,5,18890,IND.29.443.1765,0.7904631127866459,0.9999999999999989,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Buhana,Jhunjhunu,Buhana,4,18895,IND.29.443.1766,0.8183068494419846,0.9999999999999962,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Chirawa,Jhunjhunu,Chirawa,4,18830,IND.29.443.1764,0.9216122207028047,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Jhunjhunu,Jhunjhunu,Jhunjhunu,5,18890,IND.29.443.1765,0.6699654236992045,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Mandawa,Jhunjhunu,Mandawa,3,18890,IND.29.443.1765,0.9397496103028147,1.0000000000000033,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Nawalgarh,Jhunjhunu,Nawalgarh,10,18486,IND.29.443.1767,0.47878789001590333,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Pilani,Jhunjhunu,Pilani,4,18830,IND.29.443.1764,0.8553930118043539,1.000000000000002,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Singhana,Jhunjhunu,Singhana,4,18895,IND.29.443.1766,0.9055312450645232,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Jhunjhunu::Surajgarh,Jhunjhunu,Surajgarh,5,18830,IND.29.443.1764,0.8741679869946822,0.9999999999999976,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Balesar,Jodhpur Gramin,Balesar,5,19048,IND.29.444.1774,0.9176456042005677,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Bawadi,Jodhpur Gramin,Bawadi,6,18319,IND.29.444.1772,0.8992859294519019,1.000000059165072,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Bhopalgarh,Jodhpur Gramin,Bhopalgarh,5,19042,IND.29.444.1769,0.9164458263225077,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Bilara,Jodhpur Gramin,Bilara,5,19141,IND.29.444.1770,0.8617728785367565,0.9999999999999989,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Dhawa,Jodhpur Gramin,Dhawa,4,19139,IND.29.444.1771,0.9872503162430188,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Luni,Jodhpur Gramin,Luni,6,19139,IND.29.444.1771,0.9438594916090302,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Osian,Jodhpur Gramin,Osian,4,18319,IND.29.444.1772,0.8868069110168489,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Peepad Sahar,Jodhpur Gramin,Peepad Sahar,5,19042,IND.29.444.1769,0.5429424208387139,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Sekhala,Jodhpur Gramin,Sekhala,3,19048,IND.29.444.1774,0.9330898967361656,0.9999999999999996,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Shergarh,Jodhpur Gramin,Shergarh,4,19048,IND.29.444.1774,0.9923367630050586,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Jodhpur Gramin::Tinwari,Jodhpur Gramin,Tinwari,3,18319,IND.29.444.1772,0.9863141996969784,1.0000000000000018,1,Rajasthan
+block,Rajasthan::Jodhpur::Keru,Jodhpur,Keru,4,19139,IND.29.444.1771,0.8466460741794363,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Jodhpur::Mandor,Jodhpur,Mandor,5,19139,IND.29.444.1771,0.7974435048012396,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Karauli::Hindaun,Karauli,Hindaun,7,19045,IND.29.445.1775,0.764754585936599,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Karauli::Karauli,Karauli,Karauli,6,19055,IND.29.445.1776,0.6756082165127959,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Karauli::Mandrayal,Karauli,Mandrayal,4,19055,IND.29.445.1776,0.5980653905549117,1.0,1,Rajasthan
+block,Rajasthan::Karauli::Masalpur,Karauli,Masalpur,4,19055,IND.29.445.1776,0.8485071550303959,1.0,1,Rajasthan
+block,Rajasthan::Karauli::Sapotra,Karauli,Sapotra,8,18260,IND.29.445.1778,0.8083423815445243,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Karauli::Sri Mahaveer Ji,Karauli,Sri Mahaveer Ji,5,19045,IND.29.445.1775,0.7154768658108281,1.0,1,Rajasthan
+block,Rajasthan::Kekri::Bhinay,Kekri,Bhinay,5,19199,IND.29.423.1631,0.7320979237693849,0.9999999999999991,1,Rajasthan
+block,Rajasthan::Kekri::Kekri,Kekri,Kekri,7,19204,IND.29.423.1629,0.7573970981915887,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Kekri::Sarwar,Kekri,Sarwar,8,19190,IND.29.423.1634,0.917293632467463,0.9999999999999986,1,Rajasthan
+block,Rajasthan::Kekri::Todaraisingh,Kekri,Todaraisingh,6,18278,IND.29.453.1825,0.878198117950962,1.0000000000000033,1,Rajasthan
+block,Rajasthan::Khairthal-Tijara::Kishangarh Bas,Khairthal-Tijara,Kishangarh Bas,8,18955,IND.29.424.1638,0.8623207460952697,0.9999999898154214,1,Rajasthan
+block,Rajasthan::Khairthal-Tijara::Kotkasim,Khairthal-Tijara,Kotkasim,5,18955,IND.29.424.1638,0.7799784953422549,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Khairthal-Tijara::Mandawar,Khairthal-Tijara,Mandawar,7,18959,IND.29.424.1640,0.8137642251200855,0.9999999933965836,1,Rajasthan
+block,Rajasthan::Khairthal-Tijara::Tijara,Khairthal-Tijara,Tijara,6,18970,IND.29.424.1644,0.6670125411227174,1.0000001180161375,1,Rajasthan
+block,Rajasthan::Kota::Itawa,Kota,Itawa,7,19310,IND.29.446.1782,0.883795315953697,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Kota::Khairabad,Kota,Khairabad,8,19392,IND.29.446.1783,0.6888163008737519,0.9999999999999981,1,Rajasthan
+block,Rajasthan::Kota::Ladpura,Kota,Ladpura,6,19359,IND.29.446.1781,0.7948232667049935,1.0000000001666836,1,Rajasthan
+block,Rajasthan::Kota::Sangod,Kota,Sangod,6,18772,IND.29.446.1784,0.826522919503368,1.0000000000000018,1,Rajasthan
+block,Rajasthan::Kota::Sultanpur,Kota,Sultanpur,5,19338,IND.29.446.1780,0.9028860989746746,0.9999999999999987,1,Rajasthan
+block,Rajasthan::Kotputli-Behror::Bansur,Kotputli-Behror,Bansur,8,18988,IND.29.424.1637,0.8652274112604899,0.9999999999999988,1,Rajasthan
+block,Rajasthan::Kotputli-Behror::Behror,Kotputli-Behror,Behror,6,18975,IND.29.424.1636,0.8561154933561695,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Kotputli-Behror::Kotputli,Kotputli-Behror,Kotputli,7,18986,IND.29.439.1745,0.7670175977011536,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Kotputli-Behror::Neemrana,Kotputli-Behror,Neemrana,6,18975,IND.29.424.1636,0.7545191758464713,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Kotputli-Behror::Paota,Kotputli-Behror,Paota,5,18986,IND.29.439.1745,0.9509301176810099,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Kotputli-Behror::Viratnagar,Kotputli-Behror,Viratnagar,5,19011,IND.29.439.1750,0.6906932148878098,0.9999999999999988,1,Rajasthan
+block,Rajasthan::Nagaur::Bherunda,Nagaur,Bherunda,4,19035,IND.29.447.1785,0.6946664802061367,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Nagaur::Degana,Nagaur,Degana,6,19035,IND.29.447.1785,0.6665151281757242,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Nagaur::Jayal,Nagaur,Jayal,7,18490,IND.29.447.1787,0.893743806917837,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Nagaur::Khinvsar,Nagaur,Khinvsar,6,18489,IND.29.447.1790,0.9014693899350914,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Nagaur::Merta,Nagaur,Merta,4,18320,IND.29.447.1789,0.9554233274445479,1.0000000000000044,1,Rajasthan
+block,Rajasthan::Nagaur::Mundwa,Nagaur,Mundwa,4,18489,IND.29.447.1790,0.9055541455846357,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Nagaur::Nagaur,Nagaur,Nagaur,4,18489,IND.29.447.1790,0.9009427310147444,0.9999999999999966,1,Rajasthan
+block,Rajasthan::Nagaur::Riyan Badi,Nagaur,Riyan Badi,3,18320,IND.29.447.1789,0.982520000003668,1.0000000000000024,1,Rajasthan
+block,Rajasthan::Neem Ka Thana::Ajeetgarh,Neem Ka Thana,Ajeetgarh,5,18366,IND.29.451.1814,0.4141349790230749,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Neem Ka Thana::Khetri,Neem Ka Thana,Khetri,6,18895,IND.29.443.1766,0.7772832630200062,0.9999999999999997,1,Rajasthan
+block,Rajasthan::Neem Ka Thana::Neem Ka Thana,Neem Ka Thana,Neem Ka Thana,5,18366,IND.29.451.1814,0.8914716579899381,0.9999999999999982,1,Rajasthan
+block,Rajasthan::Neem Ka Thana::Patan,Neem Ka Thana,Patan,3,18366,IND.29.451.1814,0.8317387382451948,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Neem Ka Thana::Sri Madhopur,Neem Ka Thana,Sri Madhopur,5,18999,IND.29.451.1815,0.8566336144600689,0.9999999999999981,1,Rajasthan
+block,Rajasthan::Neem Ka Thana::Udaipurwati,Neem Ka Thana,Udaipurwati,6,18957,IND.29.443.1768,0.8250419664743529,0.9999999999999992,1,Rajasthan
+block,Rajasthan::Pali::Bali,Pali,Bali,6,18763,IND.29.448.1793,0.8978204440775727,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Pali::Desuri,Pali,Desuri,5,18766,IND.29.448.1794,0.9087159361542357,0.9999999999999996,1,Rajasthan
+block,Rajasthan::Pali::Kharchi(Mar.Jun),Pali,Kharchi(Mar.Jun),7,19314,IND.29.448.1796,0.7662127632834729,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Pali::Pali,Pali,Pali,6,19245,IND.29.448.1797,0.9163361312386382,1.000000000000003,1,Rajasthan
+block,Rajasthan::Pali::Rani Station,Pali,Rani Station,4,18766,IND.29.448.1794,0.5949249561884976,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Pali::Rohat,Pali,Rohat,5,19245,IND.29.448.1797,0.9564336281503609,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Pali::Sojat,Pali,Sojat,9,19203,IND.29.448.1799,0.925768048408455,0.9999999999999986,1,Rajasthan
+block,Rajasthan::Pali::Sumerpur,Pali,Sumerpur,6,18763,IND.29.448.1793,0.919419783039599,0.9999999963266533,1,Rajasthan
+block,Rajasthan::Phalodi::Aau,Phalodi,Aau,1,18488,IND.29.444.1773,1.0,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Phalodi::Bap,Phalodi,Bap,3,18488,IND.29.444.1773,0.9472001351348811,0.9999999999999978,1,Rajasthan
+block,Rajasthan::Phalodi::Bapini,Phalodi,Bapini,3,18488,IND.29.444.1773,0.7524075943129367,1.000000000000003,1,Rajasthan
+block,Rajasthan::Phalodi::Dechu,Phalodi,Dechu,3,19048,IND.29.444.1774,0.632747402308104,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Phalodi::Ghantiyali,Phalodi,Ghantiyali,3,18488,IND.29.444.1773,0.9553741148855727,0.9999999999999977,1,Rajasthan
+block,Rajasthan::Phalodi::Lohawat,Phalodi,Lohawat,2,18488,IND.29.444.1773,0.8137086307814716,0.9999999999999973,1,Rajasthan
+block,Rajasthan::Phalodi::Phalodi,Phalodi,Phalodi,3,18488,IND.29.444.1773,0.9632917856862765,0.9999999999999986,1,Rajasthan
+block,Rajasthan::Pratapgarh::Arnod,Pratapgarh,Arnod,5,19452,IND.29.432.1691,0.9287855565770263,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Pratapgarh::Chhoti Sadri,Pratapgarh,Chhoti Sadri,5,18507,IND.29.432.1695,0.5843441450285811,1.0000000000000018,1,Rajasthan
+block,Rajasthan::Pratapgarh::Dalot,Pratapgarh,Dalot,2,19452,IND.29.432.1691,0.9093831232574078,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Pratapgarh::Dhamotar,Pratapgarh,Dhamotar,7,19436,IND.29.432.1701,0.5664146809661452,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Pratapgarh::Dhariawad,Pratapgarh,Dhariawad,7,18419,IND.29.454.1831,0.9345697507609484,0.9999999999999964,1,Rajasthan
+block,Rajasthan::Pratapgarh::Peepal Khoont,Pratapgarh,Peepal Khoont,5,19454,IND.29.425.1647,0.7788756931175185,0.9999999999999987,1,Rajasthan
+block,Rajasthan::Pratapgarh::Pratapgarh,Pratapgarh,Pratapgarh,4,19436,IND.29.432.1701,0.9376461297647024,1.0000000000000016,1,Rajasthan
+block,Rajasthan::Pratapgarh::Suhagpura,Pratapgarh,Suhagpura,4,19436,IND.29.432.1701,0.6685130025832974,0.9999999999999992,1,Rajasthan
+block,Rajasthan::Rajsamand::Amet,Rajsamand,Amet,6,18713,IND.29.449.1800,0.8112692238488378,1.0000000000000062,1,Rajasthan
+block,Rajasthan::Rajsamand::Bhim,Rajsamand,Bhim,10,19272,IND.29.449.1801,0.4284903221556708,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Rajsamand::Delwada,Rajsamand,Delwada,3,18773,IND.29.449.1804,0.9116595272558243,1.0000000000000004,1,Rajasthan
+block,Rajasthan::Rajsamand::Deogarh,Rajsamand,Deogarh,7,19326,IND.29.449.1802,0.7873626655431715,0.9999999999999996,1,Rajasthan
+block,Rajasthan::Rajsamand::Khamnor,Rajsamand,Khamnor,7,18773,IND.29.449.1804,0.8525540300632838,0.9999999210866437,1,Rajasthan
+block,Rajasthan::Rajsamand::Kumbhalgarh,Rajsamand,Kumbhalgarh,7,19354,IND.29.449.1803,0.8159918859892122,0.9999999999999991,1,Rajasthan
+block,Rajasthan::Rajsamand::Railmagra,Rajsamand,Railmagra,5,19374,IND.29.449.1806,0.9021963727737936,1.0,1,Rajasthan
+block,Rajasthan::Rajsamand::Rajsamand,Rajsamand,Rajsamand,8,19372,IND.29.449.1805,0.5219143645398492,0.9999999577763261,1,Rajasthan
+block,Rajasthan::Salumbar::Jaisamand,Salumbar,Jaisamand,3,19426,IND.29.454.1834,0.7402903007292401,0.9999999999999976,1,Rajasthan
+block,Rajasthan::Salumbar::Jhallara,Salumbar,Jhallara,4,18417,IND.29.454.1833,0.9437251115112503,1.0,1,Rajasthan
+block,Rajasthan::Salumbar::Lasadiya,Salumbar,Lasadiya,4,18419,IND.29.454.1831,0.6776216963535886,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Salumbar::Salumbar,Salumbar,Salumbar,8,18417,IND.29.454.1833,0.8858324952533109,1.0000000000000013,1,Rajasthan
+block,Rajasthan::Salumbar::Sarada,Salumbar,Sarada,4,19426,IND.29.454.1834,0.9616999942103935,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Salumbar::Semari,Salumbar,Semari,3,19426,IND.29.454.1834,0.9084353193020956,1.0000000000000022,1,Rajasthan
+block,Rajasthan::Sawai Madhopur::Bonli,Sawai Madhopur,Bonli,5,19140,IND.29.450.1808,0.9356708249442847,0.9999999999999981,1,Rajasthan
+block,Rajasthan::Sawai Madhopur::Chauth Ka Barwara,Sawai Madhopur,Chauth Ka Barwara,4,18283,IND.29.450.1811,0.6626353333320254,0.9999999999999991,1,Rajasthan
+block,Rajasthan::Sawai Madhopur::Khandar,Sawai Madhopur,Khandar,7,19196,IND.29.450.1810,0.5966381169025933,1.0000000000000058,1,Rajasthan
+block,Rajasthan::Sawai Madhopur::Malarna Doongar,Sawai Madhopur,Malarna Doongar,5,19140,IND.29.450.1808,0.6955472290120128,0.9999999999999997,1,Rajasthan
+block,Rajasthan::Sawai Madhopur::Sawai Madhopur,Sawai Madhopur,Sawai Madhopur,6,18283,IND.29.450.1811,0.8354349522718131,0.9999999999999976,1,Rajasthan
+block,Rajasthan::Shahpura::Banera,Shahpura,Banera,6,18586,IND.29.429.1673,0.8957612935345192,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Shahpura::Jahazpur,Shahpura,Jahazpur,8,19318,IND.29.429.1677,0.8960338537868207,0.9999999693485092,1,Rajasthan
+block,Rajasthan::Shahpura::Kotri,Shahpura,Kotri,6,19332,IND.29.429.1678,0.9445124517872133,1.0000000000000027,1,Rajasthan
+block,Rajasthan::Shahpura::Shahpura,Shahpura,Shahpura,8,19265,IND.29.429.1682,0.8753205408017254,1.000000000000003,1,Rajasthan
+block,Rajasthan::Sikar::Danta Ramgarh,Sikar,Danta Ramgarh,6,18991,IND.29.451.1816,0.9156324638610077,1.0000000000000029,1,Rajasthan
+block,Rajasthan::Sikar::Dhod,Sikar,Dhod,4,18991,IND.29.451.1816,0.936059530481676,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Sikar::Fatehpur,Sikar,Fatehpur,7,18972,IND.29.451.1812,0.8020165227064542,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Sikar::Khandela,Sikar,Khandela,5,18999,IND.29.451.1815,0.9584539903024716,1.000000000000001,1,Rajasthan
+block,Rajasthan::Sikar::Lachhmangarh,Sikar,Lachhmangarh,6,18360,IND.29.451.1813,0.8999968185121663,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Sikar::Nechwa,Sikar,Nechwa,5,18360,IND.29.451.1813,0.9361461049897546,1.0000000000000002,1,Rajasthan
+block,Rajasthan::Sikar::Palsana,Sikar,Palsana,2,18991,IND.29.451.1816,0.9222512840425435,0.9999999999999999,1,Rajasthan
+block,Rajasthan::Sikar::Piprali,Sikar,Piprali,5,18991,IND.29.451.1816,0.7666687610489151,1.000000000000001,1,Rajasthan
+block,Rajasthan::Sirohi::Abu Road,Sirohi,Abu Road,7,19409,IND.29.452.1817,0.8997467713072267,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Sirohi::Pindwara,Sirohi,Pindwara,7,19387,IND.29.452.1818,0.728859355235499,0.9999999999999998,1,Rajasthan
+block,Rajasthan::Sirohi::Reodar,Sirohi,Reodar,8,19403,IND.29.452.1819,0.9206497737284988,0.9999999999999973,1,Rajasthan
+block,Rajasthan::Sirohi::Sheoganj,Sirohi,Sheoganj,7,19358,IND.29.452.1820,0.8893381838660179,0.9999999661177308,1,Rajasthan
+block,Rajasthan::Sirohi::Sirohi,Sirohi,Sirohi,7,19379,IND.29.452.1821,0.7702792130607005,0.9999999999999986,1,Rajasthan
+block,Rajasthan::Tonk::Deoli,Tonk,Deoli,7,18581,IND.29.453.1822,0.7700510557085681,0.999999983801942,1,Rajasthan
+block,Rajasthan::Tonk::Malpura,Tonk,Malpura,7,18913,IND.29.453.1823,0.888222904283539,0.9999999999999996,1,Rajasthan
+block,Rajasthan::Tonk::Newai,Tonk,Newai,7,18263,IND.29.453.1824,0.8143330955608978,0.9999999999999972,1,Rajasthan
+block,Rajasthan::Tonk::Peeplu,Tonk,Peeplu,4,19142,IND.29.453.1826,0.9867771060435414,0.9999999999999994,1,Rajasthan
+block,Rajasthan::Tonk::Tonk,Tonk,Tonk,5,19142,IND.29.453.1826,0.6997102581091875,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Tonk::Uniara,Tonk,Uniara,6,19205,IND.29.453.1827,0.8919088723884794,0.999999999999999,1,Rajasthan
+block,Rajasthan::Udaipur::Bargaon,Udaipur,Bargaon,5,18771,IND.29.454.1828,0.3345570663299177,1.000000280783085,1,Rajasthan
+block,Rajasthan::Udaipur::Bhinder,Udaipur,Bhinder,5,19388,IND.29.454.1836,0.8598809694191868,0.999999999999999,1,Rajasthan
+block,Rajasthan::Udaipur::Girwa,Udaipur,Girwa,6,19407,IND.29.454.1835,0.8016516373451281,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Udaipur::Gogunda,Udaipur,Gogunda,5,18771,IND.29.454.1828,0.9612714760082199,1.000000000000002,1,Rajasthan
+block,Rajasthan::Udaipur::Jhadol,Udaipur,Jhadol,7,18374,IND.29.454.1832,0.7805042109585628,1.000000000000001,1,Rajasthan
+block,Rajasthan::Udaipur::Kherwara,Udaipur,Kherwara,5,19439,IND.29.454.1829,0.9641705223834153,0.9999999461515284,1,Rajasthan
+block,Rajasthan::Udaipur::Kotra,Udaipur,Kotra,7,19394,IND.29.454.1830,0.956720385049252,1.0000000000000022,1,Rajasthan
+block,Rajasthan::Udaipur::Kurabad,Udaipur,Kurabad,5,19407,IND.29.454.1835,0.7913027692799478,1.0000000000000007,1,Rajasthan
+block,Rajasthan::Udaipur::Mavli,Udaipur,Mavli,6,19388,IND.29.454.1836,0.8970448438175758,1.0000000000000009,1,Rajasthan
+block,Rajasthan::Udaipur::Nayagaon,Udaipur,Nayagaon,6,19388,IND.29.454.1836,0.9210682122898088,1.0,1,Rajasthan
+block,Rajasthan::Udaipur::Phalasiya,Udaipur,Phalasiya,4,18374,IND.29.454.1832,0.7323908936272678,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Udaipur::Rishbhdeo,Udaipur,Rishbhdeo,5,19439,IND.29.454.1829,0.5765624895745124,0.9999999537035233,1,Rajasthan
+block,Rajasthan::Udaipur::Sayra,Udaipur,Sayra,6,18771,IND.29.454.1828,0.9041049655632218,0.9999999999999993,1,Rajasthan
+block,Rajasthan::Udaipur::Vallabhnagar,Udaipur,Vallabhnagar,2,19388,IND.29.454.1836,0.9648764652119575,1.0000000000000007,1,Rajasthan
+district,Rajasthan::Ajmer,Ajmer,,17,18318,IND.29.423.1630,0.39383297618056085,1.0000000025092368,1,Rajasthan
+district,Rajasthan::Alwar,Alwar,,28,18998,IND.29.424.1635,0.24706832111180801,0.9999999931999396,1,Rajasthan
+district,Rajasthan::Anoopgarh,Anoopgarh,,10,18275,IND.29.430.1683,0.3308228524524104,0.9981396560887907,1,Rajasthan
+district,Rajasthan::Balotra,Balotra,,17,19186,IND.29.427.1660,0.3612262990648948,0.9999999999999978,1,Rajasthan
+district,Rajasthan::Banswara,Banswara,,21,19498,IND.29.425.1648,0.27278012582334676,0.9999999684586116,1,Rajasthan
+district,Rajasthan::Baran,Baran,,22,19345,IND.29.426.1656,0.19767894923026091,0.9999999964213945,1,Rajasthan
+district,Rajasthan::Barmer,Barmer,,15,19136,IND.29.427.1661,0.4046383138536831,0.9999772576642433,1,Rajasthan
+district,Rajasthan::Beawar,Beawar,,17,19144,IND.29.448.1795,0.3057447963293793,0.999999995016577,1,Rajasthan
+district,Rajasthan::Bharatpur,Bharatpur,,21,18832,IND.29.428.1663,0.22528891024547423,0.9999999999999992,1,Rajasthan
+district,Rajasthan::Bhilwara,Bhilwara,,30,19350,IND.29.429.1680,0.20762022319837106,0.9999999987215306,1,Rajasthan
+district,Rajasthan::Bikaner,Bikaner,,17,18892,IND.29.430.1684,0.2947518834025821,0.9996658707432388,1,Rajasthan
+district,Rajasthan::Bundi,Bundi,,18,18764,IND.29.431.1687,0.3132922639840421,0.9999999998972695,1,Rajasthan
+district,Rajasthan::Chittorgarh,Chittorgarh,,29,19371,IND.29.432.1693,0.21113346968193608,0.9999999401566285,1,Rajasthan
+district,Rajasthan::Churu,Churu,,25,18749,IND.29.433.1707,0.26404975343159715,0.9999999999999963,1,Rajasthan
+district,Rajasthan::Dausa,Dausa,,26,19032,IND.29.434.1711,0.3305147430393979,1.0000000006050906,1,Rajasthan
+district,Rajasthan::Deeg,Deeg,,17,18992,IND.29.428.1666,0.3989546313924289,1.0000000000000044,1,Rajasthan
+district,Rajasthan::Dholpur,Dholpur,,16,19044,IND.29.435.1716,0.40569586505126964,0.9999999968438931,1,Rajasthan
+district,Rajasthan::Didwana Kuchaman,Didwana Kuchaman,,19,18248,IND.29.447.1792,0.3072587811004302,0.9999999999999986,1,Rajasthan
+district,Rajasthan::Dudu,Dudu,,10,19050,IND.29.439.1742,0.48409041118786866,1.0000000000000007,1,Rajasthan
+district,Rajasthan::Dungarpur,Dungarpur,,21,18917,IND.29.436.1719,0.3405677185461934,0.9999999988656292,1,Rajasthan
+district,Rajasthan::Ganganagar,Ganganagar,,14,18576,IND.29.437.1730,0.4195755219772268,0.9949230009292396,1,Rajasthan
+district,Rajasthan::Gangapurcity,Gangapurcity,,14,19043,IND.29.445.1777,0.35450419652972603,0.9999999999999992,1,Rajasthan
+district,Rajasthan::Hanumangarh,Hanumangarh,,22,18673,IND.29.438.1733,0.2840618681831879,1.0000000000000009,1,Rajasthan
+district,Rajasthan::Jaipur,Jaipur,,18,19031,IND.29.439.1738,0.24614994312946306,0.9999999790704965,1,Rajasthan
+district,Rajasthan::Jaipur Gramin,Jaipur Gramin,,32,18902,IND.29.439.1748,0.25034479778534924,1.0000000252330679,1,Rajasthan
+district,Rajasthan::Jaisalmer,Jaisalmer,,9,18979,IND.29.440.1751,0.7401891838263311,0.992274091857114,1,Rajasthan
+district,Rajasthan::Jalore,Jalore,,23,18712,IND.29.441.1754,0.2969327789283404,1.0000000000308953,1,Rajasthan
+district,Rajasthan::Jhalawar,Jhalawar,,25,18588,IND.29.442.1758,0.21989299949344024,1.0000000036971244,1,Rajasthan
+district,Rajasthan::Jhunjhunu,Jhunjhunu,,21,18830,IND.29.443.1764,0.30410505356607337,1.000000000000001,1,Rajasthan
+district,Rajasthan::Jodhpur,Jodhpur,,6,19139,IND.29.444.1771,0.818232916866774,1.000000000000002,1,Rajasthan
+district,Rajasthan::Jodhpur Gramin,Jodhpur Gramin,,22,18319,IND.29.444.1772,0.2585874915098906,1.0000000064133057,1,Rajasthan
+district,Rajasthan::Karauli,Karauli,,19,19055,IND.29.445.1776,0.4008889651069006,0.9999999999999992,1,Rajasthan
+district,Rajasthan::Kekri,Kekri,,15,19190,IND.29.423.1634,0.3046162469819894,0.9999999999999984,1,Rajasthan
+district,Rajasthan::Khairthal-Tijara,Khairthal-Tijara,,15,18955,IND.29.424.1638,0.36907607393831454,1.0000000371394244,1,Rajasthan
+district,Rajasthan::Kota,Kota,,20,19359,IND.29.446.1781,0.24479065180903087,1.0000000000479528,1,Rajasthan
+district,Rajasthan::Kotputli-Behror,Kotputli-Behror,,19,18988,IND.29.424.1637,0.28869812634695274,1.0,1,Rajasthan
+district,Rajasthan::Nagaur,Nagaur,,17,18489,IND.29.447.1790,0.3914469602022276,0.9999999999999997,1,Rajasthan
+district,Rajasthan::Neem Ka Thana,Neem Ka Thana,,17,18366,IND.29.451.1814,0.33784319344469377,1.000000000000001,1,Rajasthan
+district,Rajasthan::Pali,Pali,,22,19245,IND.29.448.1797,0.2961552516840047,0.9999999996402258,1,Rajasthan
+district,Rajasthan::Phalodi,Phalodi,,8,18488,IND.29.444.1773,0.8530085253259233,1.0000000000000047,1,Rajasthan
+district,Rajasthan::Pratapgarh,Pratapgarh,,18,19436,IND.29.432.1701,0.2800807394799649,0.9999999999999966,1,Rajasthan
+district,Rajasthan::Rajsamand,Rajsamand,,26,19354,IND.29.449.1803,0.16306248761229752,0.9999999846017849,1,Rajasthan
+district,Rajasthan::Salumbar,Salumbar,,10,18417,IND.29.454.1833,0.4309880619853075,1.0000000000000018,1,Rajasthan
+district,Rajasthan::Sawai Madhopur,Sawai Madhopur,,13,18283,IND.29.450.1811,0.38678238365625367,1.0000000000000009,1,Rajasthan
+district,Rajasthan::Shahpura,Shahpura,,18,19265,IND.29.429.1682,0.2751400086346585,0.999999991302204,1,Rajasthan
+district,Rajasthan::Sikar,Sikar,,22,18991,IND.29.451.1816,0.45846989396527515,0.9999999999999993,1,Rajasthan
+district,Rajasthan::Sirohi,Sirohi,,18,19403,IND.29.452.1819,0.19960752886464633,0.9999999941689796,1,Rajasthan
+district,Rajasthan::Tonk,Tonk,,21,19142,IND.29.453.1826,0.22688306983273965,0.9999999967932491,1,Rajasthan
+district,Rajasthan::Udaipur,Udaipur,,29,19394,IND.29.454.1830,0.21001944073039164,1.0000000067928538,1,Rajasthan
+block,Himachal Pradesh::Bilaspur::Bilaspur Sadar,Bilaspur,Bilaspur Sadar,6,18555,IND.14.168.643,0.765795912080329,1.000000037226502,1,Himachal Pradesh
+block,Himachal Pradesh::Bilaspur::Ghumarwin,Bilaspur,Ghumarwin,7,18546,IND.14.168.644,0.7693013664413652,0.9999999999999993,1,Himachal Pradesh
+block,Himachal Pradesh::Bilaspur::Jhandutta,Bilaspur,Jhandutta,3,18546,IND.14.168.644,0.7679443820376605,0.9999999999999991,1,Himachal Pradesh
+block,Himachal Pradesh::Bilaspur::Shree Naina Devi,Bilaspur,Shree Naina Devi,5,18555,IND.14.168.643,0.7396142144118334,1.0,1,Himachal Pradesh
+block,Himachal Pradesh::Chamba::Bharmour,Chamba,Bharmour,3,18519,IND.14.169.645,0.8850405690552545,0.9999999999999991,1,Himachal Pradesh
+block,Himachal Pradesh::Chamba::Bhattiyat,Chamba,Bhattiyat,5,18520,IND.14.169.648,0.7589794629065783,0.9999999999999982,1,Himachal Pradesh
+block,Himachal Pradesh::Chamba::Chamba,Chamba,Chamba,3,18506,IND.14.169.646,0.8272374874877606,0.9999999999999989,1,Himachal Pradesh
+block,Himachal Pradesh::Chamba::Mehla,Chamba,Mehla,4,18506,IND.14.169.646,0.7925745014186929,1.000000000000002,1,Himachal Pradesh
+block,Himachal Pradesh::Chamba::Pangi,Chamba,Pangi,3,18494,IND.14.169.649,0.8825557538138616,0.9999999999999993,1,Himachal Pradesh
+block,Himachal Pradesh::Chamba::Saluni,Chamba,Saluni,6,18498,IND.14.169.650,0.7086996568907609,0.9999999999999989,1,Himachal Pradesh
+block,Himachal Pradesh::Chamba::Tisa,Chamba,Tisa,6,18497,IND.14.169.647,0.8628974650851513,1.0000000000000007,1,Himachal Pradesh
+block,Himachal Pradesh::Hamirpur::Bamson,Hamirpur,Bamson,3,18533,IND.14.170.653,0.5687537812828317,0.9999999999999979,1,Himachal Pradesh
+block,Himachal Pradesh::Hamirpur::Bhoranj,Hamirpur,Bhoranj,5,18535,IND.14.170.652,0.70077048002094,0.9999999999999984,1,Himachal Pradesh
+block,Himachal Pradesh::Hamirpur::Bijhri,Hamirpur,Bijhri,5,18542,IND.14.170.651,0.779440909977639,1.0000000000000009,1,Himachal Pradesh
+block,Himachal Pradesh::Hamirpur::Hamirpur,Hamirpur,Hamirpur,7,18533,IND.14.170.653,0.44914163765916065,0.9999999900306078,1,Himachal Pradesh
+block,Himachal Pradesh::Hamirpur::Nadaun,Hamirpur,Nadaun,5,18413,IND.14.170.654,0.8806266010010215,0.9999999999202711,1,Himachal Pradesh
+block,Himachal Pradesh::Hamirpur::Tira Sujanpur,Hamirpur,Tira Sujanpur,3,18533,IND.14.170.653,0.9953450826442213,0.9999999999999994,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Baijnath,Kangra,Baijnath,8,18522,IND.14.171.655,0.8191879518399998,0.9999999999999973,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Bhawarna,Kangra,Bhawarna,1,18353,IND.14.171.665,1.0,1.0000000000000004,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Dehra Gopipur,Kangra,Dehra Gopipur,7,18356,IND.14.171.657,0.7871311693861534,1.0000000000000002,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Dharamshala,Kangra,Dharamshala,5,18351,IND.14.171.658,0.7587834434676256,1.0000000000000044,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Fatehpur,Kangra,Fatehpur,5,18352,IND.14.171.661,0.7596072798126422,1.0000000000000018,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Indora,Kangra,Indora,6,18354,IND.14.171.659,0.46467936239062274,1.0000000025805567,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Kangra,Kangra,Kangra,5,18525,IND.14.171.662,0.6031687012649898,0.9999999999999977,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Lambagaon,Kangra,Lambagaon,6,18530,IND.14.171.660,0.7014657324530621,1.000000000000002,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Nagrota Bagwan,Kangra,Nagrota Bagwan,9,18353,IND.14.171.665,0.3310650069514543,1.0000000087746017,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Nagrota Surian,Kangra,Nagrota Surian,6,18356,IND.14.171.657,0.40488059036767293,1.0000000000000004,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Nurpur,Kangra,Nurpur,3,18524,IND.14.171.664,0.7844051342438291,1.0000000000000002,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Panchrukhi,Kangra,Panchrukhi,6,18353,IND.14.171.665,0.7547439328730768,1.0000000000000009,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Pragpur,Kangra,Pragpur,5,18356,IND.14.171.657,0.5945223521912774,1.0000000000000002,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Rait,Kangra,Rait,8,18351,IND.14.171.658,0.508492593247889,1.000000000000002,1,Himachal Pradesh
+block,Himachal Pradesh::Kangra::Sulah,Kangra,Sulah,3,18353,IND.14.171.665,0.7458126488655274,1.0,1,Himachal Pradesh
+block,Himachal Pradesh::Kinnaur::Kalpa,Kinnaur,Kalpa,7,18549,IND.14.172.671,0.717741351660327,0.9715612809440303,1,Himachal Pradesh
+block,Himachal Pradesh::Kinnaur::Nichar,Kinnaur,Nichar,7,18534,IND.14.172.669,0.8668448716412714,0.9999999999999972,1,Himachal Pradesh
+block,Himachal Pradesh::Kinnaur::Pooh,Kinnaur,Pooh,6,18408,IND.14.172.667,0.4718557130144012,0.9251925648461848,1,Himachal Pradesh
+block,Himachal Pradesh::Kullu::Anni,Kullu,Anni,4,18548,IND.14.173.672,0.727588788381413,0.9999999999999986,1,Himachal Pradesh
+block,Himachal Pradesh::Kullu::Banjar,Kullu,Banjar,7,18407,IND.14.173.673,0.821380444247926,0.9999999999999994,1,Himachal Pradesh
+block,Himachal Pradesh::Kullu::Kullu,Kullu,Kullu,5,18523,IND.14.173.674,0.9246209906490356,1.0000000000000027,1,Himachal Pradesh
+block,Himachal Pradesh::Kullu::Naggar,Kullu,Naggar,4,18523,IND.14.173.674,0.9395877593769109,1.0,1,Himachal Pradesh
+block,Himachal Pradesh::Kullu::Nirmand,Kullu,Nirmand,3,18541,IND.14.173.675,0.7731010298072428,0.9999999999999984,1,Himachal Pradesh
+block,Himachal Pradesh::Lahul and Spiti::Lahul,Lahul and Spiti,Lahul,9,18493,IND.14.174.676,0.9164320928283581,1.0000000000000022,1,Himachal Pradesh
+block,Himachal Pradesh::Lahul and Spiti::Spiti,Lahul and Spiti,Spiti,7,18450,IND.14.174.677,0.9375577685241694,0.9734431970346459,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Balh,Mandi,Balh,4,18411,IND.14.175.681,0.7908172995897841,1.0000000000000009,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Bali Chowki,Mandi,Bali Chowki,4,18536,IND.14.175.684,0.712537259005942,0.9999999999999992,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Chauntra,Mandi,Chauntra,5,18526,IND.14.175.679,0.9468591473385682,1.0000000000000009,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Dharmpur,Mandi,Dharmpur,4,18406,IND.14.175.682,0.7300178140494136,1.0000000000000016,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Drang,Mandi,Drang,5,18526,IND.14.175.679,0.7696974965696538,1.000000000000005,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Gohar,Mandi,Gohar,3,18540,IND.14.175.678,0.6282964599138137,1.0000000000000002,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Gopalpur,Mandi,Gopalpur,4,18406,IND.14.175.682,0.7140831609182156,0.9999999999999983,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Karsog,Mandi,Karsog,7,18552,IND.14.175.680,0.7870014968003576,0.9999999999999986,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Mandi Sadar,Mandi,Mandi Sadar,10,18411,IND.14.175.681,0.7632534152233784,0.9999999999999998,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Seraj,Mandi,Seraj,3,18536,IND.14.175.684,0.8891776688504605,1.0000000000000004,1,Himachal Pradesh
+block,Himachal Pradesh::Mandi::Sundarnagar,Mandi,Sundarnagar,8,18547,IND.14.175.683,0.6039693585942963,1.00000001386167,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Basantpur,Shimla,Basantpur,3,6822,city:Shimla,0.43156417490540583,1.214473979229,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Chauhara,Shimla,Chauhara,7,18556,IND.14.176.689,0.5407135494787733,0.9999999999999987,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Chaupal,Shimla,Chaupal,6,18566,IND.14.176.685,0.8144052602100731,1.0000000000000002,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Jubbal,Shimla,Jubbal,4,18342,IND.14.176.686,0.7656346047851867,1.0000000000000022,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Kotkhai,Shimla,Kotkhai,5,18499,IND.14.176.687,0.7744086624821057,0.9999999999999996,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Kupvi,Shimla,Kupvi,2,18566,IND.14.176.685,0.9723144240618731,1.0000000000000009,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Mashobra,Shimla,Mashobra,11,18339,IND.14.176.690,0.48562282864000134,1.012065484760594,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Nankhari,Shimla,Nankhari,2,18538,IND.14.176.691,0.9138466724438744,0.9999999999999988,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Narkanda,Shimla,Narkanda,6,18561,IND.14.176.688,0.7508790671522628,0.9999999999999999,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Rampur,Shimla,Rampur,5,18538,IND.14.176.691,0.8327573746657936,1.0000000000000018,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Rohru,Shimla,Rohru,3,18558,IND.14.176.692,0.9525087622950958,0.999999999999999,1,Himachal Pradesh
+block,Himachal Pradesh::Shimla::Theog,Shimla,Theog,6,18565,IND.14.176.695,0.7969730540524159,0.9999999999999989,1,Himachal Pradesh
+block,Himachal Pradesh::Sirmaur::Nahan,Sirmaur,Nahan,8,18605,IND.14.177.696,0.8029442665284565,0.9999999999999979,1,Himachal Pradesh
+block,Himachal Pradesh::Sirmaur::Pachhad,Sirmaur,Pachhad,6,18596,IND.14.177.697,0.7976077806279086,0.9999999999999999,1,Himachal Pradesh
+block,Himachal Pradesh::Sirmaur::Paonta Sahib,Sirmaur,Paonta Sahib,8,18573,IND.14.177.698,0.834349556500911,1.0000000191038327,1,Himachal Pradesh
+block,Himachal Pradesh::Sirmaur::Rajgarh,Sirmaur,Rajgarh,5,18569,IND.14.177.699,0.7993401665587659,0.9999999999999999,1,Himachal Pradesh
+block,Himachal Pradesh::Sirmaur::Sangrah,Sirmaur,Sangrah,6,18597,IND.14.177.700,0.6863282023876855,1.0000000000000018,1,Himachal Pradesh
+block,Himachal Pradesh::Sirmaur::Shillai,Sirmaur,Shillai,4,18602,IND.14.177.701,0.7443523522422361,1.0000000000000009,1,Himachal Pradesh
+block,Himachal Pradesh::Solan::Dharampur,Solan,Dharampur,6,18346,IND.14.178.704,0.595693150274553,1.0,1,Himachal Pradesh
+block,Himachal Pradesh::Solan::Kandaghat,Solan,Kandaghat,4,18344,IND.14.178.703,0.6819935368880501,0.999999999999999,1,Himachal Pradesh
+block,Himachal Pradesh::Solan::Kunihar,Solan,Kunihar,8,18560,IND.14.178.702,0.7100311613133964,0.999999999999998,1,Himachal Pradesh
+block,Himachal Pradesh::Solan::Nalagarh,Solan,Nalagarh,7,18502,IND.14.178.705,0.7361504975250859,1.0000000453173188,1,Himachal Pradesh
+block,Himachal Pradesh::Solan::Solan,Solan,Solan,7,18505,IND.14.178.706,0.5686113977147889,0.9999995676555296,1,Himachal Pradesh
+block,Himachal Pradesh::Una::Amb,Una,Amb,4,18409,IND.14.179.707,0.6810617965201724,1.0000000000000013,1,Himachal Pradesh
+block,Himachal Pradesh::Una::Bangana,Una,Bangana,7,18537,IND.14.179.708,0.7352396285105376,1.0,1,Himachal Pradesh
+block,Himachal Pradesh::Una::Gagret,Una,Gagret,4,18409,IND.14.179.707,0.991020088145476,1.0000000000000013,1,Himachal Pradesh
+block,Himachal Pradesh::Una::Haroli,Una,Haroli,5,18537,IND.14.179.708,0.9225383363542932,1.000000000000001,1,Himachal Pradesh
+block,Himachal Pradesh::Una::Una,Una,Una,4,18537,IND.14.179.708,0.8685306662738765,1.000000000000002,1,Himachal Pradesh
+district,Himachal Pradesh::Bilaspur,Bilaspur,,12,18546,IND.14.168.644,0.4577753484730092,1.00000000894607,1,Himachal Pradesh
+district,Himachal Pradesh::Chamba,Chamba,,13,18519,IND.14.169.645,0.24522000157711005,1.000000000000001,1,Himachal Pradesh
+district,Himachal Pradesh::Hamirpur,Hamirpur,,10,18533,IND.14.170.653,0.25567647979569486,0.9999999978145332,1,Himachal Pradesh
+district,Himachal Pradesh::Kangra,Kangra,,30,18522,IND.14.171.655,0.18893434155498018,1.0000000006277465,1,Himachal Pradesh
+district,Himachal Pradesh::Kinnaur,Kinnaur,,11,18408,IND.14.172.667,0.2741152954638906,0.9512416226929769,1,Himachal Pradesh
+district,Himachal Pradesh::Kullu,Kullu,,12,18523,IND.14.173.674,0.6173648212557531,0.999999999999999,1,Himachal Pradesh
+district,Himachal Pradesh::Lahul and Spiti,Lahul and Spiti,,13,18450,IND.14.174.677,0.5020706505631051,0.9862182511225266,1,Himachal Pradesh
+district,Himachal Pradesh::Mandi,Mandi,,24,18411,IND.14.175.681,0.20043018863485715,1.000000001820585,1,Himachal Pradesh
+district,Himachal Pradesh::Shimla,Shimla,,24,18538,IND.14.176.691,0.17218314285647887,1.0024332278893524,1,Himachal Pradesh
+district,Himachal Pradesh::Sirmaur,Sirmaur,,19,18573,IND.14.177.698,0.24959771568951022,1.0000000051835938,1,Himachal Pradesh
+district,Himachal Pradesh::Solan,Solan,,17,18502,IND.14.178.705,0.29924070439975303,0.9999999605071808,1,Himachal Pradesh
+district,Himachal Pradesh::Una,Una,,12,18537,IND.14.179.708,0.5403253693851239,0.9999999999999981,1,Himachal Pradesh
