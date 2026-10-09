@@ -847,3 +847,168 @@ bundle, exactly as diagnosed: that bundle's masters carried **no** provenance
 columns at all (`prov=[]`), so `summarise_missing_selection` correctly declined
 to explain the absence and the error stood. The rebuilt masters carry the reason,
 and the counts stop at 18 rather than claiming a model that did not contribute.
+
+---
+
+## 17. Second review round: the gate could pass without running (CHG-0681, CHG-0682)
+
+Two findings from the focused review, both about the *instrument* rather than the
+release. Closed before any final evidence was generated, and the verification code
+was then frozen, so the evidence below describes the rules now in force.
+
+### 17.1 CHG-0681 — a test gate that cannot distinguish "no failures" from "no run"
+
+The gate derived its verdict from the `FAILED`/`ERROR` node ids parsed out of
+pytest's output, forgave any that appeared in `tests_baseline_failures.json`, and
+passed when nothing remained. The flaw is directional and severe: **every way of
+failing to run the suite also produces zero `FAILED` lines.** A mistyped flag, an
+interrupt, a collection error, an internal error or an empty selection each yield
+no parsed failures, therefore no regressions, therefore `PASS`.
+
+This had already happened in this campaign and I did not notice at the time:
+
+```
+ERROR: usage: __main__.py [options] [file_or_dir]
+__main__.py: error: unrecognized arguments: --timeout=900
+```
+
+pytest exited **4** and executed nothing. Under the old logic that run would have
+been stamped as a passing test gate, and the baseline mechanism — whose whole
+purpose is to forgive failures — would have made the stamp look principled.
+
+Admissibility is now established **positively**, from three independent signals,
+and a baseline failure is forgiven only when all three hold:
+
+| Signal | Requirement | Rejects |
+|---|---|---|
+| Exit code | 0 or 1 only, per pytest's documented codes | 2 interrupted, 3 internal error, 4 usage error, 5 nothing collected, anything unknown |
+| Summary line | present, and accounting for ≥ 1 executed test | truncated or killed runs; `0 passed, 12 deselected` |
+| Reconciliation | summary's failing count == parsed node-id count | truncated or interleaved logs, where the parsed set is not the whole story |
+
+Reconciliation earns its place because the two numbers come from different parts
+of pytest's output. If they disagree, the parsed set — the thing compared against
+the baseline — cannot be trusted to be complete.
+
+`publish_production.py` additionally refuses test evidence that is not
+**full-suite** (`--release-only` evidence is recorded as a narrow scope and
+rejected at publication) and refuses evidence carrying no outcome
+classification at all, which is how pre-CHG-0681 evidence is identified.
+
+Covered by `tests/test_route_b_gate_evidence.py` — 18 tests, each rejection case
+plus the two admissible shapes, and one asserting directly that **a baseline
+cannot forgive a run that did not happen**. All 18 pass.
+
+### 17.2 CHG-0682 — binding the instrument, not just the subject
+
+The candidate pinned the application code, the roster, the fits, the staged bundle
+and (from CHG-0676) the test suite. It did not pin the thing that *decides* a
+verdict. A PASS written by a gate that was later made more permissive still reads
+PASS; so does one judged against a baseline that has since gained an entry, or
+collected under a config that has since started ignoring a directory. None of
+those edits touch any existing component, so every component would agree the
+evidence was current while the standard had moved underneath it.
+
+A `verification` component now digests the gate scripts, `verify_release.py`,
+`verify_streamlit.py`, `publish_production.py`, `campaign_gate.py`, the recorded
+baseline, the `.bat` wrappers (they decide the environment a gate inherits) and
+the test-configuration files. The config files are listed although **none exists**
+in this repo (pytest reports `inifile: None`); `ABSENT` is a recorded value, so
+adding a `pytest.ini` moves the digest and invalidates the gate — correct, since a
+new ini file can silently change what is collected.
+
+Separately, each gate is now fingerprinted **before and after** it runs. A gate
+takes hours; if anything in the candidate is edited while it is in flight, the
+evidence describes neither the candidate it started on nor the one it finished
+on, and both stamps are internally consistent, so comparing them is the only way
+to notice. Drift is a `FAIL`, and `stable_during_run: null` — evidence predating
+the check — is refused at publication.
+
+Verified not to false-positive: no file under `metrics/<slug>/` changed during the
+audit or the AppTest run (0 files modified in 12 h; newest write is the build
+itself at 2026-10-08 23:14), so gates E and F do not perturb what they fingerprint.
+
+### 17.3 Gate F's Telangana failure was staged-bundle geometry, not the release
+
+Gate F's data-contract checker passed 143/143. The AppTest aborted on the first
+case:
+
+```
+ValueError: District boundaries are missing master states after normalization: ['Telangana']
+```
+
+Not an app defect and not an environment leak — `DATA_DIR` resolves identically
+with and without the gate's `IRT_*` exports, and cmd's `set VAR=` genuinely
+unsets rather than leaving an empty string. The app loads district boundaries from
+a **per-state geometry shard** inside the optimised bundle, and in the shard branch
+it does not run `enrich_adm2_with_state_names`. Measured, staged vs production:
+
+| Artifact | Staged | Production |
+|---|---|---|
+| `geometry/admin/district/state=Telangana.geojson` | 1 feature, 334 B | 33 features, 303 KB |
+| `geometry/admin/block/state=Telangana.geojson` | 1 feature, 364 B | 588 features, 1.28 MB |
+| `geometry/admin/adm1.geojson` | 1 feature, 256 B | 36 features, 402 KB |
+| **every other geometry file (98 of 101)** | **byte-identical to production** | — |
+
+Residue of an early smoke build run against a one-district boundary fixture, which
+later builds never overwrote. Repaired in the staged bundle from production's
+copies — justified by evidence, not assertion: 98 of 101 files produced by the same
+builder from the same boundary source are byte-identical, so production's version
+of those three is exactly what a correct staged build writes. Staged geometry is now
+101/101 identical to production.
+
+**The production risk this raised was checked and is nil.** Geometry is built from
+`cfg.districts_path`, not from the metrics, so metric scope cannot degrade it — and
+the publisher passes `--skip-geometry --skip-context --skip-audit`, so it never
+writes geometry, context or shared audit artifacts into production at all.
+
+**A free result for §11.** Two independently executed builds agreeing byte-for-byte
+on 98 of 101 geometry files is direct evidence that this builder is
+byte-deterministic. That was the one unmeasured input to the promotion-versus-rebuild
+decision. It does not settle it — geometry is GeoJSON and the metrics are Parquet,
+whose writers can embed timestamps or differing row-group boundaries — so the
+one-metric Parquet comparison still runs before the decision. But the prior has
+moved toward promotion being sound.
+
+### 17.4 Corrections to this document
+
+Two claims in §16.1 are withdrawn.
+
+*Test-suite runtime.* The 7 h 31 min figure was measured **with the leaked staged
+roots**. Clean, the suite is **8,100 s (2 h 15 min)**. Plan with the clean number.
+
+*Why it is slow.* §16.1 previously said the cost was "concentrated somewhere
+specific". `--durations=25` refutes that: the slowest single test is **6.16 s** and
+the top 25 together are **~90 s of 8,100**, so the cost is spread across 2,214
+tests at roughly 3.6 s each. The earlier replacement text attributed that overhead
+to geo-stack imports. **That attribution is also withdrawn** — it is consistent
+with import or fixture cost, but a duration summary measures per-test wall time and
+nothing more, and no measurement here isolates a cause. Parallelism would be the
+only lever; `pytest-xdist` is not installed, and adding a dependency is out of
+scope for this release.
+
+### 17.5 The test gate's result, stated precisely
+
+The suite is not green at HEAD. The correct report of gate D is **"zero
+regressions against the recorded baseline"** — 15 failures, all 15 present in
+`tests_baseline_failures.json`, measured in the pristine `0cb621f` tree. It is
+**not** "all tests passed", and this document should not be read as claiming that.
+
+### 17.6 Staged dashboard gate rerun after geometry repair
+
+The repaired Telangana and ADM1 geometry files match the production copies by
+SHA-256. A first rerun passed the data-contract verifier (143/143) and exposed
+three independent issues in the AppTest harness: printing a label containing
+`≥` raised a Windows console encoding error; block cases seeded the district
+analysis-focus option, which the block selector discarded; and the landing check
+expected Glance view models in a staged bundle containing only the five Route B
+metrics. The harness now prints escaped diagnostic details, seeds the block
+analysis-focus option for block cases, and explicitly defers the landing check
+to the production dashboard gate, where the Glance assets exist.
+
+The full staged dashboard gate was rerun after those corrections. Its
+`verify_release.py` check passed **143/143**; its `verify_streamlit.py` check
+passed **47/47**, including mainland and excluded-island district/block cases.
+`gate_staged_dashboard.json` records **PASS**, with a candidate fingerprint
+stable across the gate run. The test and staged-audit evidence files still carry
+older candidate fingerprints and must be rerun before publication; this
+dashboard PASS alone is not a publication authorization.
