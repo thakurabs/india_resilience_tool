@@ -17,7 +17,7 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, Union
+from typing import Any, Literal, Mapping, Optional, Sequence, Union
 
 import pandas as pd
 
@@ -44,6 +44,26 @@ def _normalized_key(*parts: str, normalize_fn: Optional[callable] = None) -> str
     return "|".join(norm(part) for part in parts)
 
 
+def _optional_table_columns(path: Path, wanted: Sequence[str]) -> list[str]:
+    """Which of ``wanted`` the table at ``path`` actually has.
+
+    Reads Parquet metadata only, so this costs no row scan. A bundle written
+    before a provenance column existed simply reports it absent and is read
+    exactly as before -- requesting a column pyarrow cannot find would raise and
+    force a full-table re-read on every load, for every older metric.
+    """
+    names = list(wanted or ())
+    if not names:
+        return []
+    try:  # pragma: no cover - exercised through the loaders
+        import pyarrow.dataset as ds
+
+        available = set(ds.dataset(str(path)).schema.names)
+    except Exception:
+        return []
+    return [name for name in names if name in available]
+
+
 def _load_optimized_yearly_table(
     *,
     ts_root: PathLike,
@@ -51,6 +71,7 @@ def _load_optimized_yearly_table(
     state_dir: Optional[str],
     kind: Literal["ensemble", "models"],
     columns: Optional[list[str]] = None,
+    optional_columns: Optional[Sequence[str]] = None,
     filters: Optional[list[tuple[str, str, object]]] = None,
 ) -> pd.DataFrame:
     metric_root = Path(ts_root)
@@ -61,6 +82,11 @@ def _load_optimized_yearly_table(
         path = optimized_yearly_ensemble_path_from_metric_root(metric_root, level=level, state=state_dir)
     else:
         path = optimized_yearly_models_path_from_metric_root(metric_root, level=level, state=state_dir)
+    if columns and optional_columns:
+        extra = [name for name in _optional_table_columns(Path(path), optional_columns)
+                 if name not in columns]
+        if extra:
+            columns = list(columns) + extra
     try:
         return read_table(path, columns=columns, filters=filters)
     except Exception:
@@ -499,6 +525,10 @@ def load_district_yearly(
             state_dir=state_dir,
             kind="ensemble",
             columns=["district_key", "scenario", "year", "mean", "median"],
+            # The count of models behind each year, where the bundle carries it
+            # (CHG-0673). Requested as optional so a bundle built before the
+            # field existed reads unchanged (CHG-0675).
+            optional_columns=["n_models"],
             filters=[
                 ("district_key", "==", target_key),
                 ("scenario", "==", str(scenario_name).strip().lower()),
@@ -595,6 +625,8 @@ def load_block_yearly(
             state_dir=state_dir,
             kind="ensemble",
             columns=["block_key", "scenario", "year", "mean", "median"],
+            # Same optional provenance column as the district path (CHG-0675).
+            optional_columns=["n_models"],
             filters=[
                 ("block_key", "==", target_key),
                 ("scenario", "==", str(scenario_name).strip().lower()),

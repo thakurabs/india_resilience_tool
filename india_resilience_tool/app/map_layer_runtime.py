@@ -179,6 +179,12 @@ def build_folium_map_for_selection(
     # it gated, and the cache rarely hit because the render signature also flipped
     # on every scenario/period/stat change.
     ctx = perf_section("map: patch featurecollection") if perf_section is not None else nullcontext()
+    # The tooltip reads patched feature properties, which come from ``prop_gdf``;
+    # a row the map filtered out cannot contribute a field. Checking that frame
+    # rather than ``merged`` keeps the declared fields and the patched properties
+    # in step, so the tooltip never advertises a field no feature carries.
+    has_model_count = "_tooltip_n_models" in getattr(prop_gdf, "columns", [])
+    has_no_data_reason = "_tooltip_no_data_reason" in getattr(prop_gdf, "columns", [])
     with ctx:
         fc = clone_featurecollection_for_patch(base_fc)
         fc = patch_fc_properties(
@@ -187,6 +193,14 @@ def build_folium_map_for_selection(
             alias_fn=alias_fn,
             feature_key_col=feature_key_col,
             props_map=props_map,
+            extra_text_fields=tuple(
+                field
+                for field, present in (
+                    ("_tooltip_n_models", has_model_count),
+                    ("_tooltip_no_data_reason", has_no_data_reason),
+                )
+                if present
+            ),
         )
 
     reference_fc = None
@@ -311,6 +325,8 @@ def build_folium_map_for_selection(
             has_baseline=bool(baseline_col and (baseline_col in getattr(merged, "columns", []))),
             rank_scope_label=rank_scope_label,
             metric_slug=metric_col,
+            has_model_count=has_model_count,
+            has_no_data_reason=has_no_data_reason,
         )
 
         # Hover: darken the outline only; the fill keeps its class color so the

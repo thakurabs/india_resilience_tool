@@ -224,7 +224,15 @@ def build_props_map_from_gdf(
             value_cols.append(str(c))
 
     text_cols: list[str] = []
-    for c in ("_risk_class", "_tooltip_value", "_tooltip_baseline", "_tooltip_delta", "_tooltip_rank"):
+    for c in (
+        "_risk_class",
+        "_tooltip_value",
+        "_tooltip_baseline",
+        "_tooltip_delta",
+        "_tooltip_rank",
+        "_tooltip_n_models",
+        "_tooltip_no_data_reason",
+    ):
         if c in prop_work.columns:
             text_cols.append(c)
 
@@ -305,6 +313,7 @@ def patch_fc_properties(
         "_tooltip_delta",
         "_tooltip_rank",
     ),
+    extra_text_fields: Sequence[str] = (),
 ) -> dict:
     """
     Patch feature properties (fillColor + value columns + tooltip fields) in-place.
@@ -333,7 +342,7 @@ def patch_fc_properties(
         else:
             props.setdefault("fillColor", NO_DATA_FILL_HEX)
 
-        for c in ensure_text_fields:
+        for c in tuple(ensure_text_fields) + tuple(extra_text_fields):
             props.setdefault(c, None)
 
         feat["properties"] = props
@@ -348,6 +357,8 @@ def build_geojson_tooltip(
     has_baseline: bool,
     rank_scope_label: str,
     metric_slug: str | None = None,
+    has_model_count: bool = False,
+    has_no_data_reason: bool = False,
 ) -> folium.features.GeoJsonTooltip:
     """
     Build a stable GeoJsonTooltip for the patched FeatureCollection.
@@ -379,6 +390,19 @@ def build_geojson_tooltip(
         tooltip_aliases.append("Risk class")
     tooltip_fields.append("_tooltip_rank")
     tooltip_aliases.append(f"Rank in {rank_scope_label}")
+
+    # Only for a metric whose master actually carries the count. Defaulting to off
+    # keeps every existing metric's tooltip byte-identical.
+    if has_model_count:
+        tooltip_fields.append("_tooltip_n_models")
+        tooltip_aliases.append("Models contributing")
+
+    # The reason a unit has no value, where the metric publishes one per unit. The
+    # alias is empty because the rendered string already begins "No data: ...";
+    # a label would read as a heading over a sentence.
+    if has_no_data_reason:
+        tooltip_fields.append("_tooltip_no_data_reason")
+        tooltip_aliases.append("")
 
     return folium.features.GeoJsonTooltip(
         fields=tooltip_fields,

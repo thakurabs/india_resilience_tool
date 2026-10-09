@@ -138,15 +138,24 @@ def annual_metrics(dates, daily: np.ndarray) -> dict[str, np.ndarray]:
     return result
 
 
-def paired_outputs(dates, cell_sun: np.ndarray, region_sun: np.ndarray,
-                   weights: np.ndarray) -> dict[str, dict[str, np.ndarray]]:
-    """Keep regional-series and cell-count-first estimands explicitly separate."""
+def grid_first_outputs(dates, cell_sun: np.ndarray,
+                       weights: np.ndarray) -> dict[str, dict[str, np.ndarray]]:
+    """Grid-first estimands, which need corrected cell series and area weights alone.
+
+    Split out of ``paired_outputs`` so a grid-first-only run never has to fit, hold in
+    memory or aggregate the regional-series path it does not report.
+    """
     cells = annual_metrics(dates, cell_sun)
-    regional = annual_metrics(dates, region_sun)
     grid_daily = annual_metrics(dates, fixed_aggregate(cell_sun, weights))
     cell_first = {"years": cells["years"]}
     for metric, values in cells.items():
         if metric != "years":
             cell_first[metric] = fixed_aggregate(values, weights)
-    return {"region_first_series": regional, "grid_first_series": grid_daily,
-            "grid_first_cell_metrics": cell_first}
+    return {"grid_first_series": grid_daily, "grid_first_cell_metrics": cell_first}
+
+
+def paired_outputs(dates, cell_sun: np.ndarray, region_sun: np.ndarray,
+                   weights: np.ndarray) -> dict[str, dict[str, np.ndarray]]:
+    """Keep regional-series and cell-count-first estimands explicitly separate."""
+    return {"region_first_series": annual_metrics(dates, region_sun),
+            **grid_first_outputs(dates, cell_sun, weights)}

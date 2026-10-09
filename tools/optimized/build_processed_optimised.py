@@ -491,6 +491,32 @@ def _metric_value_cols(df: pd.DataFrame, *, supported_stats: Iterable[str]) -> l
     return out
 
 
+def _retained_master_metadata_cols(
+    df: pd.DataFrame,
+    *,
+    retained_stats: Iterable[str],
+) -> list[str]:
+    """Return ``<slug>__<scenario>__<period>__<stat>`` columns kept as provenance.
+
+    These are declared per metric by ``retained_master_statistics`` and are
+    deliberately **not** in ``supported_statistics``: the ribbon builds its
+    Statistic dropdown from the latter, and a count of contributing models is
+    provenance about a published value, not a value anyone would map. A metric
+    that declares none gets an empty list, so no existing bundle changes.
+    """
+    keep_stats = {str(v).strip().lower() for v in retained_stats if str(v).strip()}
+    if not keep_stats:
+        return []
+    out: list[str] = []
+    for col in df.columns:
+        parts = str(col).split("__")
+        if len(parts) != 4:
+            continue
+        if parts[-1].strip().lower() in keep_stats:
+            out.append(str(col))
+    return out
+
+
 def _proposal_retained_admin_master_cols(
     df: pd.DataFrame,
     *,
@@ -664,12 +690,15 @@ def _select_master_columns(
     slug: str,
     level: str,
     supported_stats: Iterable[str],
+    retained_stats: Iterable[str] = (),
+    retained_columns: Iterable[str] = (),
 ) -> pd.DataFrame:
     if slug in SHADE_SLUGS:
         require_shade_signature(df, context=f"optimized {slug}/{level}")
     id_cols = list(ADMIN_ID_COLS[level])
     keep_cols = [c for c in id_cols if c in df.columns]
     keep_cols.extend(_metric_value_cols(df, supported_stats=supported_stats))
+    keep_cols.extend(_retained_master_metadata_cols(df, retained_stats=retained_stats))
     keep_cols.extend(_proposal_retained_admin_master_cols(df, slug=slug, level=level))
     # Sub-cell climate-fill provenance: a per-unit string flag (native/idw) that
     # carries no ``__stat`` suffix, so _metric_value_cols never selects it. Keep it
@@ -678,6 +707,14 @@ def _select_master_columns(
     # _safe_numeric_downcast only touches float/int, so it passes through untouched.
     if "climate_fill_method" in df.columns:
         keep_cols.append("climate_fill_method")
+    # Per-metric declared provenance columns, same principle as the flag above: a
+    # plain per-unit column that explains a value rather than being one. Declared
+    # through ``retained_master_columns``, default empty, so no existing metric's
+    # published columns change (CHG-0674).
+    for column in retained_columns:
+        name = str(column).strip()
+        if name and name in df.columns:
+            keep_cols.append(name)
     if slug in SHADE_SLUGS:
         keep_cols.append("shade_method_signature")
     keep_cols = list(dict.fromkeys(keep_cols))
@@ -765,7 +802,15 @@ def _normalize_legacy_ensemble_df(df: pd.DataFrame) -> pd.DataFrame:
         out["mean"] = pd.to_numeric(out["mean"], errors="coerce")
     if "median" in out.columns:
         out["median"] = pd.to_numeric(out["median"], errors="coerce")
-    keep_cols = [c for c in ("year", "mean", "median", "shade_method_signature") if c in out.columns]
+    # Contributing-model count, carried only when the source supplies it. It is the
+    # number of models that actually produced a finite value for this unit-year and
+    # scenario -- the same aggregation level as the ``mean`` beside it -- never the
+    # nominal roster size. Sources without the column are unaffected, so existing
+    # bundles keep their exact schema.
+    if "n_models" in out.columns:
+        counts = pd.to_numeric(out["n_models"], errors="coerce")
+        out["n_models"] = counts.astype("int32") if counts.notna().all() else counts
+    keep_cols = [c for c in ("year", "mean", "median", "n_models", "shade_method_signature") if c in out.columns]
     if "year" not in keep_cols or "mean" not in keep_cols:
         return pd.DataFrame()
     out = out[keep_cols].dropna(subset=["year"] if "shade_method_signature" in out else ["year", "mean"]).sort_values("year").reset_index(drop=True)
@@ -825,6 +870,111 @@ def _load_one_legacy_admin_yearly_model(
     if "shade_method_signature" in df:
         keep_cols.append("shade_method_signature")
     return df[keep_cols]
+
+
+#: Column that must be present, besides ``year``, for each yearly source kind to
+#: count as schema-bearing. Models carry a per-model value; ensembles carry the
+#: statistics that ``_normalize_legacy_ensemble_df`` renames to ``mean``.
+_ENSEMBLE_VALUE_COLUMNS = ("ensemble_mean", "mean", "ensemble_median", "median")
+
+
+def _classify_empty_yearly_sources(csv_paths: tuple[Path, ...], *, kind: str) -> str:
+    """Classify a yearly job whose loaded frame came back empty.
+
+    Returns ``"empty_valid"`` only when every source parsed cleanly and carried the
+    expected schema, meaning the state genuinely has no publishable rows. Any source
+    that cannot be read, or that lacks a year or value column, returns
+    ``"unreadable"`` so a failed read is never published as a clean empty result.
+
+    This deliberately re-reads the sources rather than inferring from the empty
+    frame, because :func:`_read_yearly_csv` swallows read errors into an empty
+    frame for non-shade slugs and so cannot distinguish the two outcomes.
+
+    ``kind`` is ``"models"`` or ``"ensemble"``; it selects which value column the
+    source must carry.
+    """
+    if not csv_paths:
+        return "unreadable"
+    for csv_path in csv_paths:
+        try:
+            frame = pd.read_csv(csv_path)
+        except Exception:
+            return "unreadable"
+        if any(part in SHADE_SLUGS for part in Path(csv_path).parts):
+            require_shade_signature(frame, context=str(csv_path))
+        if "year" not in frame.columns:
+            return "unreadable"
+        if kind == "ensemble":
+            if not any(c in frame.columns for c in _ENSEMBLE_VALUE_COLUMNS):
+                return "unreadable"
+        elif _extract_value_column(frame) is None:
+            return "unreadable"
+    return "empty_valid"
+
+
+def _classify_empty_yearly_models(csv_paths: tuple[Path, ...]) -> str:
+    """Classify an empty yearly-model job. See :func:`_classify_empty_yearly_sources`."""
+    return _classify_empty_yearly_sources(csv_paths, kind="models")
+
+
+def _empty_yearly_models_frame(level: str) -> pd.DataFrame:
+    """Return the zero-row yearly-model frame carrying the optimized schema.
+
+    Column order and dtypes match the populated path so readers and the parity
+    audit see one contract whether or not a state has eligible values.
+    """
+    key_col = "district_key" if str(level).strip().lower() == "district" else "block_key"
+    return pd.DataFrame(
+        {
+            "year": pd.Series(dtype="int64"),
+            "value": pd.Series(dtype="float64"),
+            "scenario": pd.Series(dtype="object"),
+            "model": pd.Series(dtype="object"),
+            key_col: pd.Series(dtype="object"),
+        }
+    )
+
+
+def _sources_carry_n_models(csv_paths: tuple[Path, ...]) -> bool:
+    """Return True when every readable source declares a contributing-model count.
+
+    Used only to give a legitimately empty state the same schema as its populated
+    siblings. A state whose every unit is ineligible still has to answer the same
+    read as one with rows, so the column set cannot differ between them. Sources
+    are re-read here rather than threaded through the classifier because the empty
+    case covers a handful of states and the classifier's return shape is relied on
+    by existing contract tests.
+    """
+    if not csv_paths:
+        return False
+    for csv_path in csv_paths:
+        try:
+            cols = set(pd.read_csv(csv_path, nrows=0).columns)
+        except Exception:
+            return False
+        if "n_models" not in cols:
+            return False
+    return True
+
+
+def _empty_yearly_ensemble_frame(level: str, *, with_n_models: bool = False) -> pd.DataFrame:
+    """Return the zero-row yearly-ensemble frame carrying the optimized schema."""
+    key_col = "district_key" if str(level).strip().lower() == "district" else "block_key"
+    # ``median`` is part of the populated schema on both load paths -- the legacy
+    # ensemble sources carry ``ensemble_median`` and the model-derived path computes
+    # it -- so an empty state has to carry it too. Omitting it made a legitimately
+    # empty state answer a different column set from its populated siblings, which
+    # the required-column audit does not check for (CHG-0673).
+    columns: dict[str, pd.Series] = {
+        "year": pd.Series(dtype="int64"),
+        "mean": pd.Series(dtype="float64"),
+        "median": pd.Series(dtype="float64"),
+    }
+    if with_n_models:
+        columns["n_models"] = pd.Series(dtype="int32")
+    columns["scenario"] = pd.Series(dtype="object")
+    columns[key_col] = pd.Series(dtype="object")
+    return pd.DataFrame(columns)
 
 
 def _load_legacy_admin_yearly_models_chunk(
@@ -997,11 +1147,16 @@ def _build_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) ->
     if model_df.empty:
         return pd.DataFrame()
     key_col = "district_key" if level == "district" else "block_key"
+    # ``count`` is pandas' count of non-null values, so a model that is absent for
+    # this unit-year, or present with a NaN, is excluded from both the statistics and
+    # the count. The count therefore describes exactly the rows the mean was taken
+    # over, at the same aggregation level as the mean.
     grouped = (
         model_df.groupby([key_col, "scenario", "year"], as_index=False)["value"]
-        .agg(mean="mean", median="median")
+        .agg(mean="mean", median="median", n_models="count")
         .reset_index(drop=True)
     )
+    grouped["n_models"] = grouped["n_models"].astype("int32")
     return _safe_numeric_downcast(grouped)
 
 
@@ -1475,7 +1630,14 @@ def _write_manifest(
                 "available_rule_weight_fraction",
             ],
             "static_snapshot": ["mean"],
-            "removed": ["std", "p05", "p95", "n_models", "values_per_model", "models"],
+            # Dropped from every optimized master and ensemble as across-model spread
+            # the dashboard never renders. ``n_models`` left this list in CHG-0673: it
+            # is now retained per metric, for metrics that declare
+            # ``retained_master_statistics``, because a thinning model roster has to be
+            # visible beside the value it produced. It is absent from every metric that
+            # does not declare it, so an existing bundle is unchanged and still readable.
+            "removed": ["std", "p05", "p95", "values_per_model", "models"],
+            "optional_per_metric": ["n_models"],
         },
         "summaries": _bundle_inventory_summaries(data_dir=data_dir),
         "glance_view_model": glance_manifest_payload(data_dir=data_dir),
@@ -2497,6 +2659,8 @@ def build_processed_optimised_bundle(
             slug = task.slug or ""
             varcfg = VARIABLES.get(slug, {})
             supported_stats = list(varcfg.get("supported_statistics") or ("mean", "median"))
+            retained_stats = list(varcfg.get("retained_master_statistics") or ())
+            retained_columns = list(varcfg.get("retained_master_columns") or ())
 
             def _write_master() -> None:
                 source = task.source_path
@@ -2506,7 +2670,14 @@ def build_processed_optimised_bundle(
                 df = _read_legacy_master(source)
                 if df.empty:
                     return
-                out = _select_master_columns(df, slug=slug, level=str(task.level), supported_stats=supported_stats)
+                out = _select_master_columns(
+                    df,
+                    slug=slug,
+                    level=str(task.level),
+                    supported_stats=supported_stats,
+                    retained_stats=retained_stats,
+                    retained_columns=retained_columns,
+                )
                 if out.empty:
                     return
                 frame, offenders = _check_canonical_roster(out, slug=slug, level=str(task.level))
@@ -2540,6 +2711,15 @@ def build_processed_optimised_bundle(
 
             def _write_models() -> None:
                 if model_df.empty:
+                    # A state whose every administrative unit is ineligible produces no
+                    # publishable rows. That is a valid build outcome, not a missing
+                    # artifact, so publish the schema without rows. Only do so once every
+                    # source has been shown to parse, so an unreadable source or a failed
+                    # build can never be recorded as a clean empty result.
+                    if _classify_empty_yearly_sources(job.csv_paths, kind="models") != "empty_valid":
+                        return
+                    _write_parquet(_empty_yearly_models_frame(job.level), job.models_path)
+                    summaries_map[job.slug]["wrote_yearly_models"] = True
                     return
                 _write_parquet(model_df, job.models_path)
                 summaries_map[job.slug]["wrote_yearly_models"] = True
@@ -2568,6 +2748,20 @@ def build_processed_optimised_bundle(
 
             def _write_ensemble() -> None:
                 if ensemble_df.empty:
+                    # Same contract as the yearly-model stage: a state with no eligible
+                    # units is a valid build with nothing to publish, so write the schema
+                    # without rows -- but only once every source has been shown to parse.
+                    sources = tuple(source.csv_path for source in job.sources)
+                    if _classify_empty_yearly_sources(sources, kind="ensemble") != "empty_valid":
+                        return
+                    _write_parquet(
+                        _empty_yearly_ensemble_frame(
+                            job.level,
+                            with_n_models=_sources_carry_n_models(sources),
+                        ),
+                        job.target_path,
+                    )
+                    summaries_map[job.slug]["wrote_yearly_ensemble"] = True
                     return
                 _write_parquet(_safe_numeric_downcast(ensemble_df), job.target_path)
                 summaries_map[job.slug]["wrote_yearly_ensemble"] = True

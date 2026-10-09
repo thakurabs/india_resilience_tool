@@ -19,7 +19,8 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
-from tools.diagnostics.wbgt_route_b import fixed_aggregate, annual_metrics, paired_outputs
+from tools.diagnostics.wbgt_route_b import (fixed_aggregate, annual_metrics, paired_outputs,
+                                            grid_first_outputs)
 from tools.diagnostics.wbgt_route_b_prepare import atomic_npz, verify_support, PERIODS, MODEL_DEFAULTS
 
 REPO = Path(__file__).resolve().parents[2]
@@ -107,6 +108,22 @@ def raw_shade(arrays: dict, cells: pd.DataFrame) -> np.ndarray:
                | (arrays["huss"] < 0) | (arrays["huss"] >= 1))
     result[invalid] = np.nan
     return result
+
+
+def cache_signature(lock: dict, model: str, support: dict, reference_hash: str,
+                    drivers: dict) -> tuple[dict, str]:
+    """The QDM cache identity, shared by the sharded fitting pass and the assembling run.
+
+    Defined once rather than recomputed in each caller: a drifting signature would make
+    every fit look stale, or worse, let a shard write a cache the assembling run accepts
+    under different inputs. ``code_sha256`` covers both pinned-math modules, so editing
+    either one deliberately invalidates existing fits.
+    """
+    base = {"method": METHOD, "source_lock": lock, "model": model,
+            "code_sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in
+                            (Path(__file__), Path(__file__).with_name("wbgt_route_b.py"))},
+            "support": support, "reference": reference_hash, "drivers": drivers}
+    return base, hashlib.sha256(json.dumps(base, sort_keys=True).encode()).hexdigest()
 
 
 def load_climate(root: Path, model: str, scenario: str, cells: pd.DataFrame) -> dict:
@@ -314,18 +331,23 @@ def run(args: argparse.Namespace) -> None:
     reference_cells = reference[:, valid]
     reference_units = fixed_aggregate(reference_cells, weights)
     cell_raw = {s: {"values": c["shade"][:, valid], "dates": c["dates"]} for s, c in climate.items()}
-    unit_raw = {s: {"values": fixed_aggregate(c["shade"][:, valid], weights), "dates": c["dates"]} for s, c in climate.items()}
+    # The regional path holds one dense day-by-unit array per scenario. At national scale that
+    # is tens of gigabytes for a comparator a grid-first run does not report, so it is not
+    # built at all rather than built and ignored.
+    unit_raw = ({} if args.grid_first_only else
+                {s: {"values": fixed_aggregate(c["shade"][:, valid], weights), "dates": c["dates"]}
+                 for s, c in climate.items()})
     district_choices = active_units[active_units.level == "district"].groupby("state_name").whole_area_m2.idxmax().to_numpy()
     unit_positions = [int(np.flatnonzero(uid == i)[0]) for i in district_choices]
     probe_cells = sorted({int(np.argmax(weights[i])) for i in unit_positions})
-    base_signature = {"method": METHOD, "source_lock": lock, "model": args.model,
-                      "code_sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in
-                                      (Path(__file__), Path(__file__).with_name("wbgt_route_b.py"))},
-                      "support": json.loads((root / "support_manifest.json").read_text()),
-                      "reference": reference_hash, "drivers": {s: c["source_hash"] for s, c in climate.items()}}
-    signature = hashlib.sha256(json.dumps(base_signature, sort_keys=True).encode()).hexdigest()
+    base_signature, signature = cache_signature(
+        lock, args.model, json.loads((root / "support_manifest.json").read_text()),
+        reference_hash, {s: c["source_hash"] for s, c in climate.items()})
     corrections, timings, caught_messages = {}, [], set()
-    for kind, refs, raw in (("cell", reference_cells, cell_raw), ("unit", reference_units, unit_raw)):
+    kinds = [("cell", reference_cells, cell_raw)]
+    if not args.grid_first_only:
+        kinds.append(("unit", reference_units, unit_raw))
+    for kind, refs, raw in kinds:
         nseries = refs.shape[1]
         indices = (probe_cells if kind == "cell" else unit_positions) if args.probe else range(nseries)
         results = {s: np.full_like(r["values"], np.nan, dtype=float) for s, r in raw.items()}
@@ -363,10 +385,13 @@ def run(args: argparse.Namespace) -> None:
         keep = (dates.year >= 1990) & (dates.year <= 2010) if scenario == "historical" else np.ones(len(dates), dtype=bool)
         rsds, wind = source["rsds"][keep][:, valid], source["sfcWind"][keep][:, valid]
         delta_cells, diagnostic_cells = sun_adjustments(mod, rsds, wind, dates[keep], calendar, active_cells, args.upstream)
-        delta_units, diagnostic_units = sun_adjustments(mod, fixed_aggregate(rsds, weights), fixed_aggregate(wind, weights), dates[keep], calendar, unit_geometry, args.upstream)
-        if scenario != "historical":
-            solar_probes[scenario] = delta_units[:, unit_positions]
+        if args.grid_first_only:
+            delta_units, diagnostic_units = None, []
         else:
+            delta_units, diagnostic_units = sun_adjustments(mod, fixed_aggregate(rsds, weights), fixed_aggregate(wind, weights), dates[keep], calendar, unit_geometry, args.upstream)
+        if scenario != "historical" and not args.grid_first_only:
+            solar_probes[scenario] = delta_units[:, unit_positions]
+        if scenario == "historical":
             cell_years = annual_metrics(dates[keep], corrections["cell"][scenario][keep] + delta_cells)
             yi = int(np.flatnonzero(cell_years["years"] == 2005)[0])
             cell_table = active_cells.copy()
@@ -375,19 +400,24 @@ def run(args: argparse.Namespace) -> None:
                     cell_table[name] = values[yi]
             cell_table.to_csv(out / "cell_metrics_2005.csv", index=False)
         radiation_rows.extend({"scenario": scenario, "kind": kind, **r} for kind, rows in (("cell", diagnostic_cells), ("unit", diagnostic_units)) for r in rows)
-        results = paired_outputs(dates[keep], corrections["cell"][scenario][keep] + delta_cells,
-                                 corrections["unit"][scenario][keep] + delta_units, weights)
+        if args.grid_first_only:
+            results = grid_first_outputs(dates[keep], corrections["cell"][scenario][keep] + delta_cells, weights)
+        else:
+            results = paired_outputs(dates[keep], corrections["cell"][scenario][keep] + delta_cells,
+                                     corrections["unit"][scenario][keep] + delta_units, weights)
         for method, metrics in results.items():
             for yi, year in enumerate(metrics["years"]):
                 for ui, unit in enumerate(uid):
                     yearly.append({"unit_index": int(unit), "scenario": scenario, "year": int(year), "method": method,
                                    **{name: float(v[yi, ui]) for name, v in metrics.items() if name != "years"}})
     frame = pd.DataFrame(yearly)
+    methods = (("grid_first_series", "grid_first_cell_metrics") if args.grid_first_only else
+               ("region_first_series", "grid_first_series", "grid_first_cell_metrics"))
     # Preserve the complete roster: excluded units are missing, never absent or zero.
     roster = pd.MultiIndex.from_tuples(
         [(int(u), s, y, m) for u in units.index for s in PERIODS
          for y in range(1990 if s == "historical" else 2020, 2011 if s == "historical" else 2081)
-         for m in ("region_first_series", "grid_first_series", "grid_first_cell_metrics")],
+         for m in methods],
         names=["unit_index", "scenario", "year", "method"])
     frame.set_index(roster.names).reindex(roster).reset_index().to_csv(out / "yearly_metrics.csv", index=False)
     pd.DataFrame(radiation_rows).to_csv(out / "radiation_diagnostics.csv", index=False)
@@ -396,11 +426,16 @@ def run(args: argparse.Namespace) -> None:
     scored, windows = [], []
     holdout_grid = fixed_aggregate(corrections["cell"]["holdout"], weights)
     for i, unit in enumerate(uid):
-        for kind, values in (("raw", unit_raw["historical"]["values"][hist["dates"].year >= 2000, i]),
-                             ("region_first", corrections["unit"]["holdout"][:, i]),
-                             ("grid_first", holdout_grid[:, i])):
+        # A grid-first-only run still scores its own held-out skill against the reference,
+        # because that is the evidence the method is judged on. The raw and regional-series
+        # comparators are dropped with the regional path that produces them.
+        comparators = ([("grid_first", holdout_grid[:, i])] if args.grid_first_only else
+                       [("raw", unit_raw["historical"]["values"][hist["dates"].year >= 2000, i]),
+                        ("region_first", corrections["unit"]["holdout"][:, i]),
+                        ("grid_first", holdout_grid[:, i])])
+        for kind, values in comparators:
             scored.append({"unit_index": int(unit), "kind": kind, **distribution_errors(test_dates, values, ref_dates[ref_test], reference_units[ref_test, i])})
-    for probe_position, i in enumerate(unit_positions):
+    for probe_position, i in ([] if args.grid_first_only else list(enumerate(unit_positions))):
         with np.load(root / "qdm" / args.model / "unit" / f"{i}.npz", allow_pickle=False) as z:
             for scenario in ("ssp245", "ssp585"):
                 delta = z[scenario + "_whole_window"] - z[scenario]
@@ -415,14 +450,18 @@ def run(args: argparse.Namespace) -> None:
                     window_row[f"days_ge_{threshold}_maximum_abs_delta"] = float(np.nanmax(np.abs(change)))
                 windows.append(window_row)
     pd.DataFrame(scored).to_csv(out / "holdout_scores.csv", index=False)
-    pd.DataFrame(windows).to_csv(out / "application_window_sensitivity.csv", index=False)
+    if not args.grid_first_only:
+        pd.DataFrame(windows).to_csv(out / "application_window_sensitivity.csv", index=False)
     manifest = {**base_signature, "signature_sha256": signature, "status": "PILOT_COMPLETE_DIAGNOSTIC_ONLY",
+                "aggregation": "grid_first_only" if args.grid_first_only else "paired",
+                "methods": list(methods),
                 "units_eligible": len(uid), "units_total": len(units), "cells_eligible": int(valid.sum()),
                 "warnings": sorted(caught_messages), "elapsed_seconds": time.monotonic() - started,
                 "peak_rss_mb": peak_rss_mb()}
-    artifact_names = ("yearly_metrics.csv", "radiation_diagnostics.csv", "holdout_scores.csv",
-                      "application_window_sensitivity.csv", "cell_support.csv", "unit_support.csv", "timings.csv",
-                      "cell_metrics_2005.csv")
+    artifact_names = ["yearly_metrics.csv", "radiation_diagnostics.csv", "holdout_scores.csv",
+                      "cell_support.csv", "unit_support.csv", "timings.csv", "cell_metrics_2005.csv"]
+    if not args.grid_first_only:
+        artifact_names.append("application_window_sensitivity.csv")
     manifest["artifact_sha256"] = {p: hashlib.sha256((out / p).read_bytes()).hexdigest() for p in artifact_names}
     (out / "run_manifest.json").write_text(json.dumps(manifest, indent=2))
 
@@ -434,7 +473,12 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--run", action="store_true")
     mode.add_argument("--probe", action="store_true")
     mode.add_argument("--smoke", action="store_true")
-    parser.add_argument("--model", choices=MODEL_DEFAULTS, default="ACCESS-CM2")
+    parser.add_argument("--model", default="ACCESS-CM2",
+                        help="Any model carrying complete Route B inputs (see "
+                             "wbgt_route_b_prepare.ENSEMBLE_MODELS)")
+    parser.add_argument("--grid-first-only", action="store_true",
+                        help="Fit and report only the grid-first estimands, skipping the "
+                             "regional-series comparator and its dense day-by-unit arrays")
     parser.add_argument("--work-dir", type=Path, default=Path("scratch/wbgt_route_b"))
     parser.add_argument("--upstream", type=Path, default=Path("scratch/carbonplan_reproduction/upstream"))
     parser.add_argument("--out-dir", type=Path, default=Path("docs/diagnostics/wbgt_outdoor_route_b_pilot"))

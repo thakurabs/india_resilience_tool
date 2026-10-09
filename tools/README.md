@@ -53,12 +53,65 @@ neither downloads data or publishes production artifacts.
   Explicit `--run` writes signed NPZs under `scratch/wbgt_route_b`. Support requires
   canonical boundaries, NEX coordinates and the cached elevation table documented
   in the programme. Geo preparation runs in IRT's existing Windows environment.
+  `--states all` builds the national roster instead of the three pilot states and
+  `--models all` selects the 18-model ingestible ensemble (`ENSEMBLE_MODELS`);
+  both default to the pilot scope, so an existing work directory still verifies
+  unchanged. `--workers N` shards the reference and driver stages, each of which
+  writes one independent atomic file per year, so parallelism changes wall clock
+  only. It pays only when shards do real work: on an all-cached verification pass
+  the per-worker interpreter start-up costs more than it saves (CHG-0656).
 - `python -m tools.diagnostics.wbgt_route_b_run --smoke`: exercises pinned QDM,
   formula parity and solar conservation in the isolated CarbonPlan environment.
   `--probe --model ACCESS-CM2` measures real-series cost; `--run` computes one
   complete diagnostic model. Inputs come from the preparation tool; outputs are
   under `docs/diagnostics/wbgt_outdoor_route_b_pilot`. Numerical support/metric
-  contracts live in `tools/diagnostics/wbgt_route_b.py`.
+  contracts live in `tools/diagnostics/wbgt_route_b.py`. `--grid-first-only` fits and
+  reports only the grid-first estimands; it skips the regional-series comparator and
+  the dense day-by-unit arrays that comparator needs, which is what makes a national
+  run fit in memory. Editing this module or `wbgt_route_b.py` changes the shared cache
+  signature by design, so existing QDM caches are refused rather than mixed; clear
+  them with `wbgt_route_b_fit --prune-stale` (CHG-0658).
+- `python -m tools.diagnostics.wbgt_route_b_elevation`: plans the national
+  cell-elevation table; `--run` reads CarbonPlan's published `inputs/elevation.zarr`
+  chunk-wise through the pinned reproduction's cached reader and writes
+  `elevation_cells.csv` with provenance. The source is CarbonPlan's, not IRT's
+  GMTED2010 field, because Route B turns elevation into station pressure inside the
+  pinned chain; the national table reproduces every pilot cell to 0.0 m. Cells with
+  no published elevation are listed and excluded from support, never run at a
+  fabricated sea level (CHG-0657).
+- `python -m tools.diagnostics.wbgt_route_b_fit`: shards the grid-first QDM fit,
+  which is the entire cost of a national run. `--prepare` loads the drivers once and
+  writes the eligible per-cell reference and shade series; `--fit --shard k/N`
+  memory-maps those and writes `qdm/<model>/cell/<i>.npz`, so a worker holds about
+  340 MB rather than the 12 GB a single assembling process needs. `--status` counts
+  cached series and `--prune-stale` clears caches invalidated by a signature change
+  (a dry run unless `--apply`). The cache identity comes from
+  `wbgt_route_b_run.cache_signature`, shared with the assembling run (CHG-0659).
+- `python -m tools.diagnostics.wbgt_route_b_campaign`: plans the national campaign;
+  `--run` drives every eligible model through preflight, drivers, prepare, fit, verify,
+  assemble and validate, resuming whatever genuinely completed. It records each stage's
+  exit code, log, elapsed time and measured series-per-hour, so a concurrency change is
+  judged on completed series rather than on an impression of speed. A lock file refuses a
+  second concurrent run over the same work root, and a failed validation stops the queue
+  rather than multiplying a defect across the roster. It computes nothing itself and lives
+  outside the shared cache signature on purpose: editing `wbgt_route_b_run.py` or
+  `wbgt_route_b.py` invalidates every fitted cache, so orchestration must not sit beside
+  them (CHG-0662).
+- `python -m tools.diagnostics.wbgt_route_b_validate --model-dir <DIR>`: read-only release
+  gate for one assembled model, implementing the acceptance criteria of
+  `docs/diagnostics/wbgt_outdoor_route_b_national/RELEASE_SPEC.md`. A non-zero exit means
+  the gate failed. It measures the day-366 exposure behind xclim's dayofyear warning
+  instead of arguing it away, and names the worst held-out units geographically rather than
+  reporting a single national number (CHG-0663).
+- `python -m tools.pipeline.publish_route_b_outdoor`: plans the production conversion;
+  `--run` writes the `processed/<slug>` tree for the five additive
+  `wbgt_outdoor_route_b_*` slugs from the validated assembly. No value is recomputed. It
+  refuses a partial roster, a failing validation report and per-model eligibility that
+  differs between models, so one ensemble can never average two different spatial supports.
+  Keep `--processed-root` on a local filesystem and point the optimised build at it with
+  `IRT_PROCESSED_ROOT`: the measured small-file write rate is about 20 files/s on the data
+  drive against about 7,300 locally, which is the difference between minutes and a day
+  (CHG-0664).
 - `python -m tools.diagnostics.wbgt_route_b_report`: plans reporting; `--run`
   consumes completed model outputs and writes period metrics, aggregation gaps,
   held-out summaries, descriptive W1 comparisons and measured cost evidence.

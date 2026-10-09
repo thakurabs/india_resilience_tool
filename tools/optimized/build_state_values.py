@@ -80,6 +80,15 @@ ADMIN_LEVELS: tuple[str, ...] = ("district", "block")
 # exact stat it renders).
 _SKIP_STATS: frozenset[str] = frozenset({"models", "values_per_model"})
 
+#: Stats that are counts of contributing models, not measurements. An area-weighted
+#: mean of per-unit counts is not a count of anything -- it would publish a state
+#: headline of, say, 17.3 models -- so these are aggregated as the minimum over the
+#: units that actually contributed to the headline. The published number then reads
+#: "every unit behind this headline rests on at least N models", which is the
+#: conservative statement and the only one that stays an integer. Units with no
+#: value contribute no count, exactly as they contribute no value.
+_MIN_AGGREGATED_STATS: frozenset[str] = frozenset({"n_models"})
+
 _BBOX = (MIN_LON, MIN_LAT, MAX_LON, MAX_LAT)
 
 _OUTPUT_COLUMNS = ["state", "metric", "scenario", "period", "stat", "value", "n_units"]
@@ -177,6 +186,35 @@ def _assert_area_present(merged: pd.DataFrame, *, label: str, strict: bool) -> N
         LOGGER.warning("%s", msg)
 
 
+def _min_contributing_count(
+    weighted: pd.DataFrame,
+    column: str,
+    *,
+    stat: str,
+    metric: str,
+    scenario: str,
+    period: str,
+) -> tuple[Optional[int], int]:
+    """Aggregate a per-unit contributing-model count to one state number.
+
+    Returns the minimum count over the units that published a value for the same
+    slice, together with how many units that was. A state with no published value
+    anywhere returns ``(None, 0)`` -- never 0 models, which would read as a
+    measurement -- matching ``weighted_state_mean``'s own empty contract.
+    """
+    value_col = f"{metric}__{scenario}__{period}__mean"
+    counts = pd.to_numeric(weighted.get(column), errors="coerce")
+    if counts is None:
+        return None, 0
+    eligible = counts.notna() & (counts > 0)
+    if value_col in weighted.columns:
+        eligible &= pd.to_numeric(weighted[value_col], errors="coerce").notna()
+    kept = counts[eligible]
+    if kept.empty:
+        return None, 0
+    return int(kept.min()), int(kept.size)
+
+
 def _build_state_rows(
     *,
     slug: str,
@@ -249,7 +287,11 @@ def _build_state_rows(
 
     rows: list[dict[str, object]] = []
     for col, (metric, scenario, period, stat) in _parse_value_columns(merged.columns):
-        value, n_units = weighted_state_mean(weighted, col)
+        if str(stat).strip().lower() in _MIN_AGGREGATED_STATS:
+            value, n_units = _min_contributing_count(weighted, col, stat=stat, metric=metric,
+                                                     scenario=scenario, period=period)
+        else:
+            value, n_units = weighted_state_mean(weighted, col)
         rows.append(
             {
                 "state": state,

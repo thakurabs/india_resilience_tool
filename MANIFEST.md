@@ -53,8 +53,14 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `python -m tools.data_acquisition.uhe_daily --sample --dry-run` | Plan bounded diagnostic UHE-Daily reference acquisition for outdoor WBGT Route B; no network or writes by default. `--download` uses validated HTTP ranges and a transfer cap, writes atomic native-grid NPZs with provenance/QC, and verifies cached days on resume. `--verify` checks selected local dates without network or writes. Programme: `docs/wbgt_outdoor_route_b.md`; contracts: `tests/test_uhe_daily.py`. No pilot compute or production publication. |
 | `python -m tools.diagnostics.wbgt_route_b_reference --help` | Native UHE support QC and separate CarbonPlan published-footprint reproduction control (CHG-0649); results and frozen specification under `docs/diagnostics/wbgt_outdoor_route_b_reference/`. |
-| `python -m tools.diagnostics.wbgt_route_b_prepare --stage support` | Plan conservative native-UHE/NEX/admin support, reference reduction or local driver extraction; `--run` writes signed resumable diagnostic inputs (CHG-0650). |
-| `python -m tools.diagnostics.wbgt_route_b_run --help` | Pinned-environment paired QDM/sun pilot: `--smoke`, `--probe`, or explicit `--run`; kernels in `wbgt_route_b.py`. Preserves native calendars, held-out validation, excluded roster units and distinct count/max estimands (CHG-0650). |
+| `python -m tools.diagnostics.wbgt_route_b_prepare --stage support` | Plan conservative native-UHE/NEX/admin support, reference reduction or local driver extraction; `--run` writes signed resumable diagnostic inputs (CHG-0650). `--states all` / `--models all` select the national roster and the 18-model ingestible ensemble; `--workers N` shards the reference and driver stages (CHG-0656). |
+| `python -m tools.diagnostics.wbgt_route_b_run --help` | Pinned-environment paired QDM/sun pilot: `--smoke`, `--probe`, or explicit `--run`; kernels in `wbgt_route_b.py`. Preserves native calendars, held-out validation, excluded roster units and distinct count/max estimands (CHG-0650). `--grid-first-only` drops the regional-series comparator and its dense day-by-unit arrays (CHG-0658). |
+| `python -m tools.diagnostics.wbgt_route_b_elevation` | Plan the national Route B cell-elevation table; `--run` fetches CarbonPlan's published `inputs/elevation.zarr` chunk-wise and writes `elevation_cells.csv` plus provenance. Reproduces the pilot's cells exactly; IRT's GMTED field is deliberately not substituted (CHG-0657). |
+| `python -m tools.diagnostics.wbgt_route_b_fit` | Shard the grid-first QDM fit: `--prepare` writes per-cell reference/shade series once, `--fit --shard k/N` memory-maps them and writes the cell caches the assembling run consumes, `--status` counts them and `--prune-stale` clears caches left by a signature change (dry run unless `--apply`) (CHG-0659). |
+| `python -m tools.diagnostics.wbgt_route_b_campaign` | Drive the 18-model national roster through a resumable staged queue: preflight, drivers, prepare, fit, verify, assemble, validate. Records per-stage exit codes, logs, timings and measured series-per-hour; a lock refuses a second concurrent launch and a failed validation stops the queue advancing. Orchestration only, deliberately outside the shared cache signature. Default plans only (CHG-0662). |
+| `python -m tools.diagnostics.wbgt_route_b_validate --model-dir <DIR>` | Read-only release gate for one assembled model: roster completeness, excluded units missing rather than zero, threshold bounds and monotonicity, count-first versus series estimand distinctness, held-out skill with named geographic outliers, and the measured day-366 leap exposure behind xclim's dayofyear warning (CHG-0663). |
+| `python -m tools.pipeline.publish_route_b_outdoor` | Convert the validated Route B assembly into the production `processed/<slug>` tree for the five additive `wbgt_outdoor_route_b_*` slugs. Refuses a partial roster, a failing validation report or mixed per-model eligibility. Counts stay fractional cell-first exceedance days; excluded units keep missing values. Writes the per-unit yearly, period and yearly-ensemble CSVs plus the per-state `support_coverage` table for exports and diagnostics. The three columns needed to explain a blank unit (`support_coverage`, `support_gap_kind`, `exclusion_reason`) also travel in the master, because nothing in the application reads that table (CHG-0669, CHG-0674). Stage `--processed-root` on a local filesystem: measured 36 small files/s to the data drive against 636 to C:. Default plans only (CHG-0664). |
+| `python -m tools.diagnostics.wbgt_route_b_exposure` | Predict the QDM application-window missingness of any model from input screening alone, without fitting it: reports lost unit-years by scenario, window, admin level and state, and the resulting ensemble thinning per unit. Verified exact against both fitted models (CHG-0667). |
 | `python -m tools.diagnostics.wbgt_route_b_report` | Plan completed-pilot summaries; `--run` writes complete-period metrics, aggregation gaps, support-labelled W1 comparisons and measured cost evidence (CHG-0650). |
 | `python -m tools.diagnostics.wbgt_route_b_finish` | Plan sequential pilot completion; `--run` waits for local inputs, verifies, probes cost, computes both models and reports with atomic status/logs. No network, national scale-out or publication (CHG-0650). |
 | `python docs/diagnostics/wbgt_outdoor_route_b_pilot/scripts/recover_solar_precision.py` | Read-only cache-recovery plan; `--run` audits the solar-only change from 9979326 and migrates matching QDM signatures without changing numerical arrays, preserving original timings (CHG-0651). |
@@ -70,7 +76,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.pipeline.build_glance_view_model --help` | Build persisted optimized Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal dashboard prep gets these through `build_processed_optimised` |
 | `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional exact-target `--prune-scope`, destructive `--full-rebuild`, optional admin `--state` scoping, opt-in shared-admin artifact rebuilds, optional scoped `--report-path`, optional admin `--level` filtering (`district`/`block`), `--workers` overrides, and nested terminal progress bars |
 | python -m tools.optimized.audit_processed_optimised_parity --help | Audit processed_optimised with optional level/admin-state filtering, state-scoped report paths, and strict block yearly-model checks via require-block-yearly-models plus strict. Warning-severity issues (e.g. an absent precomputed `state_values` table) are non-fatal unless `--strict` |
-| `python -m tools.optimized.build_state_values --help` | Precompute area-weighted state headline values per `(metric, scenario, period, stat)` into `processed_optimised/metrics/<slug>/state_values/admin/<level>/all_states.parquet`; parity with the live KPI by construction (shared canonical merge + `analysis.area_weighting`), enabling a real Position-in-India rank. Run automatically by `prepare_dashboard` between the optimized build and the parity audit |
+| `python -m tools.optimized.build_state_values --help` | Precompute area-weighted state headline values per `(metric, scenario, period, stat)` into `processed_optimised/metrics/<slug>/state_values/admin/<level>/all_states.parquet`; parity with the live KPI by construction (shared canonical merge + `analysis.area_weighting`), enabling a real Position-in-India rank. Count stats (`n_models`) aggregate as the **minimum over units that published a value**, not an area-weighted mean, which would publish a fractional count of models (CHG-0673). Run automatically by `prepare_dashboard` between the optimized build and the parity audit |
 | `python -m tools.diagnostics.wbgt_method_validation --self-test` | Stage A validation of the Tier-2 outdoor-WBGT method against hourly Liljegren physics on ARCO-ERA5, before any NEX download (CHG-0538) |
 | `python -m tools.diagnostics.wbgt_deployed_vs_reference --self-test` | Compare IRT's deployed WBGT formulations against the Liljegren (outdoor) and Bernard (indoor) references recommended by Lemke & Kjellstrom (2012), separating formula error from daily-mean aggregation error (CHG-0546) |
 | `python -m tools.diagnostics.wbgt_tier2_probe --dry-run` | Test whether the proposed Tier-2 sun adjustment fixes outdoor WBGT, scoring the chain in eight variants -- including CarbonPlan's RH-at-tasmax humidity and frozen wind -- against hourly Liljegren on the cached six-site ERA5 series (CHG-0553, CHG-0554) |
@@ -240,10 +246,10 @@ Aqueduct methodology note:
 | `bundle_scores.py` | Streamlit-free landing bundle-score normalization, aggregation, and driver helpers |
 | `frozen_rulers.py` | Frozen national CDF rulers: `MetricRuler` (apply/clamp), exact pooled mid-rank fit, `FrozenRulerSet` with slice-grid validation, and `save_ruler_set`/`load_ruler_set` for the committed artifact under `config/frozen_rulers/` |
 | `__init__.py` | Package marker |
-| `map_enrichment.py` | Streamlit-free map enrichment helpers: baseline/delta, ranking, tooltip prep |
+| `map_enrichment.py` | Streamlit-free map enrichment helpers: baseline/delta, ranking, tooltip prep, per-unit exclusion reasons, and `summarise_missing_selection` — why a whole selection has no values, empty when the data does not account for it (CHG-0679) |
 | `metrics.py` | Risk-class and percentile/ranking helpers |
 | `portfolio.py` | Portfolio comparison logic and portfolio-level data prep |
-| `timeseries.py` | Yearly series loading for admin district/block flows |
+| `timeseries.py` | Yearly series loading for admin district/block flows. The optimised ensemble readers request `n_models` as an *optional* column, resolved against the Parquet schema, so a bundle written before that field existed loads unchanged (CHG-0675). |
 
 ### `india_resilience_tool/app/`
 
@@ -268,7 +274,7 @@ Aqueduct methodology note:
 | `main.py` | Package Streamlit entrypoint |
 | `assets/` | Packaged committed HTML assets, including self-contained `read_the_docs.html`, which opens directly in a browser offline and also backs the Read the Docs dashboard view |
 | `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
-| `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline, including fine-grain drill-down guards and rankings-only fast paths |
+| `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline, including fine-grain drill-down guards and rankings-only fast paths. An empty selection reports its recorded exclusion reason as missing data, and still errors when nothing explains it (CHG-0679) |
 | `master_cache.py` | Streamlit session-state cache for master CSV + schema loading |
 | `master_freshness.py` | Master CSV freshness/rebuild gating helpers |
 | `overlays.py` | Shared reference-overlay framework: session keys, visibility/availability, RP-100 artifact validation/discovery, and river/flood render-layer contracts |
@@ -328,7 +334,7 @@ Aqueduct methodology note:
 | `dashboard_bundles.py` | Declarative dashboard bundle catalog: ordering, grouped selector labels, canonical bundle names, and composite-slug mapping |
 | `proposal_bundles.py` | Declarative proposal climate-risk bundle specs, exact rule order, and validation helpers for the offline proposal-bundle builder |
 | `constants.py` | UI, styling, scenario, and geometry-render constants, including `ADM2_MIN_AREA`/`ADM3_MIN_AREA` (boundary-load min-area thresholds shared by `app/geo_cache` and the offline state-value precompute for parity) |
-| `metrics_registry.py` | Canonical metric, pillar, and domain registry |
+| `metrics_registry.py` | Canonical metric, pillar, and domain registry. `supported_statistics` populates the ribbon's Statistic dropdown; `retained_master_statistics` is the separate, default-empty declaration of extra `__<stat>` master columns the optimized builder keeps as provenance **without** offering them as selectable statistics (CHG-0673) |
 | `paths.py` | Library-side path config mirroring root `paths.py` |
 | `variables.py` | Dashboard-facing variable registry derived from metrics registry |
 
@@ -556,6 +562,7 @@ python -m pytest -q
 - `test_jrc_flood_depth_admin_masters.py`
 - `test_master_loader.py`
 - `test_merge.py`
+- `test_contributing_model_counts.py`
 - `test_metrics_registry.py`
 - `test_naming.py`
 - `test_optimized_bundle.py`

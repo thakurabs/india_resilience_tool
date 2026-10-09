@@ -1,0 +1,293 @@
+{
+  "bundle_root": "C:\\irt_rb_bundle",
+  "expected_context_outputs": 0,
+  "expected_geometry_outputs": 0,
+  "expected_glance_outputs": 0,
+  "expected_master_outputs": 360,
+  "expected_yearly_ensemble_outputs": 0,
+  "expected_yearly_model_outputs": 360,
+  "issue_count": 20,
+  "issues": [
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_annual_max",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_annual_max\\yearly_models\\admin\\district\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_annual_max",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_annual_max\\yearly_models\\admin\\block\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_annual_max",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_annual_max\\yearly_models\\admin\\district\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_annual_max",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_annual_max\\yearly_models\\admin\\block\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_annual_mean",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_annual_mean\\yearly_models\\admin\\district\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_annual_mean",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_annual_mean\\yearly_models\\admin\\block\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_annual_mean",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_annual_mean\\yearly_models\\admin\\district\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_annual_mean",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_annual_mean\\yearly_models\\admin\\block\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_28",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_28\\yearly_models\\admin\\district\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_28",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_28\\yearly_models\\admin\\block\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_28",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_28\\yearly_models\\admin\\district\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_28",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_28\\yearly_models\\admin\\block\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_30",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_30\\yearly_models\\admin\\district\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_30",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_30\\yearly_models\\admin\\block\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_30",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_30\\yearly_models\\admin\\district\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_30",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_30\\yearly_models\\admin\\block\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_32",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_32\\yearly_models\\admin\\district\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_32",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_32\\yearly_models\\admin\\block\\state=Andaman & Nicobar Islands.parquet"
+    },
+    {
+      "level": "district",
+      "missing_columns": [
+        "district_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_32",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_32\\yearly_models\\admin\\district\\state=Lakshadweep.parquet"
+    },
+    {
+      "level": "block",
+      "missing_columns": [
+        "block_key",
+        "model",
+        "scenario",
+        "value",
+        "year"
+      ],
+      "severity": "error",
+      "slug": "wbgt_outdoor_route_b_days_ge_32",
+      "stage": "yearly-models",
+      "target": "C:\\irt_rb_bundle\\metrics\\wbgt_outdoor_route_b_days_ge_32\\yearly_models\\admin\\block\\state=Lakshadweep.parquet"
+    }
+  ],
+  "metrics_considered": 5
+}

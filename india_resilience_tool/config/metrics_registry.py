@@ -106,6 +106,16 @@ class MetricSpec:
     fixed_scenario: Optional[str] = None
     fixed_period: Optional[str] = None
     supported_statistics: Sequence[str] = field(default_factory=lambda: ("mean", "median"))
+    #: Extra ``__<stat>`` master columns to carry into the optimized bundle **without**
+    #: offering them as selectable statistics. ``supported_statistics`` populates the
+    #: ribbon's Statistic dropdown, so a count of contributing models cannot be added
+    #: there: it is provenance about a published value, not a value a user would map.
+    #: Default empty, so no existing metric's bundle or dropdown changes.
+    retained_master_statistics: Sequence[str] = field(default_factory=tuple)
+    #: Plain (non-``__<stat>``) master columns to carry into the optimized bundle,
+    #: like the pipeline's own ``climate_fill_method``. Used for per-unit provenance
+    #: that explains a value rather than being one. Default empty.
+    retained_master_columns: Sequence[str] = field(default_factory=tuple)
     supports_baseline_comparison: bool = True
     supports_scenario_comparison: bool = True
     admin_rebuild_command: Optional[str] = None
@@ -157,6 +167,12 @@ class MetricSpec:
             fixed_period=str(d.get("fixed_period") or "").strip() or None,
             supported_statistics=tuple(
                 str(v) for v in (d.get("supported_statistics") or ("mean", "median"))
+            ),
+            retained_master_statistics=tuple(
+                str(v) for v in (d.get("retained_master_statistics") or ())
+            ),
+            retained_master_columns=tuple(
+                str(v) for v in (d.get("retained_master_columns") or ())
             ),
             supports_baseline_comparison=bool(d.get("supports_baseline_comparison", True)),
             supports_scenario_comparison=bool(d.get("supports_scenario_comparison", True)),
@@ -752,6 +768,171 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "screening indicator rather than a full open-sky WBGT calculation because it "
             "does not directly model solar radiation, wind speed, or black-globe "
             "temperature."
+        ),
+    },
+
+    # --- Outdoor WBGT, Route B (CHG-0660) ---
+    # Produced offline by tools.pipeline.publish_route_b_outdoor from the
+    # validated Route B assembly, so source_type is 'external' and
+    # is_climate_compute_metric() keeps them out of the climate pipeline.
+    # Display-only under Heat Stress, like the eight existing WBGT/sWBGT
+    # diagnostics: not scored in composite_heat_stress, no bundle weight,
+    # and no colour_scale.json entry. The empirical metrics are NOT renamed
+    # or removed here; retirement is a separate, explicit decision.
+    {
+        "name": "Outdoor WBGT Days (≥ 28°C, Route B)",
+        "slug": "wbgt_outdoor_route_b_days_ge_28",
+        "value_col": "wbgt_outdoor_route_b_days_ge_28_days",
+        "units": "days",
+        "group": "temperature",
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        # The master carries a per-slice count of contributing models, retained in the
+        # bundle as provenance but never offered as a selectable statistic (CHG-0673).
+        "retained_master_statistics": ("n_models",),
+        # Per-unit provenance so a missing value can say why (CHG-0674).
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_route_b_outdoor --run "
+            "--assembly-dir scratch/wbgt_route_b_national/assembly"
+        ),
+        "description": (
+            "Number of days per year with outdoor WBGT ≥ 28°C. "
+            "Outdoor Wet Bulb Globe Temperature reproducing CarbonPlan's shade formula from tas, tasmax and huss, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014, then adjusted for direct solar load using rsds and sfcWind. Unlike the empirical sWBGT screening indicator it does model solar radiation and wind. "
+            "Counts are area-weighted cell exceedance days: each cell-day is thresholded, reduced annually per cell, then area-weighted, so a value may be fractional. It is not the count of days on which the district-average WBGT crossed the threshold, which is a different quantity. "
+            "Complete cell-years only; an incomplete year is missing, not a low count. "
+            "Produced offline by the Route B diagnostic chain, not by the climate compute pipeline, so it carries 18 complete-input models over historical 1990-2010 and SSP245/SSP585 2020-2080 rather than the empirical metrics' 22 models and wider year span. Coastal and insular units whose UHE reference support falls below the 0.95 area gate are missing, never zero."
+        ),
+    },
+    {
+        "name": "Outdoor WBGT Days (≥ 30°C, Route B)",
+        "slug": "wbgt_outdoor_route_b_days_ge_30",
+        "value_col": "wbgt_outdoor_route_b_days_ge_30_days",
+        "units": "days",
+        "group": "temperature",
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        # The master carries a per-slice count of contributing models, retained in the
+        # bundle as provenance but never offered as a selectable statistic (CHG-0673).
+        "retained_master_statistics": ("n_models",),
+        # Per-unit provenance so a missing value can say why (CHG-0674).
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_route_b_outdoor --run "
+            "--assembly-dir scratch/wbgt_route_b_national/assembly"
+        ),
+        "description": (
+            "Number of days per year with outdoor WBGT ≥ 30°C. "
+            "Outdoor Wet Bulb Globe Temperature reproducing CarbonPlan's shade formula from tas, tasmax and huss, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014, then adjusted for direct solar load using rsds and sfcWind. Unlike the empirical sWBGT screening indicator it does model solar radiation and wind. "
+            "Counts are area-weighted cell exceedance days: each cell-day is thresholded, reduced annually per cell, then area-weighted, so a value may be fractional. It is not the count of days on which the district-average WBGT crossed the threshold, which is a different quantity. "
+            "Complete cell-years only; an incomplete year is missing, not a low count. "
+            "Produced offline by the Route B diagnostic chain, not by the climate compute pipeline, so it carries 18 complete-input models over historical 1990-2010 and SSP245/SSP585 2020-2080 rather than the empirical metrics' 22 models and wider year span. Coastal and insular units whose UHE reference support falls below the 0.95 area gate are missing, never zero."
+        ),
+    },
+    {
+        "name": "Outdoor WBGT Days (≥ 32°C, Route B)",
+        "slug": "wbgt_outdoor_route_b_days_ge_32",
+        "value_col": "wbgt_outdoor_route_b_days_ge_32_days",
+        "units": "days",
+        "group": "temperature",
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        # The master carries a per-slice count of contributing models, retained in the
+        # bundle as provenance but never offered as a selectable statistic (CHG-0673).
+        "retained_master_statistics": ("n_models",),
+        # Per-unit provenance so a missing value can say why (CHG-0674).
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_route_b_outdoor --run "
+            "--assembly-dir scratch/wbgt_route_b_national/assembly"
+        ),
+        "description": (
+            "Number of days per year with outdoor WBGT ≥ 32°C. "
+            "Outdoor Wet Bulb Globe Temperature reproducing CarbonPlan's shade formula from tas, tasmax and huss, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014, then adjusted for direct solar load using rsds and sfcWind. Unlike the empirical sWBGT screening indicator it does model solar radiation and wind. "
+            "Counts are area-weighted cell exceedance days: each cell-day is thresholded, reduced annually per cell, then area-weighted, so a value may be fractional. It is not the count of days on which the district-average WBGT crossed the threshold, which is a different quantity. "
+            "Complete cell-years only; an incomplete year is missing, not a low count. "
+            "Produced offline by the Route B diagnostic chain, not by the climate compute pipeline, so it carries 18 complete-input models over historical 1990-2010 and SSP245/SSP585 2020-2080 rather than the empirical metrics' 22 models and wider year span. Coastal and insular units whose UHE reference support falls below the 0.95 area gate are missing, never zero."
+        ),
+    },
+    {
+        "name": "Outdoor WBGT (Annual Mean, Route B)",
+        "slug": "wbgt_outdoor_route_b_annual_mean",
+        "value_col": "wbgt_outdoor_route_b_annual_mean_C",
+        "units": "°C",
+        "group": "temperature",
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        # The master carries a per-slice count of contributing models, retained in the
+        # bundle as provenance but never offered as a selectable statistic (CHG-0673).
+        "retained_master_statistics": ("n_models",),
+        # Per-unit provenance so a missing value can say why (CHG-0674).
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_route_b_outdoor --run "
+            "--assembly-dir scratch/wbgt_route_b_national/assembly"
+        ),
+        "description": (
+            "Annual mean outdoor WBGT (°C). "
+            "Outdoor Wet Bulb Globe Temperature reproducing CarbonPlan's shade formula from tas, tasmax and huss, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014, then adjusted for direct solar load using rsds and sfcWind. Unlike the empirical sWBGT screening indicator it does model solar radiation and wind. "
+            "The annual mean is the one estimand that commutes with area weighting, "
+            "so cell-first and region-first aggregation give the same value. "
+            "Produced offline by the Route B diagnostic chain, not by the climate compute pipeline, so it carries 18 complete-input models over historical 1990-2010 and SSP245/SSP585 2020-2080 rather than the empirical metrics' 22 models and wider year span. Coastal and insular units whose UHE reference support falls below the 0.95 area gate are missing, never zero."
+        ),
+    },
+    {
+        "name": "Outdoor WBGT (Annual Maximum, Route B)",
+        "slug": "wbgt_outdoor_route_b_annual_max",
+        "value_col": "wbgt_outdoor_route_b_annual_max_C",
+        "units": "°C",
+        "group": "temperature",
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        # The master carries a per-slice count of contributing models, retained in the
+        # bundle as provenance but never offered as a selectable statistic (CHG-0673).
+        "retained_master_statistics": ("n_models",),
+        # Per-unit provenance so a missing value can say why (CHG-0674).
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_route_b_outdoor --run "
+            "--assembly-dir scratch/wbgt_route_b_national/assembly"
+        ),
+        "description": (
+            "Annual maximum outdoor WBGT (°C), area-weighted across each unit's "
+            "cell annual maxima. "
+            "Outdoor Wet Bulb Globe Temperature reproducing CarbonPlan's shade formula from tas, tasmax and huss, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014, then adjusted for direct solar load using rsds and sfcWind. Unlike the empirical sWBGT screening indicator it does model solar radiation and wind. "
+            "Maximum and spatial mean do not commute, so this is the area-weighted "
+            "mean of per-cell annual peaks, not the peak of the unit's average day. "
+            "Produced offline by the Route B diagnostic chain, not by the climate compute pipeline, so it carries 18 complete-input models over historical 1990-2010 and SSP245/SSP585 2020-2080 rather than the empirical metrics' 22 models and wider year span. Coastal and insular units whose UHE reference support falls below the 0.95 area gate are missing, never zero."
         ),
     },
 
@@ -2810,6 +2991,12 @@ DOMAINS: dict[str, list[str]] = {
         "swbgt_empirical_days_ge_28",
         "swbgt_empirical_days_ge_30",
         "swbgt_empirical_days_ge_32",
+        # Outdoor WBGT (Route B): solar-adjusted, bias-corrected, offline-produced.
+        "wbgt_outdoor_route_b_annual_mean",
+        "wbgt_outdoor_route_b_annual_max",
+        "wbgt_outdoor_route_b_days_ge_28",
+        "wbgt_outdoor_route_b_days_ge_30",
+        "wbgt_outdoor_route_b_days_ge_32",
     ],
     "Cold Risk": [
         "composite_cold_risk",
@@ -3177,6 +3364,8 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             "fixed_scenario": spec.fixed_scenario,
             "fixed_period": spec.fixed_period,
             "supported_statistics": list(spec.supported_statistics),
+            "retained_master_statistics": list(spec.retained_master_statistics),
+            "retained_master_columns": list(spec.retained_master_columns),
             "supports_baseline_comparison": bool(spec.supports_baseline_comparison),
             "supports_scenario_comparison": bool(spec.supports_scenario_comparison),
             "admin_rebuild_command": spec.admin_rebuild_command,

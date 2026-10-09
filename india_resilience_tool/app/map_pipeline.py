@@ -28,6 +28,7 @@ from india_resilience_tool.analysis.map_enrichment import (
     add_current_baseline_delta,
     add_rank_percentile_risk,
     add_tooltip_strings,
+    summarise_missing_selection,
 )
 from india_resilience_tool.viz.formatting import (
     get_metric_display_meta,
@@ -918,7 +919,20 @@ def build_map_and_rankings(
         )
 
     with perf_section("map: build tooltip strings"):
-        merged = add_tooltip_strings(merged, map_mode=map_mode, variable_slug=variable_slug)
+        # The count lives beside the value in the master, under the same
+        # scenario/period prefix with an ``n_models`` suffix. Deriving it from the
+        # selected column rather than from the roster means the tooltip reports what
+        # actually contributed to the number on screen, at that number's own
+        # aggregation level. Metrics that publish no such column are unaffected.
+        model_count_col = None
+        if metric_col and str(metric_col).count("__") == 3:
+            model_count_col = str(metric_col).rsplit("__", 1)[0] + "__n_models"
+        merged = add_tooltip_strings(
+            merged,
+            map_mode=map_mode,
+            variable_slug=variable_slug,
+            model_count_col=model_count_col,
+        )
 
     # Compute color scale defaults from *visible* units (matches the map filter),
     # then default to a robust p2–p98 range so outliers don't collapse the palette.
@@ -947,7 +961,17 @@ def build_map_and_rankings(
     scale_vals = scale_vals.replace([np.inf, -np.inf], np.nan).dropna()
 
     if scale_vals.empty:
-        st.error("No numeric values found for the current map selection.")
+        # A selection with nothing to map is not always a malfunction. Where every
+        # unit carries a recorded exclusion reason -- the island territories, whose
+        # reference support genuinely does not reach the gate -- the absence is the
+        # documented result, so it is reported as missing data with the reason
+        # rather than as an error. Anything the data does not account for still
+        # raises (CHG-0679).
+        explanation = summarise_missing_selection(scale_gdf)
+        if explanation:
+            st.info(explanation)
+        else:
+            st.error("No numeric values found for the current map selection.")
         render_perf_panel_safe()
         st.stop()
 

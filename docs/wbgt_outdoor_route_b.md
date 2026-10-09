@@ -332,6 +332,126 @@ Proceed nationally only with a reference-QC verdict, selected metric semantics
 and aggregation path, future-window decision, explicit limitations, and measured
 resource budget. Display-only release precedes any separate composite decision.
 
+## Stage 3: national scale-out and release (CHG-0662..CHG-0665)
+
+The user authorised national scale-out and release preparation on 2026-10-06,
+starting at `GIT:add_flood_depth@0cb621f`. The documents under
+`diagnostics/wbgt_outdoor_route_b_national/` carry the whole national stage:
+
+| Document | What it settles |
+|---|---|
+| [RELEASE_SPEC.md](diagnostics/wbgt_outdoor_route_b_national/RELEASE_SPEC.md) | the frozen contract, the 18-model roster, and the user's rulings |
+| [ACCESS_CM2_GATE.md](diagnostics/wbgt_outdoor_route_b_national/ACCESS_CM2_GATE.md) | the first model's measured gate result, PASS |
+| [EXPOSURE_REPORT.md](diagnostics/wbgt_outdoor_route_b_national/EXPOSURE_REPORT.md) | window-blanking loss for all 18 models, predicted from input screening and verified exact against a fitted model |
+| [COVERAGE_VERIFICATION.md](diagnostics/wbgt_outdoor_route_b_national/COVERAGE_VERIFICATION.md) | that the coastal 0.95 shortfall is UHE reference support, not a geometry or denominator error |
+| [PUBLICATION_PACKAGE.md](diagnostics/wbgt_outdoor_route_b_national/PUBLICATION_PACKAGE.md) | staging, ordered commands, conversion fidelity, rollback and the approval gate |
+
+None of them is a publication approval.
+
+The roster is **18 models**, verified on 2026-10-06 by direct file existence over
+every required model/scenario/year/variable rather than inherited from
+`ENSEMBLE_MODELS`. The six excluded models and their exact reasons are tabulated in the
+specification. The inherited note was incomplete twice over: NESM3 also lacks
+`huss`, IITM-ESM also lacks `tasmax`, and KACE-1-0-G has complete inputs but an
+unalignable `360_day` calendar, which only surfaced when driver extraction
+aborted during scale-out.
+
+ACCESS-CM2's national fit completed on 2026-10-05: 4,938 of 4,938 cell caches,
+zero stale under the shared signature, and the recorded code hashes still match
+`wbgt_route_b_run.py` and `wbgt_route_b.py` exactly, so the caches are valid and
+are not refitted. Support covers 7,921 district and block units over 5,082 cells,
+with 16 cells excluded for absent elevation.
+
+Three modules carry the campaign, all deliberately outside the shared cache
+signature so that orchestration and publication work cannot invalidate a fit:
+
+- `wbgt_route_b_campaign` drives preflight, drivers, prepare, fit, verify,
+  assemble and validate per model, resuming only what genuinely completed,
+  recording exit codes, logs, timings and measured series-per-hour, refusing a
+  second concurrent launch, and stopping the queue on a failed validation.
+- `wbgt_route_b_validate` applies the declared acceptance criteria to one
+  assembled model. It measures the day-366 exposure behind xclim's
+  `dayofyear`/`proleptic_gregorian` warning rather than arguing it away, and
+  names held-out geographic outliers instead of reporting one national number.
+- `tools.pipeline.publish_route_b_outdoor` converts a validated assembly into
+  the production processed layer for five additive `wbgt_outdoor_route_b_*`
+  slugs. It recomputes nothing, refuses a partial roster, a failing validation
+  report and per-model eligibility that differs between models, keeps counts as
+  fractional cell-first exceedance days, and leaves excluded units missing.
+
+The slugs are registered as `source_type = "external"`, so
+`is_climate_compute_metric` keeps them out of the climate pipeline, and they are
+display-only under Heat Stress beside the eight existing WBGT/sWBGT diagnostics:
+no composite membership, no bundle weight and no frozen ruler. The empirical
+metrics are **not** renamed and **not** removed; retirement is a separate,
+explicit decision.
+
+### Two measured findings that gate publication
+
+**The envelope is a reduction, not a drop-in replacement.** The release carries
+18 models over historical 1990-2010 and SSP245/SSP585 2020-2080, because `rsds`
+and `sfcWind` exist locally for those windows alone. The incumbent
+`swbgt_empirical_*` metrics carry 22 models over historical 1951-2014 and SSP
+2015-2100, and include KACE-1-0-G, which this chain cannot align. Every master period lies inside the new envelope, so period and map
+views are unaffected; the yearly trend charts lose 1951-1989, 2011-2019 and
+2081-2100.
+
+**Coverage loss is coastal and systematic, not confined to Lakshadweep.** 169 of
+7,921 units are ineligible under the 0.95 unit coverage gate against UHE
+reference support: 31 districts and 138 blocks, concentrated in Andhra Pradesh,
+Kerala, Gujarat, Tamil Nadu, Odisha, the Andaman and Nicobar Islands and
+Lakshadweep, and including Chennai at 0.601 retained fraction, Visakhapatanam at
+0.921, Surat at 0.927, Thiruvananthapuram at 0.948 and Ernakulam at 0.949. The
+driver is the coverage gate, not elevation: only 21 excluded units fall below
+0.25 retained fraction while 96 sit between 0.75 and 0.95. All of Lakshadweep
+district is at 0.000, and the earlier elevation-gap report's zero-support blocks
+(Chetlat, Andrott, Bitra) are a subset of this larger exclusion, not the whole of
+it. No threshold has been relaxed, no sea-level elevation fabricated and no count
+zero-filled; the alternatives and their consequences are set out for decision in
+the specification.
+
+### Contributing-model counts in the runtime bundle (CHG-0673)
+
+The user approved carrying actual contributing-model counts into the optimized
+outputs on 2026-10-07, requiring a backward-compatible implementation and asking
+that an incompatible shared-schema change be explained rather than forced.
+
+It was not needed. The count is declared per metric through a new
+`retained_master_statistics` field, which the optimized builder consults for extra
+`__<stat>` master columns and which nothing else reads. The obvious route —
+`supported_statistics` — is the incompatible one: `app/ribbon.py` builds the
+user-facing **Statistic** dropdown from that list, so a count of contributing
+models would have become a selectable statistic to map. It is provenance about a
+value, not a value.
+
+Two things the inspection found and the change fixes:
+
+- `build_state_values` skipped only `models` and `values_per_model`, so it would
+  have area-weighted the per-unit counts into a state headline of "17.3 models".
+  Counts now aggregate as the **minimum over units that published a value**.
+- `_empty_yearly_ensemble_frame` omitted `median`, which both populated load paths
+  produce, so a legitimately empty state answered a different column set from its
+  populated siblings. The required-column audit does not check for that.
+
+| Tier | The count is | Aggregation level |
+|---|---|---|
+| master | models with **every year** of the period | unit × scenario × period |
+| yearly ensemble | models with a finite value **that year** | unit × scenario × year |
+| state values | **minimum** over contributing units | state × scenario × period |
+
+Never the nominal roster size, never an average of annual counts. Zero
+contributors renders as "—" rather than "0", because a unit excluded for
+insufficient reference support has every model available and is simply not
+eligible; a literal 0 would assert something false about the roster. Metrics that
+declare nothing publish no such column and are byte-identical, which
+`tests/test_contributing_model_counts.py` asserts directly against an existing
+metric's published master.
+
+The reader needed no change: `data/master_loader.py` already normalises an
+`__n_models` suffix, and `parse_master_schema_obj` deliberately parses only
+`mean|median`, so the retained column is invisible to metric, scenario, period and
+statistic discovery.
+
 ## Validation and change record
 
 CHG-0644 — APPLIED (user-confirmed direction): this programme, bounded acquisition
@@ -357,3 +477,18 @@ leap-date planning, empty/all-NaN/single-point/extreme/partial-missing QC, atomi
 round-trip provenance, wrong-date cache refusal, and tamper detection.
 Manual validation follows operator steps 2–5. Run evidence belongs in a separate
 diagnostic report; the scientific QC gate must not be inferred from passing tests.
+
+CHG-0668, CHG-0671 — APPLIED: the optimized builder's empty-state artifact
+contract. A state whose every unit is ineligible publishes a schema-carrying empty
+Parquet for the yearly-model and yearly-ensemble tiers, but only after every source
+has been shown to parse and carry the expected schema, so a missing artifact or a
+failed read is never published as a clean empty result.
+CHG-0669 — APPLIED: the publisher's per-unit yearly-ensemble tier, which the
+incumbent metrics have and Route B lacked for every state. The parity audit could
+not catch it because ensemble jobs are only queued where source CSVs exist.
+CHG-0670, CHG-0672 — APPLIED: the island-exclusion trace and the staged dashboard
+verification record.
+CHG-0673 — APPLIED: contributing-model counts in the runtime bundle, the
+state-value minimum aggregation, the empty-ensemble schema parity fix, the tooltip
+row, and the correction of the stale "19 models" claim in all five registry
+descriptions to the verified 18.

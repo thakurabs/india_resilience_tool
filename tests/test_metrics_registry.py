@@ -178,6 +178,11 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
         "swbgt_empirical_days_ge_28",
         "swbgt_empirical_days_ge_30",
         "swbgt_empirical_days_ge_32",
+        "wbgt_outdoor_route_b_annual_mean",
+        "wbgt_outdoor_route_b_annual_max",
+        "wbgt_outdoor_route_b_days_ge_28",
+        "wbgt_outdoor_route_b_days_ge_30",
+        "wbgt_outdoor_route_b_days_ge_32",
     ]
     assert "wbd_le_6" not in heat_stress_metrics
 
@@ -770,3 +775,43 @@ def test_is_climate_compute_metric_positive_contract() -> None:
     assert is_climate_compute_metric(get_metric_spec("jrc_flood_depth_index_rp100")) is False
     # None (unknown slug) is safely not-climate-compute
     assert is_climate_compute_metric(None) is False
+
+
+def test_route_b_outdoor_metrics_are_display_only_and_offline_sourced() -> None:
+    """CHG-0660: the outdoor Route B slugs must stay out of compute and out of scoring.
+
+    They are produced offline by ``tools.pipeline.publish_route_b_outdoor`` from the
+    validated diagnostic assembly, so the climate pipeline must not try to compute
+    them, and they must not inherit the empirical metrics' scoring calibration
+    merely because the units look similar.
+    """
+    from india_resilience_tool.config.bundle_weights import LANDING_BUNDLE_WEIGHTS
+    from india_resilience_tool.config.metrics_registry import (
+        PIPELINE_SLUGS,
+        is_climate_compute_metric,
+    )
+
+    slugs = [
+        "wbgt_outdoor_route_b_annual_mean",
+        "wbgt_outdoor_route_b_annual_max",
+        "wbgt_outdoor_route_b_days_ge_28",
+        "wbgt_outdoor_route_b_days_ge_30",
+        "wbgt_outdoor_route_b_days_ge_32",
+    ]
+    scored = {entry.metric_slug
+              for entries in LANDING_BUNDLE_WEIGHTS.values() for entry in entries}
+    for slug in slugs:
+        spec = METRICS_BY_SLUG[slug]
+        assert spec.source_type == "external", slug
+        assert spec.compute is None, f"{slug} must not be wired to a compute function"
+        assert not is_climate_compute_metric(spec), slug
+        assert spec.supports_yearly_trend is True, slug
+        assert spec.supported_scenarios == ("historical", "ssp245", "ssp585"), slug
+        assert slug not in PIPELINE_SLUGS or spec.source_type == "external"
+        assert slug not in scored, f"{slug} must not be scored in any bundle"
+
+    # The empirical slugs they sit beside are untouched: no rename, no removal.
+    for slug in ("swbgt_empirical_annual_mean", "swbgt_empirical_days_ge_28",
+                 "swbgt_empirical_days_ge_30", "swbgt_empirical_days_ge_32"):
+        assert slug in METRICS_BY_SLUG, slug
+        assert is_climate_compute_metric(METRICS_BY_SLUG[slug]), slug

@@ -250,6 +250,20 @@ def make_monthly_value_year(
 # =============================================================================
 # TIER A: REGISTRY / BUNDLE CONSISTENCY
 # =============================================================================
+def _is_externally_produced(metric: dict) -> bool:
+    """Whether this metric is produced outside the climate pipeline.
+
+    A metric with ``source_type: "external"`` is assembled by a separate offline
+    chain -- the Route B outdoor WBGT metrics are fitted model by model and
+    published by `tools/pipeline/publish_route_b_outdoor.py` -- so there is no
+    compute function in `compute_indices_multiprocess.py` to call, and asserting
+    one would be asserting something untrue about how the metric exists. These
+    metrics owe a different debt instead, which the tests below collect: an
+    ``admin_rebuild_command`` that documents how to reproduce them.
+    """
+    return str(metric.get("source_type") or "").strip().lower() == "external"
+
+
 class TestTierARegistryConsistency:
     def test_all_bundle_slugs_exist_in_pipeline_registry(self) -> None:
         pipeline = _pipeline_by_slug()
@@ -262,15 +276,25 @@ class TestTierARegistryConsistency:
 
     def test_all_pipeline_metrics_have_compute_functions(self) -> None:
         missing_compute: list[str] = []
+        undocumented_external: list[str] = []
         for metric in PIPELINE_METRICS_RAW:
             slug = metric.get("slug", "(no slug)")
             compute_name = metric.get("compute")
+            if _is_externally_produced(metric):
+                if not str(metric.get("admin_rebuild_command") or "").strip():
+                    undocumented_external.append(
+                        f"{slug}: source_type is external but it declares no "
+                        "admin_rebuild_command")
+                continue
             if not compute_name:
                 missing_compute.append(f"{slug}: has no compute function defined")
                 continue
             if getattr(CMP, compute_name, None) is None:
                 missing_compute.append(f"{slug}: compute '{compute_name}' not found in compute_indices_multiprocess.py")
         assert not missing_compute, "Missing compute functions:\n" + "\n".join(missing_compute)
+        assert not undocumented_external, (
+            "External metrics without a rebuild command:\n"
+            + "\n".join(undocumented_external))
 
     def test_multi_var_metrics_declare_vars_list(self) -> None:
         """
@@ -792,6 +816,10 @@ class TestBundleMetricSmokeCoverage:
             metric = pipeline.get(slug)
             if metric is None:
                 missing.append(slug)
+                continue
+            if _is_externally_produced(metric):
+                # No compute to smoke-test; the offline chain that produces it has
+                # its own validation gates. See _is_externally_produced.
                 continue
             try:
                 _call_compute_for_metric(metric)

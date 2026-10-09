@@ -13,7 +13,7 @@ Contracts:
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 import pandas as pd
 
@@ -122,11 +122,88 @@ def add_rank_percentile_risk(
     return merged, rank_scope_label
 
 
+#: Machine exclusion reasons rendered for a reader. Only reasons that explain a
+#: *missing* value appear here; "eligible" deliberately does not, because an
+#: eligible unit with no value is missing for some other reason and this function
+#: must not guess which. An unrecognised reason is passed through verbatim rather
+#: than dropped, so a new reason surfaces as itself instead of silently vanishing.
+_EXCLUSION_REASON_LABELS: dict[str, str] = {
+    "coverage_below_gate_reference_support_dominant": (
+        "No data: reference coverage below the required share of this unit's area"
+    ),
+    "coverage_below_gate_grid_gap_dominant": (
+        "No data: climate grid coverage below the required share of this unit's area"
+    ),
+}
+
+
+def format_exclusion_reason(reason: Any, *, coverage: Any = None) -> str:
+    """Render one per-unit exclusion reason, with its retained share when known."""
+    text = str(reason or "").strip()
+    if not text or text.lower() == "eligible":
+        return ""
+    label = _EXCLUSION_REASON_LABELS.get(text.lower(), text)
+    try:
+        if coverage is not None and not pd.isna(coverage):
+            return f"{label} ({float(coverage):.0%} covered)"
+    except (TypeError, ValueError):
+        pass
+    return label
+
+
+def summarise_missing_selection(
+    frame: pd.DataFrame,
+    *,
+    reason_col: str = "exclusion_reason",
+    coverage_col: str = "support_coverage",
+) -> str:
+    """Explain why a whole selection has no values, or return "" if it cannot.
+
+    A selection with nothing to map is not always a malfunction. Where every unit
+    carries a recorded exclusion reason -- the two island territories, where the
+    reference support genuinely does not reach the gate -- the absence is the
+    documented result, and the honest presentation is the reason, not an error.
+
+    The empty string is returned deliberately whenever the data does not account
+    for the absence: no reason column, no rows at all, or any unit marked
+    ``eligible`` yet still carrying no value. That last case is a real anomaly and
+    the caller should keep reporting it as an error rather than explaining it
+    away.
+    """
+    if frame is None or len(frame) == 0 or reason_col not in frame.columns:
+        return ""
+    reasons = frame[reason_col].astype(str).str.strip()
+    if reasons.eq("").all():
+        return ""
+    if reasons.str.lower().eq("eligible").any():
+        return ""
+
+    counts = reasons.value_counts()
+    clauses = []
+    for reason, count in counts.items():
+        label = format_exclusion_reason(reason)
+        if not label:
+            continue
+        clause = label.split(": ", 1)[1] if label.startswith("No data: ") else label
+        clauses.append(f"{clause} ({int(count)} of {len(frame)} units)")
+    if not clauses:
+        return ""
+
+    message = "No data for this selection. " + "; ".join(clauses) + "."
+    if coverage_col in frame.columns:
+        coverage = pd.to_numeric(frame[coverage_col], errors="coerce").dropna()
+        if not coverage.empty:
+            message += (f" Highest retained coverage in this selection is "
+                        f"{float(coverage.max()):.0%}.")
+    return message
+
+
 def add_tooltip_strings(
     merged: pd.DataFrame,
     *,
     map_mode: str,
     variable_slug: Optional[str] = None,
+    model_count_col: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Add human-friendly tooltip string columns (Streamlit-free).
@@ -135,6 +212,10 @@ def add_tooltip_strings(
     - `_tooltip_value`, `_tooltip_value_label`
     - `_tooltip_baseline`, `_tooltip_delta`
     - `_tooltip_rank`
+    - `_tooltip_n_models`, only when `model_count_col` names a column that is
+      actually present. A metric whose master carries no contributing-model count
+      gets no such column, and the tooltip then omits the row entirely rather than
+      showing a blank or a guessed roster size.
 
     Missing data behavior:
     - Any missing numeric inputs render as "—".
@@ -172,4 +253,33 @@ def add_tooltip_strings(
     merged["_tooltip_rank"] = merged.get("_rank_in_state", pd.Series([pd.NA] * len(merged), index=merged.index)).apply(
         _fmt_rank
     )
+
+    # Contributing-model count for the displayed slice. It counts the models that
+    # produced a finite value for this unit, scenario and period -- the same
+    # aggregation level as the value above it -- so a unit whose roster thinned
+    # says so.
+    #
+    # A count of zero renders as "—" rather than "0". The count exists to qualify a
+    # published value, and zero contributors means there is no value to qualify: the
+    # row sits beside a "—" value, where a literal 0 reads as a measurement and
+    # invites the inference that the models are missing. They may not be -- a unit
+    # excluded for insufficient reference support has every model available and is
+    # simply not eligible, which the metric's coverage table explains and a tooltip
+    # cannot. An absent column is a third, separate statement: no row at all.
+    if model_count_col and str(model_count_col) in merged.columns:
+        counts = pd.to_numeric(merged[str(model_count_col)], errors="coerce")
+        merged["_tooltip_n_models"] = counts.where(counts > 0).apply(_fmt_rank)
+
+    # Why a value is missing, where the metric publishes a per-unit reason. Added
+    # only when the column exists, so a metric without one gets no row at all.
+    if "exclusion_reason" in merged.columns:
+        coverage = (
+            merged["support_coverage"]
+            if "support_coverage" in merged.columns
+            else pd.Series([None] * len(merged), index=merged.index)
+        )
+        merged["_tooltip_no_data_reason"] = [
+            format_exclusion_reason(reason, coverage=cov)
+            for reason, cov in zip(merged["exclusion_reason"], coverage)
+        ]
     return merged
