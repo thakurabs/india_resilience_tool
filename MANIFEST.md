@@ -626,6 +626,7 @@ python -m pytest -q
 
 #### Repo/process guards
 - `test_no_emojis.py`
+- `test_route_b_gate_evidence.py` — guards the Route B release test gate (CHG-0681, CHG-0682): rejects pytest interruptions, internal errors, usage errors, nothing-collected and unreconciled logs as test evidence, asserts a recorded baseline cannot forgive a run that never executed, and asserts the gate scripts/baseline/test config are bound into the release-candidate fingerprint
 
 ## Docs and supporting repo files
 

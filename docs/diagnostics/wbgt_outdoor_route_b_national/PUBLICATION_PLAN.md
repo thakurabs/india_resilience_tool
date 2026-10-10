@@ -1012,3 +1012,145 @@ passed **47/47**, including mainland and excluded-island district/block cases.
 stable across the gate run. The test and staged-audit evidence files still carry
 older candidate fingerprints and must be rerun before publication; this
 dashboard PASS alone is not a publication authorization.
+
+### 17.6 Refinement: each gate is bound to the instruments that decide *it*
+
+The drift binding in §17.2 was deliberately coarse — every gate bound to every
+verification script — and that coarseness misfired within hours of being written.
+A concurrent session rewrote `verify_streamlit.py` at 07:15 UTC while the
+full-suite gate was running. `verify_streamlit.py` is a script pytest never loads
+and which cannot change a single test outcome, yet the binding voided a completed
+2 h 15 min run.
+
+That is not conservatism, it is noise. A check that fires on changes which
+provably cannot affect the measurement trains its reader to discount it, and a
+discounted check is how a real drift gets waved through. So the binding is now
+per gate (`release_candidate.VERIFICATION_SETS`):
+
+| Gate | Bound to |
+|---|---|
+| all | `release_candidate.py`, `gate_evidence.py`, `gate_evidence.bat`, `run_staged_chain.bat` |
+| tests | + `tests_baseline_failures.json`, `pytest.ini`, `pyproject.toml`, `setup.cfg`, `tox.ini`, `conftest.py` |
+| audit | + nothing (the audit itself is `tools/optimized/…`, already pinned by `code`) |
+| dashboard | + `verify_release.py`, `verify_streamlit.py` |
+
+`publish_production.py` is in none of them: it consumes evidence rather than
+producing it, so it cannot alter a gate's verdict, and at publication it *is* the
+running code. `campaign_gate.py` decides gate A and is recorded in gate A's own
+evidence.
+
+The scope is recorded in each evidence file as `verification_scope`, and
+`compare()` refuses to judge digests across differing scopes — reporting the scope
+mismatch instead, since comparing hashes over different file sets would describe
+drift that is only a difference in what was measured. `publish_production.py`
+computes one candidate per scope and rejects evidence whose recorded scope is not
+the one that gate should have used, which is also how pre-refinement evidence is
+identified. Seven further tests cover this, 25 in the file, all passing.
+
+### 17.7 Concurrency is the real cost, and it is now a stated constraint
+
+Two sessions were gating this release in one working tree. The measured cost of
+that was one voided 2 h 15 min gate; the mechanism is that any edit to a
+fingerprinted file during a gate correctly invalidates it. Commit `c79ed9c`
+("Fix Route B staged dashboard verification") was made by the other session during
+the run.
+
+Its `verify_streamlit.py` was inspected rather than assumed: it is a genuine
+strengthening, not a gate weakened to pass. It asserts no `st.error` and requires
+a "No data" message for both island cases, and its two deferrals (the landing view
+and the incumbent-metric check) are explicitly scoped to the production run for
+the same reason they were deferred here — a metric-scoped staged bundle contains
+no incumbents and no persisted Glance view models. It is adopted as-is.
+
+**While a gate is in flight, `scratch/wbgt_route_b_national/**` and `tests/` must
+not be edited.** The shade packages (CHG-0700–0703) are blocked on Route B
+publication by their own plan, so standing clear of these paths costs that work
+nothing and unblocks it sooner.
+
+---
+
+## 18. All gates PASS, and the promotion decision is made (CHG-0683)
+
+### 18.1 Evidence, bound and current
+
+| Gate | Verdict | Scope | Stable during run | Result |
+|---|---|---|---|---|
+| D — full suite | PASS | `tests` | yes | 2,242 executed; 15 failures, 15 known, **0 regressions**; admissible, reconciled; 2.81 h |
+| E — strict parity audit | PASS | `audit` | yes | `issue_count: 0` |
+| F — contract checker + AppTest | PASS | `dashboard` | yes | 47 pass, 0 fail |
+
+All three carry `stable_during_run: true` and empty `drift`, so each describes the
+candidate as it now stands. Gate D is reported as **zero regressions against the
+recorded baseline**, not as a green suite: 15 tests fail in a pristine HEAD
+checkout and all 15 are in `tests_baseline_failures.json`.
+
+Gate D's admissibility, which CHG-0681 added, is recorded explicitly: exit code 1
+("tests failed", a concluded run), 2,242 executed, 15 reported failing against 15
+parsed node ids, `results_reconciled: true`, no abort markers, `scope: full suite`.
+
+### 18.2 The islands, demonstrated rather than asserted
+
+Twenty checks — five metrics × {Lakshadweep, Andaman & Nicobar} × {district,
+block} — every one returning `no_data_shown: true` with zero charts, zero
+downloads, no `st.error`, and the app script running clean into the map view.
+
+The earlier Lakshadweep failure is **resolved and explained**, not worked around:
+that bundle was the stale 2-model build whose masters carried no provenance
+columns, so `summarise_missing_selection` correctly declined to explain the
+absence and the generic error stood. The 18-model masters carry
+`coverage_below_gate_reference_support_dominant`, and the message now names it.
+
+Gate F also pins the export contract in evidence:
+`case_study_export_offered: false`, reason `source_type is external`.
+
+### 18.3 Promotion, not a second rebuild
+
+Chosen. The directive named three things to confirm first; all three were
+measured.
+
+**Portability.** 0 of 1,122 parquet files in the staged metric directories carry a
+path in their parquet key-value metadata, and 0 sampled string-column values hold
+a path-like string. An earlier byte-grep for `C:\` hit 9 files and was a **false
+positive** — the matches sit inside compressed column data surrounded by high-byte
+noise, and the printable strings containing `C:` are 6-byte fragments like
+`&C:_:8`. Byte-grepping compressed Parquet was the wrong instrument.
+
+**Manifest handling.** The staged manifest is root-bound and is never copied. The
+builder's manifest writer is a pure function of the directory it scans — every
+field comes from a rescan (`_bundle_inventory_summaries`,
+`glance_manifest_payload`, `_frozen_ruler_manifest_payload`,
+`_shade_release_signature`) — so `regen_manifest.py` can refresh it from the
+destination without a build, and asserts all five slugs reached the inventory.
+The runtime never reads the manifest's contents: `optimized_bundle.py` only
+defines the path helper, and the builder is its sole reader and writer.
+
+**Identical contents.** This is where promotion wins outright rather than merely
+saving time. A rebuild produces bytes **no gate has ever seen**, leaving the
+post-publication audit as their only check. A copy delivers exactly the bytes gate
+E audited to `issue_count: 0` and gate F drove the dashboard against — and
+`_promote_metrics` verifies every file by digest after the copy rather than
+trusting `copytree`.
+
+Supporting evidence that this builder is byte-deterministic: two independently
+executed builds agreed byte-for-byte on 98 of 101 geometry files (§17.3).
+
+**Only the five Route B directories are copied.** The staged bundle also holds ten
+incidental stub directories — four `gw_*`, six `jrc_*`, two to five files each,
+8–20 KB, written during the staged build — and at least one of those slugs exists
+in production with full content. A `metrics/*` copy would replace real production
+metrics with stubs, which is the one outcome the standing approval says to stop
+for rather than engineer around.
+
+Cost: promotion replaces a measured **4 h 08 min** rebuild with a 468 MB verified
+copy plus a manifest rescan.
+
+### 18.4 What publication still runs
+
+Unchanged from the rebuild path, because none of it is bypassed: gate A, the
+candidate-bound D/E/F evidence check, the direct `stat` of all five target
+directories, the pre-write inventory, the application-file snapshot, the phase
+journal, the strict parity audit against production, and the rollback note. The
+promote path replaces exactly two phases — "build bundle" and "build state values"
+— with "promote metrics" and "regenerate manifest". State values need no rebuild
+because the staged metric directories already contain the `state_values` tier and
+it is root-independent.
