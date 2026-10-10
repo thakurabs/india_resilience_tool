@@ -35,18 +35,11 @@ PANE_FLOOD_RASTER = "irt-flood-raster"
 PANE_CROSSWALK_OVERLAY = "irt-crosswalk-overlay"
 PANE_RIVER_OVERLAY = "irt-river-overlay"
 PANE_ADMIN_OUTLINE = "irt-admin-outline"
-PANE_BASEMAP_LABELS = "irt-basemap-labels"
-
-# CARTO light basemap split into a label-free base + a labels-only tile pane so
-# place names render ABOVE the choropleth (no hazy text under polygons) and only
-# appear once zoomed in past state scale.
-CARTO_LIGHT_NOLABELS_TILES = "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
-CARTO_LIGHT_ONLYLABELS_TILES = "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
-CARTO_TILES_ATTR = (
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors '
-    '&copy; <a href="https://carto.com/attributions">CARTO</a>'
+# Standard OSM tiles need no API key; labels are part of the base raster.
+BASEMAP_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+BASEMAP_ATTR = (
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 )
-BASEMAP_LABELS_MIN_ZOOM = 6
 
 # Admin-boundary outline hierarchy (drawn above the choropleth fills): the
 # country outline is strongest, then states, then districts (block view only);
@@ -543,8 +536,8 @@ def build_base_choropleth_map_with_geojson_layer(
     m = folium.Map(
         location=map_center,
         zoom_start=map_zoom,
-        tiles=CARTO_LIGHT_NOLABELS_TILES,
-        attr=CARTO_TILES_ATTR,
+        tiles=BASEMAP_TILES,
+        attr=BASEMAP_ATTR,
         control_scale=False,
         min_zoom=4,
         max_zoom=12,
@@ -556,19 +549,6 @@ def build_base_choropleth_map_with_geojson_layer(
         scrollWheelZoom=True,
     )
     _ensure_overlay_panes(m)
-
-    # Labels-only tiles above the polygons; zoom-gated so the national view stays
-    # clean and place names appear only from state scale onward.
-    folium.TileLayer(
-        tiles=CARTO_LIGHT_ONLYLABELS_TILES,
-        attr=CARTO_TILES_ATTR,
-        name="Place labels",
-        overlay=True,
-        control=False,
-        min_zoom=BASEMAP_LABELS_MIN_ZOOM,
-        max_zoom=12,
-        pane=PANE_BASEMAP_LABELS,
-    ).add_to(m)
 
     # Fit state bounds when a state is selected but district is "All";
     # otherwise (national view) fit India's bounds so the country fills the frame.
@@ -771,7 +751,6 @@ def _ensure_overlay_panes(m: Any) -> None:
         (PANE_ADMIN_OUTLINE, 415),
         (PANE_CROSSWALK_OVERLAY, 420),
         (PANE_RIVER_OVERLAY, 430),
-        (PANE_BASEMAP_LABELS, 440),
     ):
         folium.map.CustomPane(pane_name, z_index=z_index).add_to(m)
     setattr(m, "_irt_overlay_panes_added", True)

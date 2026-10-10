@@ -187,6 +187,10 @@ streamlit run india_resilience_tool/app/main.py
 
 Open: `http://localhost:8501`
 
+The map uses standard OpenStreetMap tiles (no API key required), with labels
+embedded in the basemap beneath the risk polygons. Loading the basemap requires
+internet access and follows the [OpenStreetMap tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+
 Proposal bundle builder:
 
 ```bash

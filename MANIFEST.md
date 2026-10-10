@@ -297,7 +297,7 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `context_cards.py` | Render admin district/block context cards, including the retained Hydrological Context card and exposure context |
 | `details_panel.py` | Render the single-unit details panel and crosswalk context/actions |
-| `map_view.py` | Render Folium map and extract level-aware click payloads, including landing state clicks |
+| `map_view.py` | Render Folium map with a key-free OpenStreetMap basemap and extract level-aware click payloads, including landing state clicks |
 | `rankings_view.py` | Rankings table rendering and portfolio add flows |
 | `read_the_docs_view.py` | Render the committed Technical Guidance Note HTML asset via `components.html`, including packaged-asset resolution and theme stamping helpers |
 | `state_summary_view.py` | State summary view for admin-focused overview flows |
