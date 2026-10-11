@@ -1,7 +1,7 @@
 # Does QDM bias correction measurably improve IRT's deployed metrics?
 
 **Status:** diagnostic only — nothing in the pipeline, the processed outputs or the dashboard was changed.
-**Date:** 2026-10-11 · **Snapshot:** `add_flood_depth@a87b239`
+**Date:** 2026-10-11 · **Snapshot:** `add_flood_depth@a87b239`. Precipitation section added at `b18a751` after the IMD 1990–2010 download.
 **Trigger:** the user observed that on the Heat Stress map, `twb_days_ge_28` paints central India almost white.
 
 ## 0. Answer in one screen
@@ -17,18 +17,21 @@
 3. **Across all deployed metrics, QDM gives a material, verifiable improvement for 13 metrics.** They form one coherent class: **absolute-threshold counts and levels built on humidity or night-time temperature.** A 14th, `twb_days_ge_30`, follows the same mechanism, but its baseline is too rare to verify.
 4. **QDM does nothing measurable for any metric defined against its own baseline.** That covers tx90p/tn90p/tx10p/tn10p, WSDI/CSDI, HWFI and SPI; those definitions already cancel bias.
 5. **For two tasmax metrics QDM makes things worse** (`txge35_extreme_heat_days`, `hwa_heatwave_amplitude`). ERA5 is a doubtful reference for afternoon maxima.
-6. **Precipitation is UNRESOLVED.**
-   - The only rainfall reference covering 1990–2010 on disk is ERA5 over Telangana, and ERA5 has the known drizzle bias (longest dry spell 64 days vs NEX 102).
-   - QDM toward it would degrade dry-spell metrics.
-   - A valid rainfall verdict needs IMD 0.25° gridded rainfall for 1990–2010. Only 1980–1985 is on disk.
+6. **Precipitation, scored nationally against IMD 0.25° gridded rainfall (74 cells, §5).** NEX underestimates heavy-rain extremes by about 40 %: Rx1day −31 mm, R99p −45 mm, R95p −110 mm. It overestimates the longest dry spell by 22 days.
+   - **The QDM configuration decides the outcome.** With the 31-day window used for temperature, multiplicative QDM overshoots the rain tail (Rx1day bias −31 → +17.5 mm), and its verdict is WORSE for Rx5day, R99p and R95p variability.
+   - With a **91-day window** it removes the systematic bias almost exactly (Rx1day +0.1, R99p +2.4, R95pTOT 0.0, CDD −1.4).
+   - Per-cell error stays larger because of 8-year sampling noise, so the mechanical halving rule rates these MARGINAL.
+   - The mapped 2040–60 values move a lot: Rx1day 55 → 87 mm, R95p 227 → 352 mm, CDD 102 → 80 days.
+   - **No effect:** SPI (all 7), CWD and `r95p_interannual_variability`. These are sequence or self-normalised properties that marginal QDM cannot change.
+   - **Correction to the first version of this report:** "ERA5 has a drizzle bias that makes CDD wrong" was half wrong. IMD gives a Telangana CDD of 68 days, close to ERA5's 64; NEX (102) is the outlier. ERA5's drizzle bias shows in wet spells instead (CWD 23.5 vs IMD 12.0).
 
 ## 1. Inventory of deployed metrics (105 in `processed_optimised/metrics`)
 
 | Group | Count | QDM relevance |
 |---|---|---|
 | NEX-derived temperature / humidity metrics, measured here | 35 | §4 verdicts |
-| NEX-derived precipitation metrics, measured here | 15 | §5 — UNRESOLVED (reference unfit) |
-| NEX-derived, not measured: `aridity_index_p_over_pet`, `r95p_interannual_variability` | 2 | open (§7) |
+| NEX-derived precipitation metrics, measured against IMD (incl. `r95p_interannual_variability`) | 16 | §5 |
+| NEX-derived, not measured: `aridity_index_p_over_pet` | 1 | open (§7) |
 | Shade WBGT (`wbgt_shade_stull_*`) | 4 | **already QDM-corrected** (CarbonPlan shade, CHG-0700..0703) |
 | Outdoor WBGT Route B (`wbgt_outdoor_route_b_*`) | 5 | **already QDM-corrected** (CHG-0676..0683) |
 | Composites (`composite_*`) | 15 | inherit their inputs; `composite_heat_stress` weights `twb_days_ge_28` |
@@ -41,7 +44,7 @@
 - **NEX-GDDP-CMIP6 v1.0:** daily tas, tasmax, tasmin, hurs and pr from `irt_data/r1i1p1f1`.
   - 5 models: ACCESS-CM2, EC-Earth3, GFDL-ESM4, MIROC6, MPI-ESM1-2-LR.
   - Taken at the nearest cell to 6 sites, for historical 1990–2010 and ssp245 2040–2060.
-  - Precipitation additionally on every 3rd cell of the Telangana grid (~100 cells).
+  - Precipitation additionally on every 3rd cell of the Telangana grid (~100 cells), scored against ERA5. **Superseded by the national IMD test in §5.** The ERA5 precipitation rows in `data/summary_final.csv` and `data/precipitation_unit_rows.csv` are kept only as a record.
 - **Temperature/humidity reference:** ERA5 hourly at the 6 sites (`scratch/wbgt_deployed_vs_reference_cache`), aggregated to IST days.
   - Daily mean T and RH; tasmax and tasmin are the max and min of the hourly values.
 - **Precipitation reference:** ERA5 daily precipitation over Telangana (`irt_data/era5/nc/pr/*_tel.nc`).
@@ -168,22 +171,74 @@ Values are 5-model means over 5 sites. "Holdout err" is the mean absolute error 
   - Pulling NEX toward ERA5 there imports ERA5's error.
   - Do not apply ERA5-QDM to tasmax-threshold metrics without a station-grade reference (e.g. IMD gridded Tmax).
 
-## 5. Precipitation: UNRESOLVED (reference unfit)
+## 5. Precipitation, against IMD gridded rainfall
 
-ERA5 over Telangana, holdout means:
+**Reference and design.**
 
-| Metric | ERA5 | Raw NEX | QDM toward ERA5 |
-|---|---|---|---|
-| CDD (longest run < 1 mm) | 64 | 102 | 58 |
-| CWD (longest run ≥ 1 mm) | 23.5 | 16.8 | 21.7 |
-| Rx1day (mm) | 85 | 48 | 88 |
-| R99p (mm) | 122 | 49 | 140 |
+- **Reference:** IMD 0.25° gridded daily rainfall, 1990–2010, downloaded 2026-10-11 to `irt_data/imd/rain/` via `imdlib`.
+  - All 21 files were checked against the exact byte size of 135 × 129 × days × 4.
+  - The IMD server dropped connections repeatedly; `scripts/imd_get.py` retries with backoff. 7 of the 21 years needed more than one attempt (1998 needed 5). No year failed, and no existing file was overwritten.
+  - The files for 1980–1985 were already on disk and were not used.
+- **Sampling:** 74 NEX cells on a national 2° lattice, each with all four overlapping IMD boxes on land. The reference for each cell is the mean of those 4 IMD boxes (conservative regrid; NEX cells are offset 0.125° from IMD).
+- **Same as §2:** holdout/future design, metric definitions, floors and 5 models. Multiplicative QDM with 0.1 mm trace jitter.
+- **Two QDM configurations were run:**
+  - 31-day day-of-year window, the CarbonPlan/temperature setting.
+  - 91-day window.
 
-- Telangana has a long dry season. An ERA5 CDD of 64 days and a CWD of 23.5 days reflect ERA5's light-rain (drizzle) excess, not reality.
-- QDM therefore "improves" agreement with a reference that is itself wrong for dry/wet spells.
-- For the heavy-rain metrics (Rx1day, R95p, R99p), ERA5's larger extremes may be closer to the truth than BCSD's. Under multiplicative QDM they also inflate the projected change: R99p goes from +31 mm to +161 mm by 2040–60.
-- **None of the precipitation verdicts in `data/summary_final.csv` should be acted on.**
-- SPI metrics showed no effect, consistent with SPI's own baseline gamma fit cancelling the bias.
+**Systematic error (mean signed bias against IMD, holdout 2003–2010):**
+
+| Metric | IMD | Raw NEX bias | QDM 31-d bias | **QDM 91-d bias** | Raw → QDM-91 ssp245 2040–60 |
+|---|---|---|---|---|---|
+| Rx1day (mm) | 81.6 | −30.9 | +17.5 | **+0.1** | 54.7 → 87.4 |
+| Rx5day (mm) | 173.7 | −27.2 | +53.4 | +22.7 | 154 → 205 |
+| R95p (mm) | 295.9 | −110.1 | +60.0 | **+11.0** | 227 → 352 |
+| R99p (mm) | 98.9 | −44.6 | +34.8 | **+2.4** | 79 → 134 |
+| R95pTOT (%) | 24.2 | −7.3 | +1.4 | **0.0** | 19.5 → 26.3 |
+| R20mm (days) | 15.5 | +2.5 | +3.0 | +1.3 | 19.0 → 17.5 |
+| CDD (days) | 79.7 | +22.5 | −4.3 | **−1.4** | 102 → 80 |
+| CWD (days) | 14.7 | +4.5 | +5.8 | +6.0 | 19.5 → 20.0 |
+
+**Mechanical verdicts** (mean absolute per-cell error, §2 rule; `data/imd_w31/`, `data/imd_w91/`):
+
+| Metric | 31-day window | 91-day window |
+|---|---|---|
+| CDD `pr_consecutive_dry_days_lt1mm` | MATERIAL (25.8 → 11.9) | MARGINAL (25.8 → 13.0; misses halving by 0.1) |
+| Rx1day | NO EFFECT | MARGINAL (34.7 → 22.9) |
+| R95p | NO EFFECT | MARGINAL (135 → 97) |
+| R99p | WORSE | MARGINAL (58.5 → 53.3) |
+| R95pTOT | MARGINAL | MARGINAL (8.0 → 4.9) |
+| R20mm | MARGINAL | MARGINAL (8.0 → 3.6) |
+| Rx5day | WORSE | NO EFFECT |
+| `r95p_interannual_variability` | WORSE | NO EFFECT |
+| CWD | NO EFFECT | NO EFFECT |
+| SPI 3/6/12, all 7 metrics | NO EFFECT | NO EFFECT |
+
+**Reading:**
+
+- **Extremes.**
+  - NEX BCSD underestimates heavy-rain extremes nationally by about 40 % and overestimates dry spells.
+  - With a 91-day window, QDM removes that systematic bias almost exactly.
+  - The per-cell error that remains (Rx1day about 23 mm) is mostly 8-year sampling noise in single-cell annual maxima, which no correction can remove. That is why the halving rule, built for the temperature metrics, rates these MARGINAL even though the bias has gone.
+- **The window choice is decisive for rainfall.**
+  - With 13 training years, a 31-day group has about 400 days per quantile set but only a handful of heavy-rain days in the top quantiles.
+  - The multiplicative ratio then amplifies that noise, so the tail overshoots: the per-cell QDM/IMD ratio for Rx1day spans 0.73–1.71.
+  - Any production design for rainfall should use a wider window, or monthly/seasonal grouping, and test it the same way.
+- **Multiplicative QDM preserves relative change, so absolute projected changes grow with the corrected baseline.** Rx1day's 2040–60 change goes from +4.9 mm raw to +9.7 mm. This is intended QDM behaviour, but it is a methodology change to the projected signal and must be called out if adopted.
+- **Some metrics can't be corrected this way.**
+  - CWD is a sequence property: wet-spell persistence is set by the model's daily ordering, not its marginal distribution.
+  - SPI is self-normalised against its own baseline gamma fit.
+  - R95p variability is a ratio.
+  - Marginal QDM changes none of them, as expected.
+- **ERA5 claim corrected.** On the same Telangana cells (holdout means):
+
+  | Metric | ERA5 | IMD | Raw NEX |
+  |---|---|---|---|
+  | CDD (days) | 64.0 | 68.4 | 101.6 |
+  | CWD (days) | 23.5 | 12.0 | 16.8 |
+  | Rx1day (mm) | 85.0 | 91.5 | 47.7 |
+  | R99p (mm) | 121.9 | 115.1 | 49.4 |
+
+  ERA5 matches IMD for CDD and extremes. Its drizzle bias shows only in wet-spell length. The first version of this report wrongly called ERA5's CDD unrealistic.
 
 ## 6. Threats to validity
 
@@ -192,14 +247,20 @@ ERA5 over Telangana, holdout means:
 - **Small sample.** 5 sites, 5 of 22 models, 8 holdout years.
 - **Points, not districts.** These are nearest-cell points, not district means. The district reproduction check passes, but a national gridded test has not been done.
 - **Simplified definitions.** Metrics are re-implemented with a common 1990–2010 baseline, and SPI uses method-of-moments gamma per calendar month.
+- **Precipitation reference and sample (§5).**
+  - IMD is interpolated from rain gauges. Gauges are sparse in the north-east and the Himalaya, so the reference itself is weaker there.
+  - The 74 cells sit on a 2° lattice; they are not district means.
+  - Only 5 of the 22 models were used, and the holdout is 8 years. Single-cell annual maxima are noisy over 8 years, which is why the bias disappears while the per-cell error does not.
 - **No physical-consistency step.** Additive QDM per variable can produce tasmin > tasmax. That was not checked or repaired here, and a production design would need it.
 
 ## 7. Open items for verification
 
-1. **Precipitation:** acquire IMD 0.25° gridded daily rainfall for 1990–2010 (download — needs approval), then re-run §5 against it.
+1. **Precipitation:** done against IMD (§5). Remaining questions:
+   - Confirm that the 91-day (or monthly) grouping holds with more models and at district level.
+   - Decide whether a larger projected change in rainfall extremes is acceptable as a methodology change.
 2. **tasmax extremes:** test against IMD gridded Tmax before any decision on `txge35`, `txx` or `hwa`.
-3. **Scale-up check:** run the 15 MATERIAL metrics against a **gridded** ERA5 reference on a subset of states, with district aggregation, to confirm the site results hold at district level. National gridded ERA5 does not exist locally; only Telangana is on disk.
-4. **Not measured yet:** `aridity_index_p_over_pet` (multivariate: pr + Hargreaves PET from tasmax/tasmin) and `r95p_interannual_variability`.
+3. **Scale-up check:** run the 13 MATERIAL metrics against a **gridded** ERA5 reference on a subset of states, with district aggregation, to confirm the site results hold at district level. National gridded ERA5 does not exist locally; only Telangana is on disk.
+4. **Not measured yet:** `aridity_index_p_over_pet` (multivariate: pr + Hargreaves PET from tasmax/tasmin). It needs IMD Tmax/Tmin, which also serves item 2.
 5. **Outlier models:** investigate CMCC-CM2-SR5 and TaiESM1 historical tas at Kolkata (+1.8 °C).
 
 ## 8. Reproduction
@@ -219,5 +280,12 @@ python docs/diagnostics/qdm_applicability/scripts/sanity.py             # reprod
   - `scripts/j.py`: offset-mechanism test.
   - `scripts/qdm_twb.py` and `scripts/qdm_twb_245.py`: QDM at ssp585 2071–80 and ssp245 2040–60.
   - `scripts/extract_ssp245.py`: series extraction.
+- **Precipitation against IMD:**
+  - `scripts/imd_get.py 1990 2010`: download, new files only, retries, size check.
+  - `scripts/extract_pr_national.py`: 74-cell NEX lattice.
+  - `scripts/qdm_pr_imd.py`: 31-day window.
+  - `scripts/qdm_pr_imd_w91.py`: 91-day window.
+  - `scripts/pr_signed.py`: signed bias.
+  - Outputs are in `data/imd_w31/` and `data/imd_w91/`; the cell list is `data/imd_cells.csv`.
 - **Path assumptions:** the scripts were run from `.scratch/` and still read their caches from `.scratch/...` and `scratch/...`.
 - **Unit-level outputs:** `data/temperature_humidity_unit_rows.csv` and `data/precipitation_unit_rows.csv`.

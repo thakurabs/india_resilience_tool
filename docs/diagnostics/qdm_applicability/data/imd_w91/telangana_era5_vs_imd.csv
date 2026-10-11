@@ -1,0 +1,6 @@
+metric,era5,nex_raw,imd
+cwd_consecutive_wet_days,23.5,16.8,12.0
+pr_consecutive_dry_days_lt1mm,64.0,101.6,68.4
+pr_max_1day_precip,85.0,47.7,91.5
+r20mm_very_heavy_precip_days,12.2,16.7,14.5
+r99p_extreme_wet_precip,121.9,49.4,115.1
