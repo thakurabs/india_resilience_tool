@@ -193,26 +193,10 @@ def test_heat_stress_gridfirst_slugs_do_not_overlap_heat_risk_gridfirst_slugs() 
 
 def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
     expected = {
-        "wbgt_shade_stull_annual_mean": (
-            "Shaded WBGT — Annual Mean of Estimated Daily Maxima",
-            "wbgt_shade_stull_annual_mean",
-            "wbgt_shade_stull_annual_mean_C",
-        ),
-        "wbgt_shade_stull_days_ge_28": (
-            "Shaded WBGT Days (≥ 28°C)",
-            "wbgt_shade_stull_days_ge_threshold",
-            "wbgt_shade_stull_days_ge_28_days",
-        ),
-        "wbgt_shade_stull_days_ge_30": (
-            "Shaded WBGT Days (≥ 30°C)",
-            "wbgt_shade_stull_days_ge_threshold",
-            "wbgt_shade_stull_days_ge_30_days",
-        ),
-        "wbgt_shade_stull_days_ge_32": (
-            "Shaded WBGT Days (≥ 32°C)",
-            "wbgt_shade_stull_days_ge_threshold",
-            "wbgt_shade_stull_days_ge_32_days",
-        ),
+        "wbgt_shade_stull_annual_mean": ("Shaded WBGT (Annual Mean)", None, "wbgt_shade_stull_annual_mean_C"),
+        "wbgt_shade_stull_days_ge_28": ("Shaded WBGT Days (≥ 28°C)", None, "wbgt_shade_stull_days_ge_28_days"),
+        "wbgt_shade_stull_days_ge_30": ("Shaded WBGT Days (≥ 30°C)", None, "wbgt_shade_stull_days_ge_30_days"),
+        "wbgt_shade_stull_days_ge_32": ("Shaded WBGT Days (≥ 32°C)", None, "wbgt_shade_stull_days_ge_32_days"),
         "swbgt_empirical_annual_mean": (
             "Empirical sWBGT (Annual Mean)",
             "swbgt_empirical_annual_mean",
@@ -246,18 +230,24 @@ def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
         spec = METRICS_BY_SLUG[slug]
         assert spec.label == label
         assert spec.var == "tas"
-        assert list(spec.vars or []) == (["tas", "tasmax", "hurs"] if slug.startswith("wbgt_shade") else ["tas", "hurs"])
         assert spec.compute == compute
         assert spec.value_col == value_col
         assert spec.description is not None
         assert "tas" in spec.description
-        assert "hurs" in spec.description
         if slug.startswith("wbgt_shade"):
-            assert "shaded" in spec.description.lower()
-            assert "no-direct-sun" in spec.description.lower()
+            # CarbonPlan-aligned shade (CHG-0701): built offline from the Route B QDM
+            # cache, so external, never recomputed by the pipeline, and fed by huss.
+            assert spec.source_type == "external"
+            assert list(spec.vars or []) == ["tas", "tasmax", "huss"]
+            assert "huss" in spec.description and "hurs" not in spec.description
+            assert "carbonplan" in spec.description.lower()
+            assert "quantile delta mapping" in spec.description.lower()
             assert "direct solar radiation" in spec.description.lower()
-            assert "radiant heat load" in spec.description.lower()
+            assert spec.retained_master_statistics == ("n_models",)
+            assert spec.admin_rebuild_command and "publish_carbonplan_shade" in spec.admin_rebuild_command
         else:
+            assert list(spec.vars or []) == ["tas", "hurs"]
+            assert "hurs" in spec.description
             assert "outdoor heat-stress screening indicator" in spec.description.lower()
             assert "wbgt-style estimate" in spec.description.lower()
             assert "vapour pressure" in spec.description

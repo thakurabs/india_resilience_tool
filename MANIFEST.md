@@ -857,4 +857,37 @@ For questions about the codebase:
 - `tests/test_wbgt_shade_release.py`: formula, completeness, units, calendars, route parity, temporal IDW prevention, NaN retention and provenance regressions.
 - `tests/test_wbgt_shade_cp_validation.py`: train/test separation, per-window adjustment, Feb 29 and complete-year rules, missing-not-zero counts, inclusive thresholds, flip attribution, union crosswalk coverage with nested polygons, overlap exclusion, and count-first transfer (CHG-0647, CHG-0652).
 - `docs/wbgt_shade_release.md`: release status and chronological operator commands; national publication remains outstanding.
+
+#### CarbonPlan shade replacement (CHG-0700..0703; supersedes the unpublished shade-peak-v1 stage)
+
+- `india_resilience_tool/data/wbgt_contract.py` now distinguishes three shade identities: signed
+  `carbonplan-shade-gridfirst-qdm-v1`, signed `shade-peak-v1`, and the deployed unsigned legacy method,
+  which is accepted only when its exact file hash is in `processed_optimised/shade_method_identity.json`
+  (bundle-relative keys, cached by size and mtime). `shade_sources_identity` rejects mixed selections;
+  `shade_identity_description` gives the user-facing method text for the verified identity.
+- Registry: the four `wbgt_shade_stull_*` slugs are `source_type="external"` (no pipeline `compute`),
+  inputs `tas`, `tasmax`, `huss` (+ elevation pressure), retaining `n_models` and the coverage columns. Slugs
+  and value columns are unchanged. The ribbon refuses unverified shade data and shows the deployed method's
+  text; case-study exports stay enabled for shade and add `missing_reason`, `support_coverage` and
+  `method_identity`; the state headline shows contributing units and covered area for metrics carrying
+  `exclusion_reason`.
+- `tools/pipeline/build_carbonplan_shade_release.py`: stages per-model annual metrics straight from the signed
+  Route B QDM cache (cell-year metrics, then fixed area weights); no shade recomputation.
+- `tools/diagnostics/wbgt_shade_cp_score_run.py` / `wbgt_shade_cp_release_score.py`: frozen out-of-sample
+  holdout gate (cache `holdout` 2000–2010 vs deployed legacy vs UHE). `wbgt_shade_cp_sun_control.py`: cached
+  shade + Route B sun adjustment reproduces Route B's validated outdoor CSVs.
+- `tools/pipeline/publish_carbonplan_shade.py`: staged processed tree (signed yearly/period/ensemble/master
+  files) using Route B's writers; refuses production roots.
+- `tools/optimized/build_processed_optimised.py`: routine builds and `build_state_values` routine runs skip
+  shade; `--shade-release` builds exactly the four CarbonPlan-signed slugs into a staging root;
+  `--manifest-only` regenerates `bundle_manifest.json` atomically from the bundle on disk.
+- `tools/pipeline/build_shade_identity_sidecar.py`: backed-up legacy identity sidecar.
+- `tools/pipeline/cutover_carbonplan_shade.py`: `prepare` / `swap` / `rollback` / `status` / `close`;
+  journaled same-volume renames, 30-minute downtime abort, seven-day rollback window plus sign-off.
+- `docs/diagnostics/wbgt_shade_carbonplan_release/`: frozen `SPEC.md`, `LEGACY_PREFLIGHT.md`,
+  `HOLDOUT_RULING.md`, `RUNBOOK.md` (chronological operator commands), `tests_baseline.json`,
+  `coverage_loss_units.csv`, `RELEASE_NOTES.md` (published 2026-10-11 as release
+  `shade-cp-20261011`; disclosures and gate table) and `evidence/` (gate outputs).
+- Tests: `test_carbonplan_shade_release.py`, `test_carbonplan_shade_publication.py`,
+  `test_shade_identity_sidecar.py`, `test_wbgt_shade_cp_*.py`.
 - `tools/pipeline/compute_indices_multiprocess.py --output-root`: isolated compute destination inherited by worker processes; raw source paths are unchanged.

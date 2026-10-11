@@ -1,0 +1,12 @@
+{
+  "bundle_root": "C:\\irt_shade_bundle",
+  "expected_context_outputs": 22,
+  "expected_geometry_outputs": 74,
+  "expected_glance_outputs": 0,
+  "expected_master_outputs": 288,
+  "expected_yearly_ensemble_outputs": 288,
+  "expected_yearly_model_outputs": 288,
+  "issue_count": 0,
+  "issues": [],
+  "metrics_considered": 4
+}

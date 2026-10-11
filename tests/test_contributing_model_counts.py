@@ -17,6 +17,7 @@ import pytest
 from india_resilience_tool.analysis.map_enrichment import add_tooltip_strings
 from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG, get_dashboard_variables
 from india_resilience_tool.data.master_loader import parse_master_schema_obj
+from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS
 from india_resilience_tool.viz.folium_featurecollection import build_geojson_tooltip
 from tools.optimized.build_processed_optimised import (
     _build_yearly_ensemble_from_models,
@@ -67,7 +68,8 @@ def test_no_other_metric_declares_a_retained_statistic() -> None:
         for slug, spec in METRICS_BY_SLUG.items()
         if spec.retained_master_statistics
     }
-    assert declaring == set(ROUTE_B_SLUGS)
+    # Route B and the CarbonPlan shade release (CHG-0701) carry contributing-model counts.
+    assert declaring == set(ROUTE_B_SLUGS) | set(SHADE_SLUGS)
 
 
 def test_dashboard_variables_expose_the_declaration() -> None:
@@ -375,7 +377,7 @@ def test_no_other_metric_declares_retained_plain_columns() -> None:
     declaring = {
         slug for slug, spec in METRICS_BY_SLUG.items() if spec.retained_master_columns
     }
-    assert declaring == set(ROUTE_B_SLUGS)
+    assert declaring == set(ROUTE_B_SLUGS) | set(SHADE_SLUGS)
 
 
 def test_master_retains_declared_provenance_columns() -> None:

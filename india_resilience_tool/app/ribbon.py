@@ -46,6 +46,11 @@ from india_resilience_tool.data.optimized_bundle import (
     optimized_master_sources_from_metric_root,
     resolve_optimized_bundle_root,
 )
+from india_resilience_tool.data.wbgt_contract import (
+    SHADE_SLUGS,
+    shade_identity_description,
+    shade_sources_identity,
+)
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.charts import (
     PERIOD_ORDER,
@@ -610,6 +615,12 @@ def render_metric_ribbon(
             selected_metric_preview = st.session_state.get("selected_var", sel_placeholder)
             if selected_metric_preview != sel_placeholder and selected_metric_preview in VARIABLES:
                 desc_preview = str(VARIABLES[selected_metric_preview].get("description", "")).strip()
+                if selected_metric_preview in SHADE_SLUGS:
+                    # The registry describes the release target; describe what is deployed.
+                    desc_preview = shade_identity_description(
+                        st.session_state.get("shade_identity_by_slug", {}).get(selected_metric_preview),
+                        desc_preview,
+                    )
                 units_preview = str(
                     VARIABLES[selected_metric_preview].get("unit")
                     or VARIABLES[selected_metric_preview].get("units")
@@ -815,6 +826,23 @@ def render_metric_ribbon(
                     )
                 render_perf_panel_safe()
                 st.stop()
+
+            if variable_slug in SHADE_SLUGS:
+                # Shade masters are shown only with a verified identity: signed CarbonPlan
+                # or shade-peak-v1, or unsigned legacy files whose exact hash is recorded in
+                # the bundle's identity sidecar. Unknown or mixed sources fail closed.
+                shade_sources = master_csv_path if isinstance(master_csv_path, tuple) else (master_csv_path,)
+                shade_identity = shade_sources_identity(shade_sources)
+                identities = dict(st.session_state.get("shade_identity_by_slug", {}))
+                identities[variable_slug] = shade_identity
+                st.session_state["shade_identity_by_slug"] = identities
+                if shade_identity is None:
+                    st.error(
+                        f"{VARIABLES[variable_slug]['label']} is unavailable: the deployed data could not be "
+                        "verified as one recognised shade method (unknown, mixed or unrecorded files)."
+                    )
+                    render_perf_panel_safe()
+                    st.stop()
 
             df, schema_items, metrics, by_metric = load_master_and_schema_fn(master_csv_path, variable_slug)
 

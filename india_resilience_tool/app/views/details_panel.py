@@ -24,6 +24,7 @@ import pandas as pd
 from india_resilience_tool.app._ui_text import rank_phrasing
 from india_resilience_tool.app.state import VIEW_RANKINGS
 from india_resilience_tool.data.crosswalks import CrosswalkContext, CrosswalkOverlap
+from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS
 from india_resilience_tool.viz.formatting import (
     format_delta,
     format_metric_value,
@@ -1642,8 +1643,13 @@ def render_details_panel(
             make_scenario_figure_fn=make_scenario_figure_fn,
         )
 
-    # 4. Case study export (district/block only in v1, pipeline-backed metrics only)
-    if level_norm in {"district", "block"} and str(varcfg.get("source_type") or "").strip().lower() != "external":
+    # 4. Case study export (district/block only in v1). External metrics are excluded,
+    # except shade WBGT, which kept its export when it moved to an external build (CHG-0701).
+    export_supported = (
+        str(varcfg.get("source_type") or "").strip().lower() != "external"
+        or variable_slug in SHADE_SLUGS
+    )
+    if level_norm in {"district", "block"} and export_supported:
         render_case_study_export(
             variables=variables,
             variable_slug=variable_slug,
@@ -1658,7 +1664,7 @@ def render_details_panel(
             make_case_study_zip_fn=make_case_study_zip_fn,
             slugify_fs_fn=slugify_fs_fn,
         )
-    elif level_norm in {"district", "block"} and str(varcfg.get("source_type") or "").strip().lower() == "external":
+    elif level_norm in {"district", "block"}:
         try:
             import streamlit as st
 

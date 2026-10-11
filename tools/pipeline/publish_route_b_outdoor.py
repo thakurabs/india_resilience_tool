@@ -243,7 +243,9 @@ def _csv_value(value: float) -> str:
 
 
 def _write_unit_files(root: Path, unit: pd.Series, frame: pd.DataFrame, column: str,
-                      value_col: str) -> int:
+                      value_col: str, *, method_version: str = METHOD_VERSION,
+                      source_label: str = SOURCE_LABEL,
+                      extra_columns: dict[str, str] | None = None) -> int:
     """Write the per-unit, per-model, per-scenario yearly and period CSVs.
 
     Excluded units reach here with an all-missing series. Their files are still
@@ -253,7 +255,13 @@ def _write_unit_files(root: Path, unit: pd.Series, frame: pd.DataFrame, column: 
     The rows are assembled as text rather than through ``DataFrame.to_csv``. A full
     18-model roster writes roughly 4.3 million of these files, and per-call pandas
     overhead on a handful of rows dominates everything else at that count.
+
+    ``extra_columns`` appends constant provenance columns (name -> value) to every
+    yearly and period row; the defaults reproduce Route B's files byte for byte.
     """
+    extra = dict(extra_columns or {})
+    extra_header = "".join(f",{name}" for name in extra)
+    extra_values = "".join(f",{_quote(value)}" for value in extra.values())
     level, district, block = unit.level, unit.district_name, unit.block_name
     name = path_safe(block if level == "block" else district)
     if level == "block":
@@ -263,10 +271,10 @@ def _write_unit_files(root: Path, unit: pd.Series, frame: pd.DataFrame, column: 
     identity_csv = ",".join(_quote(v) for v in identity_values)
 
     yearly_header = ",".join(("year", "value", value_col, "source_file", "method_version",
-                              "aggregation_method", *identity_names, "scenario", "model"))
+                              "aggregation_method", *identity_names, "scenario", "model")) + extra_header
     period_header = ",".join((*identity_names, "value", "period", "years_used_count",
                               "years_requested", value_col, "method_version",
-                              "aggregation_method", "model", "scenario"))
+                              "aggregation_method", "model", "scenario")) + extra_header
     written = 0
     for (model, scenario), group in frame.groupby(["model", "scenario"], sort=True):
         folder = (root / "blocks" / path_safe(district) / path_safe(block)
@@ -276,8 +284,8 @@ def _write_unit_files(root: Path, unit: pd.Series, frame: pd.DataFrame, column: 
         group = group.sort_values("year")
         years = group.year.to_numpy()
         values = group[column].to_numpy(dtype=float)
-        tail = (f"{SOURCE_LABEL},{METHOD_VERSION},{AGGREGATION_METHOD},{identity_csv},"
-                f"{_quote(scenario)},{_quote(model)}")
+        tail = (f"{source_label},{method_version},{AGGREGATION_METHOD},{identity_csv},"
+                f"{_quote(scenario)},{_quote(model)}{extra_values}")
         lines = [yearly_header]
         lines.extend(f"{int(year)},{rendered},{rendered},{tail}"
                      for year, rendered in ((y, _csv_value(v)) for y, v in zip(years, values)))
@@ -288,15 +296,16 @@ def _write_unit_files(root: Path, unit: pd.Series, frame: pd.DataFrame, column: 
             rendered = _csv_value(entry["value"])
             rows.append(f"{identity_csv},{rendered},{entry['period']},"
                         f"{entry['years_used_count']},{entry['years_requested']},{rendered},"
-                        f"{METHOD_VERSION},{AGGREGATION_METHOD},"
-                        f"{_quote(model)},{_quote(scenario)}")
+                        f"{method_version},{AGGREGATION_METHOD},"
+                        f"{_quote(model)},{_quote(scenario)}{extra_values}")
         (folder / f"{name}_periods.csv").write_text("\n".join(rows) + "\n")
         written += 2
     return written
 
 
 def _write_unit_ensemble_files(root: Path, unit: pd.Series, frame: pd.DataFrame,
-                               column: str) -> int:
+                               column: str, *,
+                               extra_columns: dict[str, str] | None = None) -> int:
     """Write the per-unit, per-scenario yearly-ensemble CSVs.
 
     The optimised builder sources its ``yearly_ensemble`` tier from these files
@@ -310,10 +319,12 @@ def _write_unit_ensemble_files(root: Path, unit: pd.Series, frame: pd.DataFrame,
     ``ensemble_std`` uses the pandas default ``ddof=1``, so a single contributing
     model yields a blank spread rather than an apparent zero.
     """
+    extra = dict(extra_columns or {})
+    extra_values = "".join(f",{_quote(value)}" for value in extra.values())
     level, district, block = unit.level, unit.district_name, unit.block_name
     name = path_safe(block if level == "block" else district)
     header = ",".join(("year", "n_models", "ensemble_mean", "ensemble_std",
-                       "ensemble_median", "ensemble_p05", "ensemble_p95"))
+                       "ensemble_median", "ensemble_p05", "ensemble_p95", *extra))
     written = 0
     for scenario, group in frame.groupby("scenario", sort=True):
         folder = (root / "blocks" / "ensembles" / path_safe(district) / path_safe(block)
@@ -334,7 +345,7 @@ def _write_unit_ensemble_files(root: Path, unit: pd.Series, frame: pd.DataFrame,
             lines.append(f"{int(year)},{int(row.n_models)},"
                          + ",".join(_csv_value(row[c]) for c in
                                     ("ensemble_mean", "ensemble_std", "ensemble_median",
-                                     "ensemble_p05", "ensemble_p95")))
+                                     "ensemble_p05", "ensemble_p95")) + extra_values)
         (folder / f"{name}_yearly_ensemble.csv").write_text("\n".join(lines) + "\n")
         written += 1
     return written

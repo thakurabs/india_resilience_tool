@@ -952,18 +952,24 @@ MIT License — see [LICENSE](LICENSE) for details.
 **Author:** Abu Bakar Siddiqui Thakur  
 **Email:** absthakur@resilience.org.in
 
-### Shade WBGT correction
+### Shade WBGT: CarbonPlan-aligned replacement (in progress)
 
-The four shade WBGT metrics now require `tas`, `tasmax` and `hurs`, estimate daily maxima
-with reconstructed RH at `tasmax`, and require complete cell-years after February-29 exclusion.
-The empirical outdoor family retains its numerical method under the label **Empirical sWBGT**.
-Existing shade artifacts require rebuilding; the national replacement has not been published.
-`python -m tools.pipeline.build_shade_release --data-dir <data> --stage <scratch dir>` budgets that
-rebuild (add `--dry-run` to skip the multi-minute published-tree walk) and, with `--build`, stages it
-resumably without ever writing to the published tree. Each state is validated against its native
-per-unit yearly files before masters are built; validation failures are recorded in `status.json`.
-Promotion and rollback are not implemented.
-See [shade release status, evidence and staged operator commands](docs/wbgt_shade_release.md).
+The deployed shade WBGT data is the **original** method, `0.7 × Stull(tas, hurs) + 0.3 × tas`
+from daily-mean inputs, published unsigned. Its replacement reads CarbonPlan shade WBGT
+(`tas`, `tasmax`, `huss`, elevation pressure; per-cell QDM against UHE-Daily, 1985–2014)
+straight from the signed Route B QDM cache for the same 18 models, keeping the four slugs and
+value columns. Counts are area-weighted cell exceedance days, so values can be fractional.
+Units whose area coverage falls below the 0.95 gate show no value, with the reason given.
+The unpublished `shade-peak-v1` stage is superseded and kept as evidence.
+
+The dashboard shows shade data only with a verified identity: CarbonPlan-signed, or legacy files
+whose exact hashes are recorded in the bundle's identity sidecar. Unknown or mixed files are not
+shown. The metric description follows whichever method is actually deployed. Until the release's
+rollback window closes, routine optimised builds and routine `build_state_values` runs skip the
+four shade slugs. The holdout gate flagged worsened ≥32 °C counts in some states; the owner ruled
+to proceed, and the regressions are disclosed. Status, evidence and the ordered operator commands
+(staging, gates, cutover, rollback) are in
+[docs/diagnostics/wbgt_shade_carbonplan_release/RUNBOOK.md](docs/diagnostics/wbgt_shade_carbonplan_release/RUNBOOK.md).
 
 Outdoor WBGT Route B is an approved **diagnostic programme**, using CarbonPlan's
 shade/QDM/sun method. Grid-first ACCESS-CM2 results power the working pilot;
@@ -989,4 +995,4 @@ built from are **local-only** (git-ignored for size); a fresh clone carries the
 builder, the committed evidence JSONs and their hashes, but not the artifacts.
 Production outdoor methods and composite membership have not changed.
 
-CarbonPlan's shade-WBGT method has a held-out validation against UHE-Daily: train 1985–1999, test 2000–2014, in Kerala, Rajasthan and Himachal Pradesh. It reproduces CarbonPlan's published series. It improves the seasonal cycle and ≥28/30 °C counts, but worsens Rajasthan ≥32 °C; its verdict is *proceed conditionally* to a national SPEC. See [the validation report](docs/diagnostics/wbgt_shade_carbonplan_validation/README.md). `shade-peak-v1` remains the deployed shade method.
+CarbonPlan's shade-WBGT method has a held-out validation against UHE-Daily: train 1985–1999, test 2000–2014, in Kerala, Rajasthan and Himachal Pradesh. It reproduces CarbonPlan's published series. It improves the seasonal cycle and ≥28/30 °C counts, but worsens Rajasthan ≥32 °C; its verdict is *proceed conditionally* to a national SPEC. See [the validation report](docs/diagnostics/wbgt_shade_carbonplan_validation/README.md). The deployed shade method is still the original legacy formula until the CarbonPlan cutover above.

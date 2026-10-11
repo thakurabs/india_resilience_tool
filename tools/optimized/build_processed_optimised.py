@@ -8,9 +8,16 @@ This tool is intentionally non-destructive: it reads from the current
 
 from __future__ import annotations
 
-from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS, SHADE_METHOD_SIGNATURE, require_shade_signature, shade_artifact_current
+from india_resilience_tool.data.wbgt_contract import (
+    CARBONPLAN_SHADE_SIGNATURE,
+    SHADE_IDENTITY_SIDECAR,
+    SHADE_SLUGS,
+    require_shade_signature,
+    shade_artifact_identity,
+)
 
 import argparse
+import hashlib
 import math
 import os
 import json
@@ -1590,30 +1597,32 @@ def _frozen_ruler_manifest_payload(
 
 
 def _shade_release_signature(data_dir: Path) -> str | None:
-    """Reject a release inventory containing mixed shade methods or shard scopes."""
+    """Return the one verified shade identity in the bundle, rejecting mixed releases.
+
+    Signed masters report their own signature; unsigned legacy masters are
+    identified only through the hash-verified identity sidecar. A bundle with no
+    verifiable shade identity at all keeps the historical label for unsigned data.
+    """
     root = resolve_optimized_bundle_root(data_dir=data_dir) / "metrics"
     scopes: dict[str, set[str]] = {}
-    current: list[bool] = []
+    identities: list[str | None] = []
     for slug in sorted(SHADE_SLUGS):
         masters = root / slug / "masters"
         paths = sorted(masters.rglob("*.parquet"))
         scopes[slug] = {str(path.relative_to(masters)) for path in paths}
-        current.extend(shade_artifact_current(path) for path in paths)
-    if not current:
+        identities.extend(shade_artifact_identity(path) for path in paths)
+    if not identities:
         return None
-    if any(current):
-        if not all(current) or any(scope != next(iter(scopes.values())) for scope in scopes.values()):
-            raise ValueError("Mixed shade release: rebuild all four metrics with identical state/level coverage and signatures")
-        return SHADE_METHOD_SIGNATURE
-    return "legacy-daily-mean-inputs"
+    known = set(identities)
+    if known == {None}:
+        return "legacy-daily-mean-inputs"
+    if len(known) != 1 or any(scope != next(iter(scopes.values())) for scope in scopes.values()):
+        raise ValueError("Mixed shade release: rebuild all four metrics with identical state/level coverage and signatures")
+    return known.pop()
 
 
-def _write_manifest(
-    *,
-    data_dir: Path,
-    progress: BuildProgress,
-    task: BuildTask,
-) -> None:
+def _manifest_payload(data_dir: Path) -> dict:
+    """Build the bundle manifest from a rescan of the bundle root alone."""
     manifest = {
         "bundle_dirname": OPTIMIZED_DIRNAME,
         "artifact_version": MANIFEST_ARTIFACT_VERSION,
@@ -1646,6 +1655,16 @@ def _write_manifest(
     shade_signature = _shade_release_signature(data_dir)
     if shade_signature is not None:
         manifest["shade_method_signature"] = shade_signature
+    return manifest
+
+
+def _write_manifest(
+    *,
+    data_dir: Path,
+    progress: BuildProgress,
+    task: BuildTask,
+) -> None:
+    manifest = _manifest_payload(data_dir)
     path = bundle_manifest_path(data_dir=data_dir)
 
     def _write_one() -> None:
@@ -1653,6 +1672,23 @@ def _write_manifest(
         path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
 
     _run_task(task, progress, _write_one)
+
+
+def write_manifest_only(data_dir: Path) -> dict[str, str]:
+    """Regenerate ``bundle_manifest.json`` atomically from the bundle on disk.
+
+    Nothing else is built or read from the processed tree, so a promoted metric
+    directory can be inventoried with production paths (CHG-0702). The previous
+    and new SHA-256 are returned so a caller can journal the swap.
+    """
+    path = bundle_manifest_path(data_dir=data_dir)
+    previous = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
+    payload = json.dumps(_manifest_payload(data_dir), indent=2, sort_keys=True).encode("utf-8")
+    temporary = path.with_name(path.name + ".part")
+    temporary.write_bytes(payload)
+    os.replace(temporary, path)
+    return {"path": str(path), "previous_sha256": previous,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
 def _selected_slugs(metrics: Optional[list[str]]) -> list[str]:
@@ -2552,6 +2588,25 @@ def audit_processed_optimised_parity(
     return report
 
 
+def _validate_shade_release_target(
+    bundle_root: Path, *, metrics: Optional[list[str]], full_rebuild: bool,
+) -> None:
+    """Refuse a shade release build that could touch legacy or production shade."""
+    if set(metrics or ()) != SHADE_SLUGS:
+        raise ValueError("A shade release build must select exactly the four shade metrics")
+    if full_rebuild:
+        raise ValueError("A shade release build never uses --full-rebuild")
+    if (bundle_root / SHADE_IDENTITY_SIDECAR).exists():
+        raise ValueError(
+            f"{bundle_root} holds the legacy shade identity sidecar; shade release builds "
+            "write only to a staging root and are promoted by the cutover tool"
+        )
+    for slug in sorted(SHADE_SLUGS):
+        for path in sorted((bundle_root / "metrics" / slug / "masters").rglob("*.parquet")):
+            if shade_artifact_identity(path) != CARBONPLAN_SHADE_SIGNATURE:
+                raise ValueError(f"{path}: existing shade tree is not CarbonPlan-signed; refusing to overwrite it")
+
+
 def build_processed_optimised_bundle(
     *,
     data_dir: Path,
@@ -2569,15 +2624,38 @@ def build_processed_optimised_bundle(
     show_progress: Optional[bool] = None,
     run_audit: bool = True,
     report_path: Optional[Path] = None,
+    shade_release: bool = False,
 ) -> list[MetricBundleSummary]:
     """
     Build the optimized runtime bundle from the current legacy processed tree.
+
+    The four shade slugs are excluded from routine builds until the CarbonPlan
+    release's rollback window closes: rewriting them would invalidate the hashes
+    that identify the unsigned legacy files. ``shade_release=True`` builds exactly
+    those four, only from CarbonPlan-signed sources, and only into a bundle root
+    that holds no legacy identity sidecar or non-CarbonPlan shade tree -- that is,
+    a staging root, never production (CHG-0702).
     """
+    requested_shade = sorted(set(metrics or ()) & SHADE_SLUGS)
+    bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
+    if shade_release:
+        _validate_shade_release_target(bundle_root, metrics=metrics, full_rebuild=full_rebuild)
+    elif requested_shade:
+        raise ValueError(
+            "Routine optimized builds cannot rebuild shade metrics; use the staged "
+            "CarbonPlan shade release runner for all four shade slugs"
+        )
+    if full_rebuild and any((bundle_root / "metrics" / slug).exists() for slug in SHADE_SLUGS):
+        raise ValueError(
+            "Routine full rebuild would remove published shade trees; use the staged "
+            "CarbonPlan shade release runner"
+        )
+    routine_metrics = metrics if metrics else sorted(set(VARIABLES) - SHADE_SLUGS)
     effective_levels = _effective_levels(levels, states=states)
     scoped_admin_run = _state_scoped_admin_run(states=states, levels=effective_levels)
     plan = _build_execution_plan(
         data_dir=data_dir,
-        metrics=metrics,
+        metrics=routine_metrics,
         levels=effective_levels,
         states=states,
         include_geometry=include_geometry,
@@ -2604,7 +2682,10 @@ def build_processed_optimised_bundle(
         # Validate every source before the first output write, so old/new versions
         # cannot be combined by a scoped optimized build.
         for task in shade_tasks:
-            require_shade_signature(_read_legacy_master(task.source_path), context=str(task.source_path))
+            source = _read_legacy_master(task.source_path)
+            require_shade_signature(source, context=str(task.source_path))
+            if shade_release and not source["shade_method_signature"].eq(CARBONPLAN_SHADE_SIGNATURE).all():
+                raise ValueError(f"{task.source_path}: shade release sources must be CarbonPlan-signed")
 
     bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
     summaries_map = {
@@ -2870,6 +2951,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Worker count for parallel yearly processing. Defaults to 80%% of logical CPUs; use 1 for serial execution.",
     )
     parser.add_argument("--no-progress", action="store_true", help="Disable tqdm progress bars.")
+    parser.add_argument(
+        "--shade-release",
+        action="store_true",
+        help="Build exactly the four CarbonPlan-signed shade metrics into a staging root (CHG-0702).",
+    )
+    parser.add_argument(
+        "--manifest-only",
+        action="store_true",
+        help="Only regenerate bundle_manifest.json atomically from the bundle on disk.",
+    )
     return parser
 
 
@@ -2877,6 +2968,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     data_dir = get_paths_config().data_dir
+    if args.manifest_only:
+        if args.dry_run:
+            print(json.dumps({"manifest": str(bundle_manifest_path(data_dir=data_dir)),
+                              "writes": False}, indent=2))
+            return 0
+        print(json.dumps(write_manifest_only(data_dir), indent=2))
+        return 0
     summaries = build_processed_optimised_bundle(
         data_dir=data_dir,
         metrics=args.metrics,
@@ -2893,6 +2991,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         show_progress=False if bool(args.no_progress) else None,
         run_audit=not bool(args.skip_audit),
         report_path=args.report_path.expanduser().resolve() if args.report_path else None,
+        shade_release=bool(args.shade_release),
     )
 
     print("PROCESSED OPTIMISED BUNDLE")

@@ -8,6 +8,7 @@ from typing import Any, Mapping, Optional
 import pandas as pd
 
 from india_resilience_tool.analysis.area_weighting import (
+    AREA_WEIGHT_COL as _AREA_WEIGHT_COL,
     weighted_state_mean as _weighted_state_mean,
     with_area_weights as _with_area_weights,
 )
@@ -55,6 +56,36 @@ def _weighted_mean(df: pd.DataFrame, value_col: Optional[str]) -> Optional[float
     """
     value, _n_units = _weighted_state_mean(df, value_col)
     return value
+
+
+def state_coverage_note(df_state: pd.DataFrame, value_col: Optional[str]) -> str:
+    """Describe which units and how much area stand behind a state headline.
+
+    Only for metrics that publish per-unit coverage provenance (``exclusion_reason``):
+    their headline is an area-weighted mean over contributing units, renormalised
+    over the covered area, so a reader needs the covered share and unit count
+    beside it. Returns "" for every other metric or when nothing is known.
+    """
+    if (
+        df_state is None
+        or df_state.empty
+        or not value_col
+        or value_col not in df_state.columns
+        or "exclusion_reason" not in df_state.columns
+        or _AREA_WEIGHT_COL not in df_state.columns
+    ):
+        return ""
+    area = pd.to_numeric(df_state[_AREA_WEIGHT_COL], errors="coerce").fillna(0.0).clip(lower=0.0)
+    values = pd.to_numeric(df_state[value_col], errors="coerce")
+    contributing = values.notna() & (area > 0)
+    total_area = float(area.sum())
+    if total_area <= 0:
+        return ""
+    share = float(area[contributing].sum()) / total_area
+    return (
+        f"Area-weighted over {int(contributing.sum())} of {len(df_state)} units, "
+        f"covering {share:.0%} of the state's area; units below the coverage gate are excluded."
+    )
 
 
 def _norm_period_token(value: str) -> str:
@@ -440,7 +471,11 @@ def render_state_summary_view(
             if sel_key in base_states:
                 baseline_val = base_map.get(sel_key)
 
+    coverage_note = state_coverage_note(df_state, metric_col)
+
     with st.expander(summary_title, expanded=True):
+        if coverage_note:
+            st.caption(coverage_note)
         if supports_baseline_comparison:
             c1, c2, c3 = st.columns(3)
             with c1:

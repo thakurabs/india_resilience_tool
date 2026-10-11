@@ -1240,6 +1240,38 @@ def test_build_processed_optimised_full_rebuild_dry_run_preserves_existing_bundl
     assert marker.exists()
 
 
+def test_routine_optimized_build_cannot_rewrite_any_shade_tree(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path, slug="txx_annual_max")
+    shade = "wbgt_shade_stull_annual_mean"
+    _write_admin_legacy_metric_fixture(tmp_path, slug=shade)
+    _write_geometry_fixture(tmp_path)
+    marker = tmp_path / "processed_optimised" / "metrics" / shade / "yearly_models" / "marker.txt"
+    marker.parent.mkdir(parents=True)
+    marker.write_text("published-unsigned", encoding="utf-8")
+
+    summaries = build_processed_optimised_bundle(
+        data_dir=tmp_path, overwrite=True, include_geometry=False,
+        include_context=False, show_progress=False, run_audit=False,
+    )
+    assert shade not in {summary.slug for summary in summaries}
+    assert marker.read_text(encoding="utf-8") == "published-unsigned"
+
+    with pytest.raises(ValueError, match="Routine optimized builds cannot rebuild shade"):
+        build_processed_optimised_bundle(
+            data_dir=tmp_path, metrics=[shade], overwrite=True,
+            include_geometry=False, include_context=False, run_audit=False,
+        )
+    with pytest.raises(ValueError, match="would remove published shade trees"):
+        build_processed_optimised_bundle(
+            data_dir=tmp_path, full_rebuild=True, dry_run=True,
+            include_geometry=False, include_context=False, run_audit=False,
+        )
+    assert marker.read_text(encoding="utf-8") == "published-unsigned"
+
+
 def test_build_processed_optimised_full_rebuild_rejects_suspicious_root(
     tmp_path: Path,
     monkeypatch,

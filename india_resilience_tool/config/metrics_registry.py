@@ -627,71 +627,138 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
-        "name": "Shaded WBGT — Annual Mean of Estimated Daily Maxima",
+        "name": "Shaded WBGT (Annual Mean)",
         "slug": "wbgt_shade_stull_annual_mean",
         "var": "tas",
-        "vars": ["tas", "tasmax", "hurs"],
+        "vars": ["tas", "tasmax", "huss"],
         "value_col": "wbgt_shade_stull_annual_mean_C",
         "units": "°C",
-        "compute": "wbgt_shade_stull_annual_mean",
-        "params": {},
         "group": "temperature",
+        # CarbonPlan-aligned shade WBGT (CHG-0700/0701). Built offline from the
+        # Route B QDM cache by tools.pipeline.publish_carbonplan_shade, so it is
+        # external like Route B and never recomputed by the climate pipeline. The
+        # dashboard verifies each artifact's identity and describes the deployed
+        # legacy data with its own text until cutover (wbgt_contract).
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        "retained_master_statistics": ("n_models",),
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_carbonplan_shade --run "
+            "--stage scratch/wbgt_shade_carbonplan_release"
+        ),
         "description": (
-            "Annual mean Shaded WBGT (°C), estimated from tas, tasmax and hurs as "
-            "0.7 × Stull(tasmax, reconstructed RH) + 0.3 × tasmax. Complete years only. "
-            "It estimates humid heat stress in shaded or no-direct-sun conditions, "
-            "but does not include direct solar radiation or radiant heat load."
+            "Annual mean of daily peak (maximum) shaded WBGT (°C). "
+            "Shaded WBGT reproducing CarbonPlan's shade formula from tas, tasmax and huss, with surface pressure derived from cell elevation, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014. It describes heat stress in shade: it does not include direct solar radiation (see the Route B outdoor WBGT metrics for that). "
+            "Complete cell-years only; an incomplete year is missing, not a low count. Produced offline from the Route B QDM cache, so it carries 18 complete-input models with yearly values over historical 1985-2014 (baseline period 1990-2010) and SSP245/SSP585 2020-2080. Units whose UHE reference support falls below the 0.95 area gate are missing, never zero. In the 2000-2010 out-of-sample holdout it reduced error against UHE-Daily nationally, but days >= 32°C worsened in some states (see the release notes)."
         ),
     },
     {
         "name": "Shaded WBGT Days (≥ 28°C)",
         "slug": "wbgt_shade_stull_days_ge_28",
         "var": "tas",
-        "vars": ["tas", "tasmax", "hurs"],
+        "vars": ["tas", "tasmax", "huss"],
         "value_col": "wbgt_shade_stull_days_ge_28_days",
         "units": "days",
-        "compute": "wbgt_shade_stull_days_ge_threshold",
-        "params": {"thresh_c": 28.0},
         "group": "temperature",
+        # CarbonPlan-aligned shade WBGT (CHG-0700/0701). Built offline from the
+        # Route B QDM cache by tools.pipeline.publish_carbonplan_shade, so it is
+        # external like Route B and never recomputed by the climate pipeline. The
+        # dashboard verifies each artifact's identity and describes the deployed
+        # legacy data with its own text until cutover (wbgt_contract).
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        "retained_master_statistics": ("n_models",),
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_carbonplan_shade --run "
+            "--stage scratch/wbgt_shade_carbonplan_release"
+        ),
         "description": (
-            "Number of days per year with Shaded WBGT ≥ 28°C, estimated from tas, tasmax and "
-            "hurs-derived RH at tasmax using Stull wet-bulb temperature and tasmax. Complete years only. "
-            "It captures humid heat stress in shaded or no-direct-sun conditions, but "
-            "does not include direct solar radiation or radiant heat load."
+            "Number of days per year with daily peak shaded WBGT ≥ 28°C. "
+            "Shaded WBGT reproducing CarbonPlan's shade formula from tas, tasmax and huss, with surface pressure derived from cell elevation, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014. It describes heat stress in shade: it does not include direct solar radiation (see the Route B outdoor WBGT metrics for that). "
+            "Counts are area-weighted cell exceedance days: each cell-day is thresholded, reduced annually per cell, then area-weighted, so a value may be fractional. "
+            "Complete cell-years only; an incomplete year is missing, not a low count. Produced offline from the Route B QDM cache, so it carries 18 complete-input models with yearly values over historical 1985-2014 (baseline period 1990-2010) and SSP245/SSP585 2020-2080. Units whose UHE reference support falls below the 0.95 area gate are missing, never zero. In the 2000-2010 out-of-sample holdout it reduced error against UHE-Daily nationally, but days >= 32°C worsened in some states (see the release notes)."
         ),
     },
     {
         "name": "Shaded WBGT Days (≥ 30°C)",
         "slug": "wbgt_shade_stull_days_ge_30",
         "var": "tas",
-        "vars": ["tas", "tasmax", "hurs"],
+        "vars": ["tas", "tasmax", "huss"],
         "value_col": "wbgt_shade_stull_days_ge_30_days",
         "units": "days",
-        "compute": "wbgt_shade_stull_days_ge_threshold",
-        "params": {"thresh_c": 30.0},
         "group": "temperature",
+        # CarbonPlan-aligned shade WBGT (CHG-0700/0701). Built offline from the
+        # Route B QDM cache by tools.pipeline.publish_carbonplan_shade, so it is
+        # external like Route B and never recomputed by the climate pipeline. The
+        # dashboard verifies each artifact's identity and describes the deployed
+        # legacy data with its own text until cutover (wbgt_contract).
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        "retained_master_statistics": ("n_models",),
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_carbonplan_shade --run "
+            "--stage scratch/wbgt_shade_carbonplan_release"
+        ),
         "description": (
-            "Number of days per year with Shaded WBGT ≥ 30°C, estimated from tas, tasmax and "
-            "hurs-derived RH at tasmax using Stull wet-bulb temperature and tasmax. Complete years only. "
-            "It captures humid heat stress in shaded or no-direct-sun conditions, but "
-            "does not include direct solar radiation or radiant heat load."
+            "Number of days per year with daily peak shaded WBGT ≥ 30°C. "
+            "Shaded WBGT reproducing CarbonPlan's shade formula from tas, tasmax and huss, with surface pressure derived from cell elevation, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014. It describes heat stress in shade: it does not include direct solar radiation (see the Route B outdoor WBGT metrics for that). "
+            "Counts are area-weighted cell exceedance days: each cell-day is thresholded, reduced annually per cell, then area-weighted, so a value may be fractional. "
+            "Complete cell-years only; an incomplete year is missing, not a low count. Produced offline from the Route B QDM cache, so it carries 18 complete-input models with yearly values over historical 1985-2014 (baseline period 1990-2010) and SSP245/SSP585 2020-2080. Units whose UHE reference support falls below the 0.95 area gate are missing, never zero. In the 2000-2010 out-of-sample holdout it reduced error against UHE-Daily nationally, but days >= 32°C worsened in some states (see the release notes)."
         ),
     },
     {
         "name": "Shaded WBGT Days (≥ 32°C)",
         "slug": "wbgt_shade_stull_days_ge_32",
         "var": "tas",
-        "vars": ["tas", "tasmax", "hurs"],
+        "vars": ["tas", "tasmax", "huss"],
         "value_col": "wbgt_shade_stull_days_ge_32_days",
         "units": "days",
-        "compute": "wbgt_shade_stull_days_ge_threshold",
-        "params": {"thresh_c": 32.0},
         "group": "temperature",
+        # CarbonPlan-aligned shade WBGT (CHG-0700/0701). Built offline from the
+        # Route B QDM cache by tools.pipeline.publish_carbonplan_shade, so it is
+        # external like Route B and never recomputed by the climate pipeline. The
+        # dashboard verifies each artifact's identity and describes the deployed
+        # legacy data with its own text until cutover (wbgt_contract).
+        "source_type": "external",
+        "selection_mode": "scenario_period",
+        "supports_yearly_trend": True,
+        "supported_scenarios": ("historical", "ssp245", "ssp585"),
+        "preferred_period_order": ("1990-2010", "2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+        "retained_master_statistics": ("n_models",),
+        "retained_master_columns": ("support_coverage", "support_gap_kind", "exclusion_reason"),
+        "admin_rebuild_command": (
+            "python -m tools.pipeline.publish_carbonplan_shade --run "
+            "--stage scratch/wbgt_shade_carbonplan_release"
+        ),
         "description": (
-            "Number of days per year with Shaded WBGT ≥ 32°C, estimated from tas, tasmax and "
-            "hurs-derived RH at tasmax using Stull wet-bulb temperature and tasmax. Complete years only. "
-            "It captures humid heat stress in shaded or no-direct-sun conditions, but "
-            "does not include direct solar radiation or radiant heat load."
+            "Number of days per year with daily peak shaded WBGT ≥ 32°C. "
+            "Shaded WBGT reproducing CarbonPlan's shade formula from tas, tasmax and huss, with surface pressure derived from cell elevation, bias-corrected per grid cell by additive quantile delta mapping against the UHE-Daily reference over 1985-2014. It describes heat stress in shade: it does not include direct solar radiation (see the Route B outdoor WBGT metrics for that). "
+            "Counts are area-weighted cell exceedance days: each cell-day is thresholded, reduced annually per cell, then area-weighted, so a value may be fractional. "
+            "Complete cell-years only; an incomplete year is missing, not a low count. Produced offline from the Route B QDM cache, so it carries 18 complete-input models with yearly values over historical 1985-2014 (baseline period 1990-2010) and SSP245/SSP585 2020-2080. Units whose UHE reference support falls below the 0.95 area gate are missing, never zero. In the 2000-2010 out-of-sample holdout it reduced error against UHE-Daily nationally, but days >= 32°C worsened in some states (see the release notes)."
         ),
     },
     {
@@ -2980,8 +3047,8 @@ DOMAINS: dict[str, list[str]] = {
         "wsdi_warm_spell_days",
         # WBGT/SWBGT diagnostics: visible under Heat Stress for inspection,
         # NOT scored in composite_heat_stress (bundle_weights.py unchanged).
-        # Shaded WBGT = 0.7*Twb_stull + 0.3*tas; Outdoor sWBGT uses tas +
-        # vapour pressure. Both are derivatives of inputs already in the
+        # Shaded WBGT = CarbonPlan shade formula with per-cell QDM (CHG-0701);
+        # Outdoor sWBGT uses tas + vapour pressure. Both derive from inputs already in the
         # composite, so scoring them would double-count humid-heat signal.
         "wbgt_shade_stull_annual_mean",
         "wbgt_shade_stull_days_ge_28",

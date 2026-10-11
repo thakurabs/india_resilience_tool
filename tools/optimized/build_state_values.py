@@ -30,7 +30,7 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
-from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS, SHADE_METHOD_SIGNATURE, require_shade_signature
+from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS, require_shade_signature
 
 import argparse
 import logging
@@ -243,6 +243,8 @@ def _build_state_rows(
 
     master_df = load_master_csvs(master_path)
     if slug in SHADE_SLUGS:
+        # Signed shade only: unsigned legacy state values are never rewritten, because
+        # the legacy identity sidecar pins their exact bytes (CHG-0701).
         require_shade_signature(master_df, context=str(master_path))
     if master_df.empty:
         LOGGER.warning("[%s/%s] empty master for state=%r — skipping", slug, level, state)
@@ -285,6 +287,9 @@ def _build_state_rows(
         keep = weighted["state_name"].astype(str).map(alias) == state_key
         weighted = weighted[keep].copy()
 
+    shade_signature = (
+        str(master_df["shade_method_signature"].iloc[0]) if slug in SHADE_SLUGS else None
+    )
     rows: list[dict[str, object]] = []
     for col, (metric, scenario, period, stat) in _parse_value_columns(merged.columns):
         if str(stat).strip().lower() in _MIN_AGGREGATED_STATS:
@@ -301,6 +306,7 @@ def _build_state_rows(
                 "stat": stat,
                 "value": value,
                 "n_units": int(n_units),
+                **({"shade_method_signature": shade_signature} if shade_signature else {}),
             }
         )
     return rows
@@ -347,7 +353,10 @@ def build_state_values_for_metric(
         LOGGER.warning("[%s/%s] produced no value rows", slug, level)
         return None
 
-    out_df = pd.DataFrame(all_rows, columns=_OUTPUT_COLUMNS)
+    columns = _OUTPUT_COLUMNS + (["shade_method_signature"] if slug in SHADE_SLUGS else [])
+    out_df = pd.DataFrame(all_rows, columns=columns)
+    if slug in SHADE_SLUGS:
+        require_shade_signature(out_df, context=f"{slug}/{level} state values")
     out_path = optimized_state_values_path_from_metric_root(metric_root, level=level)
 
     if dry_run:
@@ -362,8 +371,6 @@ def build_state_values_for_metric(
         return None
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    if slug in SHADE_SLUGS:
-        out_df["shade_method_signature"] = SHADE_METHOD_SIGNATURE
     out_df.to_parquet(out_path, index=False)
     LOGGER.info(
         "[%s/%s] wrote %d rows across %d states -> %s",
@@ -441,6 +448,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     data_dir = Path(args.data_dir).expanduser().resolve() if args.data_dir else None
     levels = _resolve_levels(args.level)
     slugs = _discover_slugs(data_dir, args.metric)
+    if not args.metric:
+        # Routine runs leave shade alone until the CarbonPlan rollback window closes;
+        # the staged shade release names the four slugs explicitly (CHG-0702).
+        skipped = sorted(set(slugs) & SHADE_SLUGS)
+        if skipped:
+            LOGGER.info("Skipping shade metrics in a routine run: %s", ", ".join(skipped))
+        slugs = [slug for slug in slugs if slug not in SHADE_SLUGS]
     if not slugs:
         LOGGER.error("No metric slugs found in the optimized bundle.")
         return 1
