@@ -1,0 +1,24 @@
+metric,family,floor,ref,err_raw,err_qdm,raw_2050,qdm_2050,shift_2050,chg_raw,chg_qdm,n_units,verdict
+aridity_index_p_over_pet,ratio,0.05,0.578,0.112,0.112,0.637,0.655,0.092,0.056,0.085,54,NO EFFECT
+csdi_cold_spell_days,count,5.0,6.31,3.119,3.129,2.863,2.198,0.751,-4.581,-5.241,54,NO EFFECT
+hwa_heatwave_amplitude,degC,0.5,38.752,1.89,1.563,42.656,42.261,0.981,3.45,3.452,54,MARGINAL
+hwfi_events_tmean_90p,events,0.5,2.519,0.712,0.718,6.491,6.796,0.462,4.553,4.861,54,NO EFFECT
+tasmax_summer_mean,degC,0.5,37.095,1.002,0.574,37.686,37.93,0.788,1.176,1.178,54,MARGINAL
+tasmin_tropical_nights_gt25,count,5.0,69.708,17.594,6.863,110.152,107.397,18.493,39.246,41.642,54,MATERIAL
+tasmin_tropical_nights_gt28,count,5.0,7.822,8.738,3.179,32.92,26.222,9.778,18.318,18.495,54,MATERIAL
+tasmin_winter_mean,degC,0.5,12.899,0.813,0.368,14.297,14.201,0.753,1.539,1.54,54,MARGINAL
+tasmin_winter_min,degC,0.5,8.185,1.474,0.803,8.795,9.36,0.999,1.697,1.614,54,MARGINAL
+tn10p_cool_nights_pct,pct,1.0,8.711,1.542,1.551,3.417,2.713,0.737,-6.889,-7.577,54,NO EFFECT
+tn90p_warm_nights_pct,pct,1.0,12.457,1.718,1.728,39.965,42.641,5.394,29.67,32.359,54,NO EFFECT
+tnle10_cold_nights,count,5.0,24.646,6.584,4.6,16.416,15.605,4.175,-12.468,-11.674,54,NO EFFECT
+tnle10_consecutive_cold_nights,spell,1.0,9.801,2.669,2.045,6.531,6.329,1.655,-4.089,-3.742,54,MARGINAL
+tnle5_severe_cold_nights,count,5.0,1.757,1.384,0.746,0.828,0.549,0.451,-1.475,-1.112,54,NO EFFECT
+tnn_annual_min,degC,0.5,8.139,1.451,0.795,8.754,9.335,1.001,1.697,1.608,54,MARGINAL
+tnx_annual_max,degC,0.5,28.288,1.731,0.538,31.152,30.02,1.429,1.604,1.618,54,MATERIAL
+tx10p_cool_days_pct,pct,1.0,9.348,1.615,1.616,6.086,6.289,0.473,-4.253,-4.037,54,NO EFFECT
+tx90p_hot_days_pct,pct,1.0,12.371,2.279,2.281,26.322,27.753,1.911,16.02,17.465,54,NO EFFECT
+txge30_hot_days,count,5.0,254.243,30.269,12.737,264.281,270.514,23.144,25.445,22.546,54,MATERIAL
+txge35_extreme_heat_days,count,5.0,103.593,15.818,9.051,113.828,118.834,14.445,18.49,20.238,54,MARGINAL
+txle15_cold_days,count,5.0,0.354,0.373,0.26,0.032,0.085,0.063,-0.027,-0.151,54,NO EFFECT
+txx_annual_max,degC,0.5,42.304,1.203,0.53,44.168,43.633,1.131,1.23,1.244,54,MATERIAL
+wsdi_warm_spell_days,count,5.0,16.454,5.714,5.731,58.577,63.283,6.673,46.9,51.611,54,NO EFFECT

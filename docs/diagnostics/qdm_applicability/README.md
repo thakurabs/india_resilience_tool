@@ -1,7 +1,7 @@
 # Does QDM bias correction measurably improve IRT's deployed metrics?
 
 **Status:** diagnostic only — nothing in the pipeline, the processed outputs or the dashboard was changed.
-**Date:** 2026-10-11 · **Snapshot:** `add_flood_depth@a87b239`. Precipitation section added at `b18a751` after the IMD 1990–2010 download.
+**Date:** 2026-10-11 · **Snapshot:** `add_flood_depth@a87b239`. Precipitation section (§5) added at `b18a751` after the IMD 1990–2010 rain download. Tmax/Tmin and aridity section (§6) added 2026-10-12 at `1131afe` after the IMD temperature download.
 **Trigger:** the user observed that on the Heat Stress map, `twb_days_ge_28` paints central India almost white.
 
 ## 0. Answer in one screen
@@ -14,9 +14,9 @@
 2. **QDM against ERA5 fixes the baseline out of sample and roughly halves the mapped mid-century value.**
    - Kolkata, ssp245 2040–60: 132 → 60 days.
    - The mean warming signal is preserved exactly.
-3. **Across all deployed metrics, QDM gives a material, verifiable improvement for 13 metrics.** They form one coherent class: **absolute-threshold counts and levels built on humidity or night-time temperature.** A 14th, `twb_days_ge_30`, follows the same mechanism, but its baseline is too rare to verify.
+3. **Across all deployed metrics, QDM gives a material, verifiable improvement for 13 metrics.** They form one coherent class: **absolute-threshold counts and levels built on humidity or night-time temperature.** A 14th, `twb_days_ge_30`, follows the same mechanism, but its baseline is too rare to verify. **The IMD tests in §6 revise this list:** `txx_annual_max` and `txge30_hot_days` join it. `tnle10_cold_nights` and `tnle10_consecutive_cold_nights` hold only at two sites and in the Himalaya, so they are doubtful nationally.
 4. **QDM does nothing measurable for any metric defined against its own baseline.** That covers tx90p/tn90p/tx10p/tn10p, WSDI/CSDI, HWFI and SPI; those definitions already cancel bias.
-5. **For two tasmax metrics QDM makes things worse** (`txge35_extreme_heat_days`, `hwa_heatwave_amplitude`). ERA5 is a doubtful reference for afternoon maxima.
+5. **Against ERA5, QDM made two tasmax metrics worse** (`txge35_extreme_heat_days`, `hwa_heatwave_amplitude`). **IMD shows this was ERA5's fault (§6):** against IMD gridded Tmax, QDM improves every tasmax metric. `txx_annual_max` and `txge30_hot_days` are MATERIAL; `txge35` and `hwa` are MARGINAL.
 6. **Precipitation, scored nationally against IMD 0.25° gridded rainfall (74 cells, §5).** NEX underestimates heavy-rain extremes by about 40 %: Rx1day −31 mm, R99p −45 mm, R95p −110 mm. It overestimates the longest dry spell by 22 days.
    - **The QDM configuration decides the outcome.** With the 31-day window used for temperature, multiplicative QDM overshoots the rain tail (Rx1day bias −31 → +17.5 mm), and its verdict is WORSE for Rx5day, R99p and R95p variability.
    - With a **91-day window** it removes the systematic bias almost exactly (Rx1day +0.1, R99p +2.4, R95pTOT 0.0, CDD −1.4).
@@ -25,13 +25,20 @@
    - **No effect:** SPI (all 7), CWD and `r95p_interannual_variability`. These are sequence or self-normalised properties that marginal QDM cannot change.
    - **Correction to the first version of this report:** "ERA5 has a drizzle bias that makes CDD wrong" was half wrong. IMD gives a Telangana CDD of 68 days, close to ERA5's 64; NEX (102) is the outlier. ERA5's drizzle bias shows in wet spells instead (CWD 23.5 vs IMD 12.0).
 
+7. **Daily max/min temperature and aridity, scored nationally against IMD 1° gridded Tmax/Tmin (59 boxes, §6).**
+   - **Confirmed independently of ERA5:** tropical nights > 25 and > 28 °C, and `tnx_annual_max`, are MATERIAL on both references.
+   - **Newly MATERIAL:** `txx_annual_max` and `txge30_hot_days`.
+   - **Weakened:** `tnle10_cold_nights` and `tnle10_consecutive_cold_nights` were MATERIAL against ERA5, but nearly all of their IMD improvement comes from 5 Himalayan boxes. Outside the Himalaya they are NO EFFECT and MARGINAL. `tasmin_winter_mean` drops to MARGINAL outside the Himalaya.
+   - **Aridity index: NO EFFECT.** Raw NEX already matches IMD annual rainfall within 1.4 %. Multiplicative QDM *adds* 8 % to annual rainfall, an artefact of the correction that IMD itself does not explain, and raises the projected aridity change from +0.05 to +0.09.
+   - Independent tasmax/tasmin correction does not create inverted days (0.003 %, same as raw).
+
 ## 1. Inventory of deployed metrics (105 in `processed_optimised/metrics`)
 
 | Group | Count | QDM relevance |
 |---|---|---|
 | NEX-derived temperature / humidity metrics, measured here | 35 | §4 verdicts |
 | NEX-derived precipitation metrics, measured against IMD (incl. `r95p_interannual_variability`) | 16 | §5 |
-| NEX-derived, not measured: `aridity_index_p_over_pet` | 1 | open (§7) |
+| NEX-derived aridity index `aridity_index_p_over_pet` (pr + Hargreaves PET), measured against IMD | 1 | §6 |
 | Shade WBGT (`wbgt_shade_stull_*`) | 4 | **already QDM-corrected** (CarbonPlan shade, CHG-0700..0703) |
 | Outdoor WBGT Route B (`wbgt_outdoor_route_b_*`) | 5 | **already QDM-corrected** (CHG-0676..0683) |
 | Composites (`composite_*`) | 15 | inherit their inputs; `composite_heat_stress` weights `twb_days_ge_28` |
@@ -170,6 +177,7 @@ Values are 5-model means over 5 sites. "Holdout err" is the mean absolute error 
   - ERA5's hourly-maximum tasmax under-represents the dry-season afternoon peak.
   - Pulling NEX toward ERA5 there imports ERA5's error.
   - Do not apply ERA5-QDM to tasmax-threshold metrics without a station-grade reference (e.g. IMD gridded Tmax).
+  - **Superseded by §6:** against IMD gridded Tmax, QDM improves every tasmax metric. The WORSE verdicts above describe ERA5, not QDM.
 
 ## 5. Precipitation, against IMD gridded rainfall
 
@@ -240,7 +248,63 @@ Values are 5-model means over 5 sites. "Holdout err" is the mean absolute error 
 
   ERA5 matches IMD for CDD and extremes. Its drizzle bias shows only in wet-spell length. The first version of this report wrongly called ERA5's CDD unrealistic.
 
-## 6. Threats to validity
+## 6. Daily maximum/minimum temperature and the aridity index, against IMD gridded temperature
+
+**Reference and design.**
+
+- **Reference:** IMD 1° gridded daily Tmax and Tmin, 1990–2010, downloaded 2026-10-12 to `irt_data/imd/tmax/` and `irt_data/imd/tmin/`. All 42 files match the expected size of 31 × 31 × days × 4 bytes, and none needed a retry.
+- **Units are IMD 1° boxes, not 0.25° cells.**
+  - Each IMD box holds exactly 4 × 4 NEX cells. The NEX value is the plain mean of those 16 cells; a box with any missing cell is dropped.
+  - For the aridity index, IMD 0.25° rain is area-averaged onto the same box. The edge rows and columns get half weight, because IMD rain centres sit on whole and quarter degrees.
+- **Sample:** every other IMD box (a 2° lattice) that has complete Tmax and Tmin. That gives 75 boxes; 59 survive the NEX and IMD rain completeness checks.
+  - 5 of them are Himalayan (latitude ≥ 30°). They are reported separately below, for the same reason Shimla was excluded in §4: a 1° box in the mountains mixes very different elevations.
+- **Same as §2/§5:** holdout and future design, metric definitions, floors, verdict rule and the 5 models.
+- **QDM settings:**
+  - Additive QDM with a 31-day window for tasmax and tasmin, corrected independently.
+  - Multiplicative QDM with a 91-day window for rainfall, the setting §5 showed is needed.
+- **Scope:** all 22 deployed metrics built only on tasmax and/or tasmin, plus `aridity_index_p_over_pet` (annual P ÷ annual Hargreaves PET, the production formula from `evapotranspiration.py`). Metrics on daily-mean `tas` or humidity can't be scored, because IMD has neither.
+
+**Verdicts** (holdout 2003–2010, mean absolute per-box error; `data/imd_temp/`):
+
+| Metric | All 59 boxes | Excluding Himalaya (54) | ERA5 sites (§4) |
+|---|---|---|---|
+| `tasmin_tropical_nights_gt25` | MATERIAL (18.1 → 6.5 d) | **MATERIAL** (17.6 → 6.9) | MATERIAL |
+| `tasmin_tropical_nights_gt28` | MATERIAL (8.9 → 3.0 d) | **MATERIAL** (8.7 → 3.2) | MATERIAL |
+| `tnx_annual_max` | MATERIAL (2.11 → 0.54 °C) | **MATERIAL** (1.73 → 0.54) | MATERIAL |
+| `txx_annual_max` | MATERIAL (1.66 → 0.54 °C) | **MATERIAL** (1.20 → 0.53) | MARGINAL |
+| `txge30_hot_days` | MATERIAL (31.5 → 12.4 d) | **MATERIAL** (30.3 → 12.7) | MARGINAL |
+| `txge35_extreme_heat_days` | MARGINAL (15.6 → 8.7 d) | MARGINAL (15.8 → 9.1) | WORSE |
+| `hwa_heatwave_amplitude` | MARGINAL (2.27 → 1.57 °C) | MARGINAL (1.89 → 1.56) | WORSE |
+| `tasmax_summer_mean` | MATERIAL (1.65 → 0.60 °C) | MARGINAL (1.00 → 0.57) | NO EFFECT |
+| `tasmin_winter_mean` | MATERIAL (1.36 → 0.36 °C) | MARGINAL (0.81 → 0.37) | MATERIAL |
+| `tasmin_winter_min`, `tnn_annual_min` | MATERIAL | MARGINAL | MARGINAL |
+| `tnle10_consecutive_cold_nights` | MATERIAL (9.5 → 2.3 d) | MARGINAL (2.7 → 2.1) | MATERIAL |
+| `tnle10_cold_nights` | MATERIAL (13.3 → 4.8 d) | NO EFFECT (6.6 → 4.6) | MATERIAL |
+| `tnle5_severe_cold_nights`, `txle15_cold_days` | MATERIAL | NO EFFECT (event rare outside the Himalaya) | MARGINAL / NO EFFECT |
+| `aridity_index_p_over_pet` | NO EFFECT (0.11 → 0.11) | NO EFFECT | not measured |
+| tx90p, tn90p, tx10p, tn10p, WSDI, CSDI, `hwfi_events_tmean_90p` | NO EFFECT | NO EFFECT | NO EFFECT (WSDI future-only) |
+
+**Reading:**
+
+- **The §4 "tasmax extremes get worse" verdict was a reference artefact.** Against IMD, QDM improves every tasmax metric. `txx` and `txge30` are MATERIAL. `txge35` and `hwa` improve without reaching the halving rule, and `txge35` misses it by about 1 day. ERA5's hourly-maximum tasmax was the problem, as suspected.
+- **Why `txge35` stays about 7 days low after QDM.** IMD's own days ≥ 35 °C rose from 91.0 (1990–2002) to 98.5 (2003–2010) on these boxes. A correction trained on 1990–2002 can only carry the models' own warming into the test years, so the extra observed rise remains as a −7 d signed bias even though the per-box spread halves. This is a limit of the holdout design. The production correction would be trained on all of 1990–2010, which includes that rise.
+- **Tropical nights and `tnx` are confirmed independently.** ERA5 at sites and IMD on a national grid agree that these are MATERIAL.
+- **The cold-night verdicts are Himalaya-driven.** The 5 Himalayan boxes supply over 90 % of the improvement for `txle15`, `tnle5` and `tnle10_consecutive_cold_nights`, and 79 % for `tnle10` (`data/imd_temp/himalaya_share_of_gain.csv`). Outside the Himalaya, `tnle10` is NO EFFECT and its consecutive-night variant is MARGINAL. The §4 MATERIAL verdicts for these two also rest on two sites: Bikaner (28.3 d of gain for `tnle10`) and Lucknow (11.2 d), with about 0 at the other three. So they are not established nationally.
+- **Aridity index: no effect, and QDM moves the mean in the wrong direction.**
+
+  | Holdout annual totals (mm) | IMD | Raw NEX | QDM |
+  |---|---|---|---|
+  | Precipitation | 988 | 1001 | 1081 |
+  | Hargreaves PET | 1733 | 1668 | 1703 |
+
+  - Raw NEX already matches IMD's annual rainfall within 1.4 %, because BCSD corrects monthly means.
+  - Multiplicative QDM adds 8 % to annual rainfall. IMD itself doesn't explain this: its annual rainfall is 982 mm in 1990–2002 and 988 mm in 2003–2010. So the inflation is an artefact of the rainfall QDM; the likely cause is the tail correction adding rain to heavy days without taking it from moderate ones. The cause has not been isolated.
+  - PET moves the right way (−4 % → −2 %), but the aridity bias grows from +0.03 to +0.07, and the per-box error does not change.
+  - QDM also raises the projected 2040–60 aridity change from +0.05 to +0.09, almost all through precipitation (+11.6 % → +17.8 %). PET change is unaffected (+1.0 % vs +0.9 %).
+  - **This also bears on §5:** any multiplicative-QDM rollout for rainfall needs a check that annual and seasonal totals are preserved.
+- **Physical consistency holds.** Independent tasmax and tasmin correction produced inverted days (tasmin > tasmax) on 0.0027 % of 2040–60 days, the same as raw (0.0029 %). The worst box had 0.09 %. It doesn't affect Hargreaves PET in practice.
+
+## 7. Threats to validity
 
 - **ERA5 is treated as the truth.** For single-variable metrics, "MATERIAL" means QDM consistently moves NEX from its own BCSD target (GMFD) toward ERA5. That is an improvement only if ERA5 is the better reference at those sites.
   - Neither humidity nor tasmin has been checked against station observations here. An IMD station RH comparison at Kolkata/Lucknow is the cheapest independent check.
@@ -251,19 +315,23 @@ Values are 5-model means over 5 sites. "Holdout err" is the mean absolute error 
   - IMD is interpolated from rain gauges. Gauges are sparse in the north-east and the Himalaya, so the reference itself is weaker there.
   - The 74 cells sit on a 2° lattice; they are not district means.
   - Only 5 of the 22 models were used, and the holdout is 8 years. Single-cell annual maxima are noisy over 8 years, which is why the bias disappears while the per-cell error does not.
+- **Temperature reference and scale (§6).**
+  - IMD 1° temperature is interpolated from a few hundred stations, which is sparse in the Himalaya and the north-east.
+  - The test is run at 1°, coarser than the 0.25° cells the dashboard aggregates. Production QDM would need the IMD reference interpolated to 0.25° or the correction trained at 1°, and neither was tested.
 - **No physical-consistency step.** Additive QDM per variable can produce tasmin > tasmax. That was not checked or repaired here, and a production design would need it.
 
-## 7. Open items for verification
+## 8. Open items for verification
 
 1. **Precipitation:** done against IMD (§5). Remaining questions:
    - Confirm that the 91-day (or monthly) grouping holds with more models and at district level.
    - Decide whether a larger projected change in rainfall extremes is acceptable as a methodology change.
-2. **tasmax extremes:** test against IMD gridded Tmax before any decision on `txge35`, `txx` or `hwa`.
-3. **Scale-up check:** run the 13 MATERIAL metrics against a **gridded** ERA5 reference on a subset of states, with district aggregation, to confirm the site results hold at district level. National gridded ERA5 does not exist locally; only Telangana is on disk.
-4. **Not measured yet:** `aridity_index_p_over_pet` (multivariate: pr + Hargreaves PET from tasmax/tasmin). It needs IMD Tmax/Tmin, which also serves item 2.
+2. **tasmax extremes:** done against IMD (§6). `txx` and `txge30` are MATERIAL; `txge35` and `hwa` are MARGINAL, and `txge35` misses only because of the holdout design. Remaining question: retest `txge35` with a design robust to observed train→test warming, e.g. alternating years.
+3. **Scale-up check:** run the MATERIAL metrics against a **gridded** ERA5 reference on a subset of states, with district aggregation, to confirm the site results hold at district level. National gridded ERA5 does not exist locally; only Telangana is on disk.
+4. **Aridity index:** done against IMD (§6), NO EFFECT. The open question is the **8 % annual-rainfall inflation from multiplicative QDM.** Isolate its cause (tail extrapolation vs trace jitter vs window) before any rainfall QDM is adopted, and add an annual and seasonal total-preservation check to any rollout.
 5. **Outlier models:** investigate CMCC-CM2-SR5 and TaiESM1 historical tas at Kolkata (+1.8 °C).
+6. **Cold-night metrics:** `tnle10_cold_nights` and `tnle10_consecutive_cold_nights` are MATERIAL only at Bikaner/Lucknow (ERA5) and in the Himalaya (IMD). Decide whether they belong on the QDM list.
 
-## 8. Reproduction
+## 9. Reproduction
 
 Run from the repo root with the Windows `irt` interpreter (pandas, xarray, scipy):
 
@@ -287,5 +355,12 @@ python docs/diagnostics/qdm_applicability/scripts/sanity.py             # reprod
   - `scripts/qdm_pr_imd_w91.py`: 91-day window.
   - `scripts/pr_signed.py`: signed bias.
   - Outputs are in `data/imd_w31/` and `data/imd_w91/`; the cell list is `data/imd_cells.csv`.
+- **Daily max/min temperature and aridity against IMD (§6):**
+  - `scripts/imd_get.py 1990 2010 tmax` and `... tmin`: download.
+  - `scripts/extract_temp_national.py`: NEX tasmax/tasmin/pr averaged onto IMD 1° boxes (about 2 min).
+  - `scripts/qdm_temp_imd.py`: verdicts, signed bias and inverted-day counts (about 7 min, 5 workers).
+  - `scripts/temp_imd_followup.py`: aridity P/PET split and Himalayan share of gain (about 20 min, serial).
+  - `scripts/temp_imd_nohimalaya.py`: verdicts excluding latitude ≥ 30°, and the IMD train-vs-test shift.
+  - Outputs are in `data/imd_temp/`; the box list is `data/imd_temp_boxes.csv`.
 - **Path assumptions:** the scripts were run from `.scratch/` and still read their caches from `.scratch/...` and `scratch/...`.
 - **Unit-level outputs:** `data/temperature_humidity_unit_rows.csv` and `data/precipitation_unit_rows.csv`.
