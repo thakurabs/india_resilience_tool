@@ -836,6 +836,8 @@ For questions about the codebase:
 
 ### Shade WBGT release correction
 
+Dashboard availability (CHG-0705): `metrics_registry.py` excludes only the four empirical outdoor sWBGT metrics from `DOMAINS` and `get_dashboard_variables()`. The nine CarbonPlan-aligned shade and Route B outdoor WBGT metrics remain selectable diagnostics. The offline registry and tools listed below remain available; Heat Stress scoring is unchanged.
+
 - `india_resilience_tool/compute/wbgt.py`: shared explicit-unit shade daily-peak estimate, validity diagnostics and complete-calendar annual reductions.
 - `india_resilience_tool/data/wbgt_contract.py`: lightweight shade signature and artifact freshness/validation contract.
 - `tools/diagnostics/wbgt_shade_release.py`: offline six-site reproduction, frozen-candidate confirmation, complete-year policy, uncertainty and absolute-target reporting.

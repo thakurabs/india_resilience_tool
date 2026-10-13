@@ -74,10 +74,11 @@ def test_no_other_metric_declares_a_retained_statistic() -> None:
 
 def test_dashboard_variables_expose_the_declaration() -> None:
     variables = get_dashboard_variables()
-    assert variables["wbgt_outdoor_route_b_days_ge_32"]["retained_master_statistics"] == ["n_models"]
+    for slug in set(ROUTE_B_SLUGS) | set(SHADE_SLUGS):
+        assert variables[slug]["retained_master_statistics"] == ["n_models"]
     # An existing metric reports an empty list, which the builder treats as "retain
     # nothing" -- so its published columns cannot change.
-    assert variables["swbgt_empirical_annual_mean"]["retained_master_statistics"] == []
+    assert variables["twb_annual_mean"]["retained_master_statistics"] == []
 
 
 # --- Master retention -----------------------------------------------------------

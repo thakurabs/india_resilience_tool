@@ -2996,6 +2996,15 @@ def is_climate_compute_metric(spec: Optional[MetricSpec]) -> bool:
 # The older bundle terminology is kept as a compatibility alias because portfolio,
 # exports, and some helper functions still reference "bundles".
 
+# Retained in the offline registry for artifact compatibility, excluded from all
+# dashboard variables and metric selection (CHG-0705).
+DASHBOARD_EXCLUDED_METRICS: frozenset[str] = frozenset({
+    "swbgt_empirical_annual_mean",
+    "swbgt_empirical_days_ge_28",
+    "swbgt_empirical_days_ge_30",
+    "swbgt_empirical_days_ge_32",
+})
+
 DOMAINS: dict[str, list[str]] = {
     "Heat Risk": [
         "composite_heat_risk",
@@ -3045,20 +3054,11 @@ DOMAINS: dict[str, list[str]] = {
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
         "wsdi_warm_spell_days",
-        # WBGT/SWBGT diagnostics: visible under Heat Stress for inspection,
-        # NOT scored in composite_heat_stress (bundle_weights.py unchanged).
-        # Shaded WBGT = CarbonPlan shade formula with per-cell QDM (CHG-0701);
-        # Outdoor sWBGT uses tas + vapour pressure. Both derive from inputs already in the
-        # composite, so scoring them would double-count humid-heat signal.
+        # CarbonPlan-aligned WBGT diagnostics remain visible, outside composite scoring.
         "wbgt_shade_stull_annual_mean",
         "wbgt_shade_stull_days_ge_28",
         "wbgt_shade_stull_days_ge_30",
         "wbgt_shade_stull_days_ge_32",
-        "swbgt_empirical_annual_mean",
-        "swbgt_empirical_days_ge_28",
-        "swbgt_empirical_days_ge_30",
-        "swbgt_empirical_days_ge_32",
-        # Outdoor WBGT (Route B): solar-adjusted, bias-corrected, offline-produced.
         "wbgt_outdoor_route_b_annual_mean",
         "wbgt_outdoor_route_b_annual_max",
         "wbgt_outdoor_route_b_days_ge_28",
@@ -3393,6 +3393,8 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
     """
     variables: dict[str, dict[str, Any]] = {}
     for slug, spec in METRICS_BY_SLUG.items():
+        if slug in DASHBOARD_EXCLUDED_METRICS:
+            continue
         units = str(spec.units or "").strip()
         domains_for_slug = get_domains_for_metric(slug)
         pillars_for_slug = list(

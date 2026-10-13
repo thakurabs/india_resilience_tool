@@ -211,7 +211,7 @@ This optional offline builder writes private grid-first area-overlap caches unde
 
 Heat Risk v2 compute also persists private annual per-cell metric fields under `IRT_DATA_DIR/processed/_internal/heat_risk/grid_metrics/<metric>/<model>/<scenario>/<year>.nc` with JSON sidecars. District/block use grid-first cellwise compute for `tas_annual_mean`, `tasmax_summer_mean`, `tas_summer_mean`, `txge30_hot_days`, and `tasmin_tropical_nights_gt25` in addition to the earlier percentile/heatwave slugs. These files are inspection and cache artifacts only; public dashboard CSV paths, slugs, units, and columns remain unchanged.
 
-Heat Stress v2 keeps the `composite_heat_stress` slug and eight retained metrics. Its frozen-CDF headline scores the six absolute wet-bulb/threshold metrics (`twb_annual_mean`, `twb_summer_mean`, `twb_annual_max`, `twb_days_ge_28`, `twb_days_ge_30`, and `tasmin_tropical_nights_gt28`); TN90p and WSDI continue to reuse the Heat Risk v2 grid-first percentile path but are baseline-referenced lenses excluded from the headline. Heat Stress-only metrics are computed grid-first for admin district/block outputs and cached under `IRT_DATA_DIR/processed/_internal/heat_stress/grid_metrics/<metric>/<model>/<grid_id>/<scenario>/<year>.nc`. WBD, WBGT, and simplified WBGT metrics remain registered legacy diagnostics but are no longer Heat Stress domain or scoring members.
+Heat Stress v2 keeps the `composite_heat_stress` slug and eight retained metrics. Its frozen-CDF headline scores the six absolute wet-bulb/threshold metrics (`twb_annual_mean`, `twb_summer_mean`, `twb_annual_max`, `twb_days_ge_28`, `twb_days_ge_30`, and `tasmin_tropical_nights_gt28`); TN90p and WSDI continue to reuse the Heat Risk v2 grid-first percentile path but are baseline-referenced lenses excluded from the headline. Heat Stress-only metrics are computed grid-first for admin district/block outputs and cached under `IRT_DATA_DIR/processed/_internal/heat_stress/grid_metrics/<metric>/<model>/<grid_id>/<scenario>/<year>.nc`. WBD and simplified WBGT remain registered legacy diagnostics outside the Heat Stress domain and scoring. CarbonPlan-aligned shaded WBGT and Route B outdoor WBGT remain selectable Heat Stress diagnostics, excluded from composite scoring.
 
 Drought Risk v2 uses `climate-indices==2.2.0` SPI on monthly precipitation totals computed from daily `pr` grids, then derives grid-first admin district/block metrics before polygon aggregation. The active Drought bundle still uses the six event-count and max-spell metrics; `spi3_count_months_lt_minus1` is now also grid-first for admin district/block levels and uses explicit `period_mean` / coverage floors in the registry. Private Drought caches live under `IRT_DATA_DIR/processed/_internal/drought_risk/`; the public processed CSV and optimized bundle contracts remain unchanged.
 
@@ -951,6 +951,8 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 **Author:** Abu Bakar Siddiqui Thakur  
 **Email:** absthakur@resilience.org.in
+
+WBGT dashboard availability (CHG-0705): only the four empirical outdoor sWBGT metrics are excluded from dashboard metric selection, comparison, portfolio, and export options. CarbonPlan-aligned shaded WBGT and Route B outdoor WBGT remain available as diagnostics. Offline registry definitions and data are retained. Heat Stress composite scoring is unchanged.
 
 ### Shade WBGT: CarbonPlan-aligned replacement (in progress)
 

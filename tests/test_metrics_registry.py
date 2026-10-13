@@ -174,10 +174,6 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
         "wbgt_shade_stull_days_ge_28",
         "wbgt_shade_stull_days_ge_30",
         "wbgt_shade_stull_days_ge_32",
-        "swbgt_empirical_annual_mean",
-        "swbgt_empirical_days_ge_28",
-        "swbgt_empirical_days_ge_30",
-        "swbgt_empirical_days_ge_32",
         "wbgt_outdoor_route_b_annual_mean",
         "wbgt_outdoor_route_b_annual_max",
         "wbgt_outdoor_route_b_days_ge_28",
@@ -191,7 +187,7 @@ def test_heat_stress_gridfirst_slugs_do_not_overlap_heat_risk_gridfirst_slugs() 
     assert HEAT_STRESS_GRIDFIRST_SLUGS & HEAT_RISK_GRIDFIRST_SLUGS == set()
 
 
-def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
+def test_wbgt_and_swbgt_metrics_registered_with_distinct_dashboard_visibility() -> None:
     expected = {
         "wbgt_shade_stull_annual_mean": ("Shaded WBGT (Annual Mean)", None, "wbgt_shade_stull_annual_mean_C"),
         "wbgt_shade_stull_days_ge_28": ("Shaded WBGT Days (≥ 28°C)", None, "wbgt_shade_stull_days_ge_28_days"),
@@ -223,9 +219,7 @@ def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
 
     for slug, (label, compute, value_col) in expected.items():
         assert slug in METRICS_BY_SLUG
-        # Diagnostics: visible under Heat Stress domain. NOT scored in
-        # composite_heat_stress (asserted below via bundle_weights).
-        assert slug in heat_stress_metrics
+        assert (slug in heat_stress_metrics) == slug.startswith("wbgt_shade_")
 
         spec = METRICS_BY_SLUG[slug]
         assert spec.label == label
@@ -805,3 +799,32 @@ def test_route_b_outdoor_metrics_are_display_only_and_offline_sourced() -> None:
                  "swbgt_empirical_days_ge_30", "swbgt_empirical_days_ge_32"):
         assert slug in METRICS_BY_SLUG, slug
         assert is_climate_compute_metric(METRICS_BY_SLUG[slug]), slug
+
+
+def test_only_empirical_swbgt_metrics_are_absent_from_dashboard_options() -> None:
+    """Exclude empirical sWBGT while retaining CarbonPlan-oriented WBGT."""
+    from india_resilience_tool.config.metrics_registry import (
+        get_dashboard_variables, get_domains, get_metric_options_for_domain,
+    )
+    from india_resilience_tool.config.variables import VARIABLES, get_indices_for_group
+
+    retired = {slug for slug in METRICS_BY_SLUG if slug.startswith("swbgt_")}
+    assert len(retired) == 4
+    retained = {slug for slug in METRICS_BY_SLUG if slug.startswith("wbgt_")}
+    assert len(retained) == 9
+    assert retained <= get_dashboard_variables().keys()
+    assert retained <= VARIABLES.keys()
+    assert retired.isdisjoint(get_dashboard_variables())
+    assert retired.isdisjoint(VARIABLES)
+    assert retired.isdisjoint(get_indices_for_group("temperature"))
+    for level in ("district", "block"):
+        assert retained <= set(get_metrics_for_domain("Heat Stress", spatial_family="admin", level=level))
+        for domain in get_domains(spatial_family="admin", level=level):
+            assert retired.isdisjoint(get_metrics_for_domain(domain, spatial_family="admin", level=level))
+            assert retired.isdisjoint(
+                slug for slug, _ in get_metric_options_for_domain(
+                    domain, spatial_family="admin", level=level
+                )
+            )
+    assert "twb_annual_mean" in VARIABLES
+    assert "composite_heat_stress" in VARIABLES
