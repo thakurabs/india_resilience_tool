@@ -1,0 +1,6 @@
+metric,family,floor,ref,err_raw,err_qdm,raw_2050,qdm_2050,shift_2050,chg_raw,chg_qdm,n_units,verdict
+twb_annual_max,degC,0.5,26.42,1.615,0.331,29.037,27.751,1.434,1.352,1.428,709,MATERIAL
+twb_annual_mean,degC,0.5,20.338,1.066,0.131,20.955,21.424,1.05,1.292,1.29,709,MATERIAL
+twb_days_ge_28,count,5.0,1.566,17.862,0.828,37.929,14.234,24.328,21.025,13.277,709,MATERIAL
+twb_days_ge_30,count,5.0,0.001,0.777,0.02,6.132,1.077,5.095,5.559,1.074,709,FUTURE-ONLY (unverifiable)
+twb_summer_mean,degC,0.5,20.791,2.077,0.272,20.115,21.757,2.007,1.255,1.258,709,MATERIAL

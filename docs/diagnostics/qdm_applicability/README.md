@@ -1,7 +1,7 @@
 # Does QDM bias correction measurably improve IRT's deployed metrics?
 
 **Status:** diagnostic only — nothing in the pipeline, the processed outputs or the dashboard was changed.
-**Date:** 2026-10-11 · **Snapshot:** `add_flood_depth@a87b239`. Precipitation section (§5) added at `b18a751` after the IMD 1990–2010 rain download. Tmax/Tmin and aridity section (§6) added 2026-10-12 at `1131afe` after the IMD temperature download.
+**Date:** 2026-10-11 · **Snapshot:** `add_flood_depth@a87b239`. Precipitation section (§5) added at `b18a751` after the IMD 1990–2010 rain download. Tmax/Tmin and aridity section (§6) added 2026-10-12 at `1131afe` after the IMD temperature download. National wet-bulb section (§7) added 2026-10-18 at `b4dc757`, after the hourly ERA5 India download (CHG-0708) and the daily reference built from it (CHG-0709).
 **Trigger:** the user observed that on the Heat Stress map, `twb_days_ge_28` paints central India almost white.
 
 ## 0. Answer in one screen
@@ -31,6 +31,16 @@
    - **Weakened:** `tnle10_cold_nights` and `tnle10_consecutive_cold_nights` were MATERIAL against ERA5, but nearly all of their IMD improvement comes from 5 Himalayan boxes. Outside the Himalaya they are NO EFFECT and MARGINAL. `tasmin_winter_mean` drops to MARGINAL outside the Himalaya.
    - **Aridity index: NO EFFECT.** Raw NEX already matches IMD annual rainfall within 1.4 %. Multiplicative QDM *adds* 8 % to annual rainfall, an artefact of the correction that IMD itself does not explain, and raises the projected aridity change from +0.05 to +0.09.
    - Independent tasmax/tasmin correction does not create inverted days (0.003 %, same as raw).
+
+8. **Wet-bulb metrics, scored on every Indian land cell and every district against a national ERA5 reference (§7).**
+   - All four checkable `twb_*` metrics are MATERIAL nationally, on cells (4,625) and on districts (778). Error cut 80–95 %.
+   - `twb_days_ge_28` district error falls from 17.9 to 0.8 days/yr outside the Himalaya. Its mapped 2040–60 value falls from 38 to 14 days/yr.
+   - **The correction redraws the map, not just the scale.** Rank agreement raw vs corrected is 0.85–0.90, about 40 % of districts change quintile, and only 26 of the top 50 `twb_days_ge_28` districts stay in the top 50.
+     - Assam and Arunachal fall out of the top (Biswanath #1 → #387): the raw model is far too humid there.
+     - The Odisha and Andhra coasts rise (Puri #158 → #8): the raw model is too dry there.
+     - Western Rajasthan rises 5-fold (Jaisalmer 6 → 28 days). The mechanism is understood (raw model 8 RH points too dry), but ERA5's desert humidity is unchecked.
+   - `twb_days_ge_30` is too rare in ERA5 to verify.
+   - The empirical sWBGT metrics in §4 were removed from the dashboard (`2fcce38`), so §7 does not cover them.
 
 ## 1. Inventory of deployed metrics (105 in `processed_optimised/metrics`)
 
@@ -304,12 +314,87 @@ Values are 5-model means over 5 sites. "Holdout err" is the mean absolute error 
   - **This also bears on §5:** any multiplicative-QDM rollout for rainfall needs a check that annual and seasonal totals are preserved.
 - **Physical consistency holds.** Independent tasmax and tasmin correction produced inverted days (tasmin > tasmax) on 0.0027 % of 2040–60 days, the same as raw (0.0029 %). The worst box had 0.09 %. It doesn't affect Hargreaves PET in practice.
 
-## 7. Threats to validity
+## 7. Wet-bulb metrics nationally, against a gridded ERA5 humidity reference
+
+**Reference.**
+
+- **Hourly ERA5** 2 m temperature and dewpoint over 6–38 N, 68–98 E, 1990–2010 (CHG-0708, `irt_data/era5_hourly_india/`, 253 files, 9 GB).
+- **Daily reference on the NEX grid** (CHG-0709, `scripts/era5_daily_ref_build.py`, `irt_data/era5_daily_ref_nexgrid/`, 21 files, 753 MB). It matches how NEX defines a day:
+  - IST calendar days (UTC+5:30);
+  - tas = mean of the hourly temperatures; hurs = mean of the hourly RH (Magnus over water);
+  - each NEX cell is the mean of the 4 surrounding ERA5 points.
+- **Verification** (`.scratch/era5_national_ref/ref_check.py`):
+  - all 7,670 days present, no NaN;
+  - an independent pandas re-derivation at 6 sites matches to ≤ 2.3e-5;
+  - `twb_days_ge_28` at the site cells reproduces the §3 site reference: Kolkata 10.05 vs 10.24, Lucknow 3.52 vs 3.71.
+  - **The reference is unreliable in the mountains.** The Shimla cell reads 16.3 °C against 13.5 °C at the site, because a 4-point mean mixes valley and ridge. Cells at latitude ≥ 30° are reported separately.
+
+**Design.** Same holdout/future design, verdict rule, floors and 5 models as §2. Wet-bulb is computed with Stull from daily-mean tas and hurs, the deployed method, and corrected directly with additive QDM (31-day window).
+
+| Test | Units | Script | Run time |
+|---|---|---|---|
+| A | 129 cells on a 1.5° lattice | `scripts/qdm_twb_national.py` | 3 min |
+| B | all 4,625 land cells (all 4 surrounding IMD rain points on land) | `scripts/qdm_twb_national.py --step 1 --workers 40` | 12 min |
+| Districts | test B's cells, area-weighted to 778 of 784 districts | `scripts/qdm_twb_districts.py` | 35 s |
+
+Test A was the first, sparse sample. B superseded it and agrees with it within about 5 %, so only B is reported below (A is kept in `data/twb_national/testA_*`).
+
+**Verdicts, excluding the Himalaya** (holdout 2003–2010 mean absolute error; 2040–60 is the 5-model mean):
+
+| Metric | Cells (4,045): error raw → QDM | Districts (709): error raw → QDM | Districts 2040–60 raw → QDM | Verdict (both) |
+|---|---|---|---|---|
+| `twb_days_ge_28` | 14.0 → 0.7 d | 17.9 → 0.8 d | 37.9 → 14.2 d | MATERIAL |
+| `twb_summer_mean` | 2.20 → 0.27 °C | 2.08 → 0.27 °C | 20.1 → 21.8 °C | MATERIAL |
+| `twb_annual_max` | 1.81 → 0.36 °C | 1.61 → 0.33 °C | 29.0 → 27.8 °C | MATERIAL |
+| `twb_annual_mean` | 1.18 → 0.13 °C | 1.07 → 0.13 °C | 21.0 → 21.4 °C | MATERIAL |
+| `twb_days_ge_30` | 0.73 → 0.02 d | 0.78 → 0.02 d | 6.1 → 1.1 d | NO EFFECT / FUTURE-ONLY (ERA5 has almost no such days) |
+
+- **Signed bias:** raw NEX is too cool in the mean (summer −1.9 °C) but too hot at the annual maximum (+1.6 °C). Its daily wet-bulb spread is too wide, which is why the ≥ 28 °C count is inflated (+13.7 d) even though the mean is cool. QDM leaves biases of −0.1, +0.25 and +0.1 d respectively.
+- **The mean warming signal is preserved** (+1.29 °C raw and QDM, districts). The projected rise in `twb_days_ge_28` shrinks from +21.0 to +13.3 d/yr, a threshold effect of the lower corrected baseline.
+- **By State** (`data/twb_national/testB_summary_by_state_no_himalaya.csv`), `twb_days_ge_28` is MATERIAL in 11 States. The largest raw errors are Bihar (80 → 3 d), West Bengal (73 → 3), Uttar Pradesh (50 → 3) and Assam (43 → 0.4). Thirteen States, including Maharashtra, Madhya Pradesh, Rajasthan and the south, are FUTURE-ONLY because ERA5 has almost no such days today. No State is WORSE for any metric.
+
+**Map impact** (districts, 5-model mean, 2040–60, `data/twb_national/district_map_impact.csv`):
+
+| Metric | Spearman raw vs QDM | Districts changing quintile | Moving ≥ 2 quintiles | Top-50 kept |
+|---|---|---|---|---|
+| `twb_days_ge_28` | 0.89 | 318 / 778 | 43 | 26 |
+| `twb_summer_mean` | 0.85 | 363 | 67 | 27 |
+| `twb_annual_max` | 0.86 | 363 | 54 | 28 |
+| `twb_annual_mean` | 0.90 | 303 | 30 | 32 |
+
+Quintiles stand in for colour bands; the dashboard's frozen ruler was not applied.
+
+For `twb_days_ge_28` (2040–60 days/yr, raw → QDM; rank raw → QDM; ERA5 1990–2010 vs raw NEX 2003–10 in brackets):
+
+- **Falls:** Assam and Arunachal. Biswanath 138 → 7 (#1 → #387; ERA5 0.3 vs NEX 106), Sonitpur 133 → 12, Namsai 132 → 7. The raw model is far too humid there.
+- **Stays on top, at about half the value:** coastal Bengal and central Bihar. Medinipur East 124 → 65 (#21 → #1), Howrah 132 → 63 (#7 → #2), Kolkata 131 → 60 (#8 → #4), Patna 120 → 51.
+- **Rises:** the Odisha and Andhra coasts, where the raw model is too dry. Puri 62 → 57 (#158 → #8; ERA5 14.5 vs NEX 6.9), Jagatsinghapur #130 → #5, Krishna #340 → #57, Guntur #368 → #73.
+- **Rises sharply:** western Rajasthan. Jaisalmer 6 → 28 (#607 → #180), Barmer 7 → 20.
+
+**Western Rajasthan** (`scripts/qdm_twb_rajasthan.py`, 79 cells in Jaisalmer and Barmer, `data/twb_national/rajasthan_check.txt`). This is the only place where corrected exceeds raw several-fold.
+
+| 79 cells, 5 models | ERA5 1990–2010 | Raw NEX 1990–2010 | Raw NEX 2040–60 | QDM 2040–60 |
+|---|---|---|---|---|
+| Mean Twb (°C) | 19.1 | 16.0 | 17.5 | 20.5 |
+| Days/yr with Twb 26–28 °C | 48.8 | 7.6 | 24.1 | 84.1 |
+| Days/yr with Twb 27–28 °C | 12.5 | 1.9 | 7.6 | 42.2 |
+| Days/yr ≥ 28 °C | 1.1 | 1.0 | 6.2 | 26.2 |
+| Jun–Sep mean hurs (%) | 58.2 | 48.9–50.3 | | |
+
+- **Mechanism:** the raw model is about 8 RH points drier than ERA5 in the monsoon and 3 °C cooler in mean wet-bulb. ERA5 has a dense band of days just under the threshold (12.5 d/yr at 27–28 °C); the raw model almost none. The model's projected warming (+1.3–1.5 °C across the distribution) lifts ERA5's band over 28 °C. The days fall in Jun–Aug, as in ERA5 today.
+- **Why the holdout cannot test it:** today's ≥ 28 °C count agrees by coincidence (1.1 vs 1.0 d/yr). The disagreement is just below the threshold, so the verdict is FUTURE-ONLY.
+- **Model spread is wide:** 9–58 d/yr after QDM (ACCESS-CM2 highest, MIROC6 lowest), against 0.5–21 raw.
+- **Open:** the result is as good as ERA5's desert monsoon humidity, which has not been checked against stations. This is the first place a station check should go.
+
+## 8. Threats to validity
 
 - **ERA5 is treated as the truth.** For single-variable metrics, "MATERIAL" means QDM consistently moves NEX from its own BCSD target (GMFD) toward ERA5. That is an improvement only if ERA5 is the better reference at those sites.
   - Neither humidity nor tasmin has been checked against station observations here. An IMD station RH comparison at Kolkata/Lucknow is the cheapest independent check.
+  - §7 extends this to every district. ERA5 understates humid-heat extremes in some studies, so corrected wet-bulb counts may be low. In western Rajasthan the corrected count rests entirely on ERA5's monsoon humidity (§7).
 - **Small sample.** 5 sites, 5 of 22 models, 8 holdout years.
-- **Points, not districts.** These are nearest-cell points, not district means. The district reproduction check passes, but a national gridded test has not been done.
+- **Points, not districts.** §3–§4 use nearest-cell points, not district means. For the wet-bulb metrics this is resolved: §7 scores every land cell and 778 districts.
+- **Wet-bulb sample (§7).** 5 of 22 models; neighbouring cells share weather, so 4,625 cells are not 4,625 independent checks. The 6 districts without a scored cell (Andaman & Nicobar ×3, Lakshadweep, Diu, Chennai) and 20 coastal districts under 50 % covered rest on few or no cells.
+- **Boundary file.** `districts_4326.geojson` gives 17 carved-out districts their parent's LGD code (e.g. Balotra and Barmer). §7 keys districts by row; any production join on LGD code alone would merge them.
 - **Simplified definitions.** Metrics are re-implemented with a common 1990–2010 baseline, and SPI uses method-of-moments gamma per calendar month.
 - **Precipitation reference and sample (§5).**
   - IMD is interpolated from rain gauges. Gauges are sparse in the north-east and the Himalaya, so the reference itself is weaker there.
@@ -320,18 +405,20 @@ Values are 5-model means over 5 sites. "Holdout err" is the mean absolute error 
   - The test is run at 1°, coarser than the 0.25° cells the dashboard aggregates. Production QDM would need the IMD reference interpolated to 0.25° or the correction trained at 1°, and neither was tested.
 - **No physical-consistency step.** Additive QDM per variable can produce tasmin > tasmax. That was not checked or repaired here, and a production design would need it.
 
-## 8. Open items for verification
+## 9. Open items for verification
 
 1. **Precipitation:** done against IMD (§5). Remaining questions:
    - Confirm that the 91-day (or monthly) grouping holds with more models and at district level.
    - Decide whether a larger projected change in rainfall extremes is acceptable as a methodology change.
 2. **tasmax extremes:** done against IMD (§6). `txx` and `txge30` are MATERIAL; `txge35` and `hwa` are MARGINAL, and `txge35` misses only because of the holdout design. Remaining question: retest `txge35` with a design robust to observed train→test warming, e.g. alternating years.
-3. **Scale-up check:** run the MATERIAL metrics against a **gridded** ERA5 reference on a subset of states, with district aggregation, to confirm the site results hold at district level. National gridded ERA5 does not exist locally; only Telangana is on disk.
+3. **Scale-up check:** done for the wet-bulb metrics (§7): every land cell and 778 districts, against a national ERA5 daily reference built for it. The tasmin metrics (tropical nights, `tnx`) are covered nationally by IMD (§6).
 4. **Aridity index:** done against IMD (§6), NO EFFECT. The open question is the **8 % annual-rainfall inflation from multiplicative QDM.** Isolate its cause (tail extrapolation vs trace jitter vs window) before any rainfall QDM is adopted, and add an annual and seasonal total-preservation check to any rollout.
 5. **Outlier models:** investigate CMCC-CM2-SR5 and TaiESM1 historical tas at Kolkata (+1.8 °C).
 6. **Cold-night metrics:** `tnle10_cold_nights` and `tnle10_consecutive_cold_nights` are MATERIAL only at Bikaner/Lucknow (ERA5) and in the Himalaya (IMD). Decide whether they belong on the QDM list.
+7. **Western Rajasthan wet-bulb (§7):** check ERA5 monsoon humidity against station observations at Jaisalmer and Barmer (and Kolkata/Lucknow, first bullet of §8) before publishing a 5-fold rise there. Needs a data source and a download decision.
+8. **Map disclosure:** a corrected wet-bulb map reorders districts (about 40 % change quintile) and shrinks the projected rise in `twb_days_ge_28`. Both are methodology changes and need to be called out if adopted. `composite_heat_stress` weights these metrics and would shift with them.
 
-## 9. Reproduction
+## 10. Reproduction
 
 Run from the repo root with the Windows `irt` interpreter (pandas, xarray, scipy):
 
@@ -362,5 +449,12 @@ python docs/diagnostics/qdm_applicability/scripts/sanity.py             # reprod
   - `scripts/temp_imd_followup.py`: aridity P/PET split and Himalayan share of gain (about 20 min, serial).
   - `scripts/temp_imd_nohimalaya.py`: verdicts excluding latitude ≥ 30°, and the IMD train-vs-test shift.
   - Outputs are in `data/imd_temp/`; the box list is `data/imd_temp_boxes.csv`.
+- **Wet-bulb nationally (§7):**
+  - `scripts/era5_hourly_get.py 198912 201012`: hourly ERA5 download (CDS; new files only).
+  - `scripts/era5_daily_ref_build.py 1990 2010`: daily reference on the NEX grid (about 17 s/year).
+  - `scripts/qdm_twb_national.py`: test A (129 cells). `--step 1 --workers 40`: test B (all land cells; caches 3.4 GB in `.scratch/qdm_applicability/series_twb_national_s1/`). `--limit K --models M`: timing probe.
+  - `scripts/qdm_twb_districts.py`: test B aggregated to districts, with map impact.
+  - `scripts/qdm_twb_rajasthan.py`: the western Rajasthan mechanism check (about 2 min).
+  - Outputs are in `data/twb_national/`; the per-cell and per-district unit rows (22 MB, 5 MB) stay in `.scratch/`.
 - **Path assumptions:** the scripts were run from `.scratch/` and still read their caches from `.scratch/...` and `scratch/...`.
 - **Unit-level outputs:** `data/temperature_humidity_unit_rows.csv` and `data/precipitation_unit_rows.csv`.

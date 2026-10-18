@@ -1,0 +1,6 @@
+metric,districts,spearman,median_rank_shift,p90_rank_shift,max_rank_shift,quintile_changed,quintile_moved_2plus,top50_overlap
+twb_annual_mean,778,0.904,46.0,157.3,454.0,303,30,32
+twb_summer_mean,778,0.846,57.0,199.6,511.0,363,67,27
+twb_annual_max,778,0.861,67.0,200.3,382.0,363,54,28
+twb_days_ge_28,778,0.888,51.0,177.3,427.0,318,43,26
+twb_days_ge_30,778,0.851,80.0,184.6,534.0,348,63,26

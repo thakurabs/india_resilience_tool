@@ -1,0 +1,151 @@
+metric,state_name,family,floor,ref,err_raw,err_qdm,raw_2050,qdm_2050,shift_2050,chg_raw,chg_qdm,n_units,verdict
+twb_annual_max,Andhra Pradesh,degC,0.5,27.251,0.941,0.271,28.813,28.439,0.9,1.222,1.228,26,MATERIAL
+twb_annual_max,Arunachal Pradesh,degC,0.5,21.019,2.518,0.225,24.612,22.209,2.405,1.322,1.327,26,MATERIAL
+twb_annual_max,Assam,degC,0.5,27.568,1.398,0.231,29.99,28.554,1.451,1.249,1.223,35,MATERIAL
+twb_annual_max,Bihar,degC,0.5,28.4,1.935,0.385,31.727,29.715,2.013,1.609,1.549,38,MATERIAL
+twb_annual_max,Chhattisgarh,degC,0.5,25.927,2.208,0.579,29.439,27.722,1.729,1.546,1.782,33,MATERIAL
+twb_annual_max,"Dadra, Nagar Haveli, Daman & Diu",degC,0.5,26.963,2.446,0.312,30.421,28.356,2.065,1.359,1.539,2,MATERIAL
+twb_annual_max,Delhi,degC,0.5,28.372,0.706,0.202,30.075,29.573,0.524,1.201,1.35,11,MATERIAL
+twb_annual_max,Goa,degC,0.5,26.111,2.005,0.369,29.412,27.477,1.936,1.401,1.261,2,MATERIAL
+twb_annual_max,Gujarat,degC,0.5,27.116,1.96,0.449,30.048,28.621,1.473,1.311,1.534,33,MATERIAL
+twb_annual_max,Haryana,degC,0.5,28.31,0.653,0.193,29.684,29.444,0.521,1.223,1.339,18,MARGINAL
+twb_annual_max,Jharkhand,degC,0.5,26.861,2.424,0.402,30.85,28.512,2.339,1.736,1.718,24,MATERIAL
+twb_annual_max,Karnataka,degC,0.5,24.287,1.786,0.352,27.249,25.672,1.605,1.341,1.314,31,MATERIAL
+twb_annual_max,Kerala,degC,0.5,25.7,0.908,0.255,27.47,26.832,0.754,1.141,1.186,14,MATERIAL
+twb_annual_max,Madhya Pradesh,degC,0.5,26.14,2.244,0.48,29.527,27.754,1.775,1.435,1.632,52,MATERIAL
+twb_annual_max,Maharashtra,degC,0.5,25.561,2.615,0.39,29.435,27.161,2.275,1.498,1.649,36,MATERIAL
+twb_annual_max,Manipur,degC,0.5,23.865,0.554,0.195,24.529,24.815,0.517,1.164,1.143,16,MARGINAL
+twb_annual_max,Meghalaya,degC,0.5,25.534,0.774,0.239,26.032,26.361,0.702,1.121,1.042,12,MATERIAL
+twb_annual_max,Mizoram,degC,0.5,24.667,0.808,0.211,25.78,25.526,0.675,1.035,1.029,11,MATERIAL
+twb_annual_max,Nagaland,degC,0.5,23.972,0.838,0.133,25.502,25.072,0.826,1.262,1.254,16,MATERIAL
+twb_annual_max,Odisha,degC,0.5,27.238,1.1,0.321,29.266,28.674,0.971,1.347,1.414,30,MATERIAL
+twb_annual_max,Puducherry,degC,0.5,27.496,0.902,0.222,29.273,28.697,0.75,1.194,1.227,4,MATERIAL
+twb_annual_max,Punjab,degC,0.5,28.465,0.491,0.14,29.585,29.552,0.482,1.202,1.321,1,MARGINAL
+twb_annual_max,Rajasthan,degC,0.5,27.294,1.144,0.28,29.135,28.588,0.963,1.289,1.447,49,MATERIAL
+twb_annual_max,Sikkim,degC,0.5,16.699,2.774,0.527,19.784,17.976,2.471,1.084,1.208,6,MATERIAL
+twb_annual_max,Tamil Nadu,degC,0.5,26.139,1.274,0.217,28.357,27.337,1.104,1.211,1.261,37,MATERIAL
+twb_annual_max,Telangana,degC,0.5,25.962,1.676,0.367,28.789,27.417,1.398,1.324,1.455,33,MATERIAL
+twb_annual_max,Tripura,degC,0.5,27.604,0.829,0.173,29.291,28.402,0.889,1.027,1.045,8,MATERIAL
+twb_annual_max,Uttar Pradesh,degC,0.5,28.299,1.668,0.356,31.196,29.686,1.519,1.442,1.54,75,MATERIAL
+twb_annual_max,Uttarakhand,degC,0.5,24.042,0.939,0.212,25.66,25.216,0.876,1.243,1.357,7,MATERIAL
+twb_annual_max,West Bengal,degC,0.5,28.072,1.664,0.306,30.866,29.229,1.637,1.357,1.328,23,MATERIAL
+twb_annual_mean,Andhra Pradesh,degC,0.5,23.203,0.827,0.087,23.812,24.205,0.821,1.118,1.118,26,MATERIAL
+twb_annual_mean,Arunachal Pradesh,degC,0.5,13.256,2.673,0.128,17.19,14.555,2.635,1.428,1.428,26,MATERIAL
+twb_annual_mean,Assam,degC,0.5,21.015,1.38,0.086,23.388,22.153,1.379,1.311,1.312,35,MATERIAL
+twb_annual_mean,Bihar,degC,0.5,21.407,0.366,0.138,22.382,22.376,0.332,1.202,1.199,38,NO EFFECT
+twb_annual_mean,Chhattisgarh,degC,0.5,20.364,1.347,0.163,20.136,21.53,1.395,1.313,1.31,33,MATERIAL
+twb_annual_mean,"Dadra, Nagar Haveli, Daman & Diu",degC,0.5,22.429,1.162,0.09,22.445,23.653,1.208,1.424,1.42,2,MATERIAL
+twb_annual_mean,Delhi,degC,0.5,19.61,1.387,0.216,19.378,20.634,1.256,1.334,1.332,11,MATERIAL
+twb_annual_mean,Goa,degC,0.5,22.988,0.42,0.15,24.41,23.906,0.504,1.175,1.172,2,FUTURE-ONLY (unverifiable)
+twb_annual_mean,Gujarat,degC,0.5,21.231,1.067,0.132,21.365,22.397,1.043,1.419,1.418,33,MATERIAL
+twb_annual_mean,Haryana,degC,0.5,19.338,1.322,0.175,19.217,20.439,1.222,1.384,1.383,18,MATERIAL
+twb_annual_mean,Jharkhand,degC,0.5,20.432,0.495,0.145,20.934,21.407,0.496,1.164,1.162,24,MARGINAL
+twb_annual_mean,Karnataka,degC,0.5,20.677,0.661,0.106,22.278,21.678,0.674,1.173,1.171,31,MATERIAL
+twb_annual_mean,Kerala,degC,0.5,23.245,0.395,0.175,24.192,24.12,0.339,1.117,1.116,14,NO EFFECT
+twb_annual_mean,Madhya Pradesh,degC,0.5,19.388,1.418,0.123,19.131,20.567,1.436,1.427,1.424,52,MATERIAL
+twb_annual_mean,Maharashtra,degC,0.5,20.851,0.72,0.122,21.296,22.002,0.739,1.366,1.362,36,MATERIAL
+twb_annual_mean,Manipur,degC,0.5,18.071,0.922,0.088,18.277,19.153,0.887,1.279,1.281,16,MATERIAL
+twb_annual_mean,Meghalaya,degC,0.5,19.592,0.931,0.121,19.759,20.587,0.88,1.21,1.211,12,MATERIAL
+twb_annual_mean,Mizoram,degC,0.5,19.454,0.907,0.134,19.591,20.425,0.834,1.176,1.177,11,MATERIAL
+twb_annual_mean,Nagaland,degC,0.5,17.664,0.853,0.048,19.237,18.828,0.846,1.331,1.333,16,MATERIAL
+twb_annual_mean,Odisha,degC,0.5,22.108,0.978,0.135,22.235,23.208,0.973,1.236,1.235,30,MATERIAL
+twb_annual_mean,Puducherry,degC,0.5,24.3,0.47,0.07,25.383,25.252,0.461,1.081,1.08,4,MARGINAL
+twb_annual_mean,Punjab,degC,0.5,19.189,0.795,0.131,19.653,20.427,0.774,1.442,1.441,1,MATERIAL
+twb_annual_mean,Rajasthan,degC,0.5,18.96,1.901,0.16,18.311,20.175,1.864,1.48,1.48,49,MATERIAL
+twb_annual_mean,Sikkim,degC,0.5,9.659,1.7,0.135,10.717,10.855,1.712,1.463,1.462,6,MATERIAL
+twb_annual_mean,Tamil Nadu,degC,0.5,23.159,0.721,0.118,24.719,24.067,0.735,1.085,1.084,37,MATERIAL
+twb_annual_mean,Telangana,degC,0.5,21.799,0.986,0.127,21.933,22.928,0.995,1.271,1.27,33,MATERIAL
+twb_annual_mean,Tripura,degC,0.5,22.403,0.563,0.14,22.83,23.309,0.479,1.116,1.117,8,MARGINAL
+twb_annual_mean,Uttar Pradesh,degC,0.5,20.326,1.041,0.14,20.503,21.403,0.99,1.322,1.32,75,MATERIAL
+twb_annual_mean,Uttarakhand,degC,0.5,15.555,0.73,0.119,16.875,16.746,0.707,1.436,1.434,7,MATERIAL
+twb_annual_mean,West Bengal,degC,0.5,21.896,0.491,0.171,22.91,22.802,0.492,1.141,1.14,23,MARGINAL
+twb_days_ge_28,Andhra Pradesh,count,5.0,3.863,2.985,0.777,23.933,17.688,12.394,22.253,14.961,26,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Arunachal Pradesh,count,5.0,0.004,9.57,0.01,17.849,0.561,17.288,9.249,0.557,26,MATERIAL
+twb_days_ge_28,Assam,count,5.0,1.065,48.255,0.462,95.917,16.714,79.221,52.975,16.103,35,MATERIAL
+twb_days_ge_28,Bihar,count,5.0,5.102,80.923,3.108,111.378,40.457,70.921,31.633,37.428,38,MATERIAL
+twb_days_ge_28,Chhattisgarh,count,5.0,0.012,2.826,0.155,15.239,4.497,10.748,13.249,4.476,33,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,"Dadra, Nagar Haveli, Daman & Diu",count,5.0,0.0,9.903,0.118,42.449,9.628,32.821,35.355,9.614,2,MATERIAL
+twb_days_ge_28,Delhi,count,5.0,4.867,11.043,1.999,40.771,30.027,10.745,28.304,27.595,11,MATERIAL
+twb_days_ge_28,Goa,count,5.0,0.0,3.033,0.046,16.625,1.516,15.109,13.682,1.502,2,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Gujarat,count,5.0,0.122,10.986,0.608,35.264,15.393,20.036,26.999,15.27,33,MATERIAL
+twb_days_ge_28,Haryana,count,5.0,3.699,6.386,1.248,28.983,28.118,4.767,22.827,26.296,18,MARGINAL
+twb_days_ge_28,Jharkhand,count,5.0,0.668,18.585,0.558,51.486,12.874,38.611,35.07,12.487,24,MATERIAL
+twb_days_ge_28,Karnataka,count,5.0,0.0,0.397,0.003,3.513,0.136,3.377,3.105,0.134,31,NO EFFECT
+twb_days_ge_28,Kerala,count,5.0,0.0,0.912,0.02,7.424,1.174,6.261,6.796,1.171,14,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Madhya Pradesh,count,5.0,0.098,4.694,0.223,17.297,5.435,11.865,13.694,5.363,52,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Maharashtra,count,5.0,0.0,3.34,0.041,15.383,2.261,13.122,12.836,2.251,36,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Manipur,count,5.0,0.0,0.065,0.01,1.449,0.078,1.37,1.409,0.078,16,NO EFFECT
+twb_days_ge_28,Meghalaya,count,5.0,0.109,2.458,0.071,12.758,2.235,10.637,10.778,2.17,12,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Mizoram,count,5.0,0.0,0.121,0.022,1.548,0.28,1.279,1.483,0.276,11,NO EFFECT
+twb_days_ge_28,Nagaland,count,5.0,0.0,0.639,0.006,11.756,0.278,11.478,11.301,0.277,16,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Odisha,count,5.0,3.618,4.816,1.086,36.565,20.308,17.226,31.552,17.859,30,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Puducherry,count,5.0,3.249,4.201,0.494,36.259,17.57,18.693,33.014,15.183,4,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Punjab,count,5.0,5.335,5.698,1.06,31.156,34.064,4.962,25.073,31.372,1,MARGINAL
+twb_days_ge_28,Rajasthan,count,5.0,0.593,4.017,0.375,16.413,13.327,6.373,13.205,12.991,49,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Sikkim,count,5.0,0.0,0.003,0.0,0.005,0.0,0.005,0.002,0.0,6,NO EFFECT
+twb_days_ge_28,Tamil Nadu,count,5.0,0.098,2.47,0.084,22.087,4.875,17.298,20.164,4.804,37,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Telangana,count,5.0,0.097,1.434,0.066,11.726,3.637,8.352,10.591,3.588,33,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,Tripura,count,5.0,0.223,8.293,0.155,62.832,10.048,52.784,56.845,9.926,8,MATERIAL
+twb_days_ge_28,Uttar Pradesh,count,5.0,4.121,49.089,2.866,76.518,34.96,41.566,27.908,32.362,75,MATERIAL
+twb_days_ge_28,Uttarakhand,count,5.0,0.184,7.477,0.093,16.512,3.873,12.639,10.062,3.805,7,MATERIAL
+twb_days_ge_28,West Bengal,count,5.0,6.811,72.827,2.532,110.406,37.147,73.259,37.486,33.246,23,MATERIAL
+twb_days_ge_30,Andhra Pradesh,count,5.0,0.0,0.04,0.012,0.683,0.577,0.625,0.657,0.576,26,NO EFFECT
+twb_days_ge_30,Arunachal Pradesh,count,5.0,0.0,0.647,0.0,4.459,0.002,4.457,3.969,0.002,26,NO EFFECT
+twb_days_ge_30,Assam,count,5.0,0.0,0.321,0.013,13.351,0.151,13.2,13.143,0.149,35,FUTURE-ONLY (unverifiable)
+twb_days_ge_30,Bihar,count,5.0,0.0,2.677,0.047,23.825,3.911,19.914,21.781,3.909,38,FUTURE-ONLY (unverifiable)
+twb_days_ge_30,Chhattisgarh,count,5.0,0.0,0.637,0.015,2.286,0.281,2.007,1.843,0.28,33,NO EFFECT
+twb_days_ge_30,"Dadra, Nagar Haveli, Daman & Diu",count,5.0,0.0,2.02,0.0,4.592,0.026,4.565,3.149,0.026,2,NO EFFECT
+twb_days_ge_30,Delhi,count,5.0,0.0,0.592,0.069,7.304,3.164,4.212,6.898,3.155,11,NO EFFECT
+twb_days_ge_30,Goa,count,5.0,0.0,0.308,0.0,2.299,0.007,2.292,1.992,0.007,2,NO EFFECT
+twb_days_ge_30,Gujarat,count,5.0,0.0,1.136,0.002,5.663,0.143,5.523,4.924,0.143,33,FUTURE-ONLY (unverifiable)
+twb_days_ge_30,Haryana,count,5.0,0.0,0.354,0.024,5.864,2.295,3.695,5.61,2.293,18,NO EFFECT
+twb_days_ge_30,Jharkhand,count,5.0,0.0,1.568,0.007,7.235,1.136,6.099,5.985,1.133,24,FUTURE-ONLY (unverifiable)
+twb_days_ge_30,Karnataka,count,5.0,0.0,0.023,0.0,0.425,0.0,0.425,0.388,-0.0,31,NO EFFECT
+twb_days_ge_30,Kerala,count,5.0,0.0,0.004,0.0,0.226,0.013,0.213,0.222,0.013,14,NO EFFECT
+twb_days_ge_30,Madhya Pradesh,count,5.0,0.0,0.855,0.003,3.663,0.346,3.317,3.11,0.346,52,NO EFFECT
+twb_days_ge_30,Maharashtra,count,5.0,0.0,0.587,0.001,2.267,0.018,2.249,1.76,0.018,36,NO EFFECT
+twb_days_ge_30,Manipur,count,5.0,0.0,0.004,0.0,0.004,0.0,0.004,0.003,0.0,16,NO EFFECT
+twb_days_ge_30,Meghalaya,count,5.0,0.0,0.001,0.0,0.207,0.01,0.197,0.202,0.006,12,NO EFFECT
+twb_days_ge_30,Mizoram,count,5.0,0.0,0.003,0.0,0.003,0.0,0.003,0.001,0.0,11,NO EFFECT
+twb_days_ge_30,Nagaland,count,5.0,0.0,0.006,0.0,0.094,0.001,0.093,0.092,0.001,16,NO EFFECT
+twb_days_ge_30,Odisha,count,5.0,0.006,0.375,0.012,2.261,0.671,1.863,1.96,0.659,30,NO EFFECT
+twb_days_ge_30,Puducherry,count,5.0,0.0,0.025,0.006,1.163,0.437,0.935,1.149,0.437,4,NO EFFECT
+twb_days_ge_30,Punjab,count,5.0,0.0,0.133,0.0,5.807,2.382,3.708,5.712,2.382,1,NO EFFECT
+twb_days_ge_30,Rajasthan,count,5.0,0.0,0.455,0.011,3.418,0.494,2.945,3.12,0.492,49,NO EFFECT
+twb_days_ge_30,Sikkim,count,5.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,6,NO EFFECT
+twb_days_ge_30,Tamil Nadu,count,5.0,0.0,0.011,0.0,0.994,0.033,0.96,0.987,0.033,37,NO EFFECT
+twb_days_ge_30,Telangana,count,5.0,0.0,0.101,0.0,1.101,0.036,1.066,0.958,0.036,33,NO EFFECT
+twb_days_ge_30,Tripura,count,5.0,0.0,0.029,0.007,0.64,0.024,0.616,0.615,0.024,8,NO EFFECT
+twb_days_ge_30,Uttar Pradesh,count,5.0,0.0,2.207,0.089,15.827,4.716,11.129,14.258,4.71,75,FUTURE-ONLY (unverifiable)
+twb_days_ge_30,Uttarakhand,count,5.0,0.0,0.079,0.0,1.811,0.171,1.641,1.762,0.171,7,NO EFFECT
+twb_days_ge_30,West Bengal,count,5.0,0.031,1.571,0.078,16.922,2.266,14.656,15.587,2.226,23,FUTURE-ONLY (unverifiable)
+twb_summer_mean,Andhra Pradesh,degC,0.5,24.55,1.76,0.159,23.808,25.477,1.711,1.096,1.096,26,MATERIAL
+twb_summer_mean,Arunachal Pradesh,degC,0.5,13.014,2.631,0.199,16.653,14.02,2.632,1.202,1.202,26,MATERIAL
+twb_summer_mean,Assam,degC,0.5,21.131,1.372,0.237,22.581,21.985,1.352,1.149,1.15,35,MATERIAL
+twb_summer_mean,Bihar,degC,0.5,21.747,1.522,0.299,21.224,22.578,1.36,1.236,1.24,38,MATERIAL
+twb_summer_mean,Chhattisgarh,degC,0.5,20.694,3.485,0.255,18.215,21.729,3.514,1.225,1.23,33,MATERIAL
+twb_summer_mean,"Dadra, Nagar Haveli, Daman & Diu",degC,0.5,23.224,3.083,0.111,21.148,24.288,3.14,1.292,1.295,2,MATERIAL
+twb_summer_mean,Delhi,degC,0.5,19.86,2.61,0.617,18.506,20.719,2.213,1.414,1.414,11,MATERIAL
+twb_summer_mean,Goa,degC,0.5,24.23,0.835,0.216,24.323,25.054,0.731,1.19,1.191,2,MATERIAL
+twb_summer_mean,Gujarat,degC,0.5,21.772,1.546,0.187,21.329,22.906,1.591,1.356,1.362,33,MATERIAL
+twb_summer_mean,Haryana,degC,0.5,19.536,2.22,0.505,18.618,20.525,1.907,1.461,1.463,18,MATERIAL
+twb_summer_mean,Jharkhand,degC,0.5,20.923,1.916,0.28,19.958,21.774,1.816,1.178,1.184,24,MATERIAL
+twb_summer_mean,Karnataka,degC,0.5,21.831,0.787,0.229,22.228,22.809,0.754,1.204,1.205,31,MATERIAL
+twb_summer_mean,Kerala,degC,0.5,24.342,0.467,0.259,25.11,25.251,0.389,1.169,1.169,14,NO EFFECT
+twb_summer_mean,Madhya Pradesh,degC,0.5,19.209,2.912,0.217,17.325,20.284,2.958,1.334,1.341,52,MATERIAL
+twb_summer_mean,Maharashtra,degC,0.5,21.225,2.455,0.243,19.766,22.31,2.544,1.299,1.3,36,MATERIAL
+twb_summer_mean,Manipur,degC,0.5,18.268,2.098,0.226,17.169,19.16,1.992,1.151,1.155,16,MATERIAL
+twb_summer_mean,Meghalaya,degC,0.5,20.057,2.345,0.339,18.589,20.736,2.148,1.075,1.075,12,MATERIAL
+twb_summer_mean,Mizoram,degC,0.5,19.958,2.435,0.316,18.437,20.736,2.299,1.06,1.059,11,MATERIAL
+twb_summer_mean,Nagaland,degC,0.5,17.628,0.811,0.165,18.305,18.536,0.78,1.155,1.158,16,MATERIAL
+twb_summer_mean,Odisha,degC,0.5,23.436,2.526,0.201,21.923,24.447,2.524,1.198,1.198,30,MATERIAL
+twb_summer_mean,Puducherry,degC,0.5,25.522,0.731,0.135,25.933,26.479,0.741,1.127,1.127,4,MATERIAL
+twb_summer_mean,Punjab,degC,0.5,19.342,1.004,0.338,19.713,20.53,0.817,1.533,1.537,1,MATERIAL
+twb_summer_mean,Rajasthan,degC,0.5,18.945,2.685,0.297,17.473,20.072,2.599,1.427,1.431,49,MATERIAL
+twb_summer_mean,Sikkim,degC,0.5,9.409,1.604,0.217,9.771,10.403,1.609,1.395,1.402,6,MATERIAL
+twb_summer_mean,Tamil Nadu,degC,0.5,24.236,0.439,0.197,25.313,25.232,0.437,1.198,1.199,37,NO EFFECT
+twb_summer_mean,Telangana,degC,0.5,22.72,3.06,0.248,20.721,23.729,3.009,1.182,1.183,33,MATERIAL
+twb_summer_mean,Tripura,degC,0.5,23.414,2.478,0.379,21.83,24.141,2.31,1.047,1.048,8,MATERIAL
+twb_summer_mean,Uttar Pradesh,degC,0.5,20.435,2.526,0.364,19.059,21.368,2.309,1.358,1.364,75,MATERIAL
+twb_summer_mean,Uttarakhand,degC,0.5,15.355,0.838,0.381,16.348,16.432,0.735,1.514,1.513,7,MARGINAL
+twb_summer_mean,West Bengal,degC,0.5,23.093,1.689,0.43,22.5,23.82,1.487,1.172,1.172,23,MATERIAL
