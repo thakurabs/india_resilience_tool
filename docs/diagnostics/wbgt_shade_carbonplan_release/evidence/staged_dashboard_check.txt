@@ -1,0 +1,40 @@
+PASS  bundle root is the intended one  'C:\\irt_shade_bundle'
+PASS  the app script runs clean into the map view  {'selectboxes': ['selected_bundle', 'selected_var', 'sel_scenario', 'sel_period', 'sel_stat', 'map_mode', 'analysis_mode', 'selected_state', 'selected_district', 'overlay_rural_facilities_density_category'], 'markdown_elements': 39}
+PASS  all four metrics are selectable in the Heat Stress domain  {'metric_options': 23, 'shade_labels': ['Shaded WBGT (Annual Mean)', 'Shaded WBGT Days (\u2265 28\xb0C)', 'Shaded WBGT Days (\u2265 30\xb0C)', 'Shaded WBGT Days (\u2265 32\xb0C)']}
+PASS  wbgt_shade_stull_annual_mean | Telangana/Hyderabad | district (ordinary mainland)  {'charts': 2, 'dataframes': 0, 'downloads': 0, 'text_chars': 2225}
+PASS  wbgt_shade_stull_annual_mean | Telangana/Hyderabad | block (ordinary mainland)  {'charts': 2, 'dataframes': 0, 'downloads': 0, 'text_chars': 2245}
+PASS  wbgt_shade_stull_annual_mean | Gujarat/Surat | district (coastal, partially excluded)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 319}
+PASS  wbgt_shade_stull_annual_mean | Gujarat/Surat | block (coastal, partially excluded)  {'charts': 1, 'dataframes': 0, 'downloads': 0, 'text_chars': 2434}
+PASS  wbgt_shade_stull_annual_mean | Andaman & Nicobar Islands/Nicobars | district (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 319, 'no_data_shown': True}
+PASS  wbgt_shade_stull_annual_mean | Andaman & Nicobar Islands/Nicobars | block (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 313, 'no_data_shown': True}
+PASS  wbgt_shade_stull_annual_mean | Lakshadweep/Lakshadweep | district (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 318, 'no_data_shown': True}
+PASS  wbgt_shade_stull_annual_mean | Lakshadweep/Lakshadweep | block (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 395, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_28 | Telangana/Hyderabad | district (ordinary mainland)  {'charts': 2, 'dataframes': 0, 'downloads': 0, 'text_chars': 2118}
+PASS  wbgt_shade_stull_days_ge_28 | Telangana/Hyderabad | block (ordinary mainland)  {'charts': 2, 'dataframes': 0, 'downloads': 0, 'text_chars': 2139}
+PASS  wbgt_shade_stull_days_ge_28 | Gujarat/Surat | district (coastal, partially excluded)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 319}
+PASS  wbgt_shade_stull_days_ge_28 | Gujarat/Surat | block (coastal, partially excluded)  {'charts': 1, 'dataframes': 0, 'downloads': 0, 'text_chars': 2441}
+PASS  wbgt_shade_stull_days_ge_28 | Andaman & Nicobar Islands/Nicobars | district (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 319, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_28 | Andaman & Nicobar Islands/Nicobars | block (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 313, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_28 | Lakshadweep/Lakshadweep | district (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 318, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_28 | Lakshadweep/Lakshadweep | block (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 395, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_30 | Telangana/Hyderabad | district (ordinary mainland)  {'charts': 2, 'dataframes': 0, 'downloads': 0, 'text_chars': 2113}
+PASS  wbgt_shade_stull_days_ge_30 | Telangana/Hyderabad | block (ordinary mainland)  {'charts': 2, 'dataframes': 0, 'downloads': 0, 'text_chars': 2133}
+PASS  wbgt_shade_stull_days_ge_30 | Gujarat/Surat | district (coastal, partially excluded)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 319}
+PASS  wbgt_shade_stull_days_ge_30 | Gujarat/Surat | block (coastal, partially excluded)  {'charts': 1, 'dataframes': 0, 'downloads': 0, 'text_chars': 2328}
+PASS  wbgt_shade_stull_days_ge_30 | Andaman & Nicobar Islands/Nicobars | district (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 319, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_30 | Andaman & Nicobar Islands/Nicobars | block (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 313, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_30 | Lakshadweep/Lakshadweep | district (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 318, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_30 | Lakshadweep/Lakshadweep | block (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 395, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_32 | Telangana/Hyderabad | district (ordinary mainland)  {'charts': 2, 'dataframes': 0, 'downloads': 0, 'text_chars': 2109}
+PASS  wbgt_shade_stull_days_ge_32 | Telangana/Hyderabad | block (ordinary mainland)  {'charts': 2, 'dataframes': 0, 'downloads': 0, 'text_chars': 2129}
+PASS  wbgt_shade_stull_days_ge_32 | Gujarat/Surat | district (coastal, partially excluded)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 319}
+PASS  wbgt_shade_stull_days_ge_32 | Gujarat/Surat | block (coastal, partially excluded)  {'charts': 1, 'dataframes': 0, 'downloads': 0, 'text_chars': 2323}
+PASS  wbgt_shade_stull_days_ge_32 | Andaman & Nicobar Islands/Nicobars | district (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 319, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_32 | Andaman & Nicobar Islands/Nicobars | block (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 313, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_32 | Lakshadweep/Lakshadweep | district (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 318, 'no_data_shown': True}
+PASS  wbgt_shade_stull_days_ge_32 | Lakshadweep/Lakshadweep | block (all units ineligible)  {'charts': 0, 'dataframes': 0, 'downloads': 0, 'text_chars': 395, 'no_data_shown': True}
+PASS  download surfaces match the metric's source type  {'download_buttons': 0, 'sizes': [], 'case_study_expanders': ['Case study export (single district, multi-index)'], 'right_panel_sections': ['Exposure Snapshot', 'Hydrological Context', 'Risk summary', 'Trend over time', 'Scenario comparison (period-mean)', 'Case study export (single district, multi-index)', 'View 22 included metrics', 'Geography & analysis focus']}
+PASS  a model selection control is present  {'controls': 24}
+PASS  landing view -- deferred to the production run (the staged bundle has no Glance view models)
+PASS  incumbent metrics render -- deferred to the production run (the staged bundle has no incumbents)
+SUMMARY [staged] PASS: 39 pass, 0 not pass

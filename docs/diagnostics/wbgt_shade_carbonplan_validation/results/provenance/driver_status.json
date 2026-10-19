@@ -1,0 +1,32 @@
+{
+ "ACCESS-CM2_historical_1985_2014": {
+  "eligible": true,
+  "issues": [],
+  "calendar": "proleptic_gregorian",
+  "seconds": 29.8
+ },
+ "ACCESS-CM2_ssp245_2020_2059": {
+  "eligible": true,
+  "issues": [],
+  "calendar": "proleptic_gregorian",
+  "seconds": 38.3
+ },
+ "CMCC-CM2-SR5_historical_1985_2014": {
+  "eligible": true,
+  "issues": [],
+  "calendar": "365_day",
+  "seconds": 28.7
+ },
+ "CMCC-CM2-SR5_ssp245_2020_2059": {
+  "eligible": true,
+  "issues": [],
+  "calendar": "365_day",
+  "seconds": 36.6
+ },
+ "ACCESS-CM2_ssp245_2060_2080_aw": {
+  "eligible": true,
+  "issues": [],
+  "calendar": "proleptic_gregorian",
+  "seconds": 10.8
+ }
+}

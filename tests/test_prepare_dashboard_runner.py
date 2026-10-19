@@ -4,6 +4,7 @@ import argparse
 import io
 import subprocess
 from contextlib import redirect_stdout
+from pathlib import Path
 
 import pytest
 
@@ -18,10 +19,13 @@ from tools.runs.prepare_dashboard import (
     build_blocks_geojson_plan,
     build_climate_hazards_plan,
     build_command_plan,
+    build_built_up_area_plan,
     build_dashboard_package_plan,
     build_groundwater_plan,
     build_jrc_flood_depth_plan,
+    build_lulc_plan,
     build_population_plan,
+    build_rural_facilities_plan,
     build_cli,
     execute_plan,
     main,
@@ -72,18 +76,18 @@ def test_aqueduct_bundle_builds_expected_default_steps() -> None:
         "blocks-geojson",
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
-        "aqueduct-hydro-crosswalk",
         "aqueduct-admin-masters",
-        "aqueduct-hydro-masters",
         "aqueduct-validate",
         "processed-optimised-build",
+        "processed-optimised-state-values",
         "processed-optimised-audit",
     ]
-    assert "--overwrite" in plan[-2].argv
-    assert "--prune-scope" not in plan[-2].argv
-    assert "--full-rebuild" not in plan[-2].argv
-    assert "--metric" in plan[-2].argv
-    assert "--skip-audit" in plan[-2].argv
+    build_step = plan[labels.index("processed-optimised-build")]
+    assert "--overwrite" in build_step.argv
+    assert "--prune-scope" not in build_step.argv
+    assert "--full-rebuild" not in build_step.argv
+    assert "--metric" in build_step.argv
+    assert "--skip-audit" in build_step.argv
 
 
 def test_aqueduct_bundle_requires_inputs_when_prepare_baseline_enabled() -> None:
@@ -148,6 +152,10 @@ def test_climate_hazards_bundle_expands_admin_levels_and_adds_runtime_steps() ->
     assert plan[6].argv[-1] == "--quiet"
     assert plan[7].argv[-1] == "--quiet"
     assert plan[8].argv.count("--level") == 2
+    # Backward-compat guard: the climate composite step passes neither the metrics
+    # override nor force_overwrite, so no "--overwrite" must leak in (overwrite=False here).
+    assert "--overwrite" not in plan[6].argv
+    assert "--overwrite" not in plan[7].argv
 
 
 def test_climate_hazards_audit_only_only_runs_audit() -> None:
@@ -169,17 +177,17 @@ def test_climate_hazards_audit_only_only_runs_audit() -> None:
         skip_audit=False,
     )
     scope = _climate_scope(
-        levels=["district", "block", "basin", "sub_basin"],
+        levels=["district", "block"],
         pending_by_level={"district": ["tas_annual_mean"]},
     )
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
     assert [step.label for step in plan] == ["processed-optimised-audit"]
-    assert plan[0].argv.count("--level") == 4
+    assert plan[0].argv.count("--level") == 2
 
 
 def test_climate_hazards_skip_optimised_removes_only_build_stage() -> None:
     args = argparse.Namespace(
-        level="hydro",
+        level="admin",
         state=None,
         metrics=["tas_annual_mean"],
         models=None,
@@ -196,10 +204,10 @@ def test_climate_hazards_skip_optimised_removes_only_build_stage() -> None:
         skip_audit=False,
     )
     scope = _climate_scope(
-        levels=["basin", "sub_basin"],
+        levels=["district", "block"],
         pending_by_level={
-            "basin": ["tas_annual_mean"],
-            "sub_basin": ["tas_annual_mean"],
+            "district": ["tas_annual_mean"],
+            "block": ["tas_annual_mean"],
         },
     )
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
@@ -237,8 +245,8 @@ def test_climate_hazards_skip_masters_skips_composite_stage() -> None:
 
 def test_climate_hazards_overwrite_passes_flag_to_compute() -> None:
     args = argparse.Namespace(
-        level="basin",
-        state=None,
+        level="district",
+        state=["Telangana"],
         metrics=["tas_annual_mean"],
         models=None,
         scenarios=None,
@@ -253,11 +261,11 @@ def test_climate_hazards_overwrite_passes_flag_to_compute() -> None:
         skip_optimised=True,
         skip_audit=False,
     )
-    scope = _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]})
+    scope = _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]})
 
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
 
-    assert plan[0].label == "climate-compute:basin"
+    assert plan[0].label == "climate-compute:district:Telangana"
     assert "--overwrite" in plan[0].argv
     assert "--skip-existing" not in plan[0].argv
 
@@ -281,7 +289,7 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
         skip_audit=False,
     )
     scope = ClimateRuntimeScope(
-        levels=("district", "block", "basin", "sub_basin"),
+        levels=("district", "block"),
         by_level={
             "district": ClimateLevelReadiness(
                 level="district",
@@ -305,28 +313,6 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
                 unrunnable_metrics=(),
                 unrunnable_reasons_by_metric={},
             ),
-            "basin": ClimateLevelReadiness(
-                level="basin",
-                selected_metrics=("metric_a", "metric_b"),
-                runnable_metrics=("metric_a", "metric_b"),
-                compute_pending_metrics=(),
-                masters_pending_metrics=(),
-                optimized_pending_metrics=(),
-                complete_metrics=("metric_a", "metric_b"),
-                unrunnable_metrics=(),
-                unrunnable_reasons_by_metric={},
-            ),
-            "sub_basin": ClimateLevelReadiness(
-                level="sub_basin",
-                selected_metrics=("metric_a", "metric_b"),
-                runnable_metrics=("metric_a", "metric_b"),
-                compute_pending_metrics=("metric_b",),
-                masters_pending_metrics=("metric_b",),
-                optimized_pending_metrics=("metric_b",),
-                complete_metrics=("metric_a",),
-                unrunnable_metrics=(),
-                unrunnable_reasons_by_metric={},
-            ),
         },
         global_issues=(),
     )
@@ -334,61 +320,18 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
 
     assert [step.label for step in plan] == [
-        "processed-optimised-build:district+block+basin+sub_basin",
+        "processed-optimised-build:district+block",
         "processed-optimised-audit",
     ]
-    assert plan[0].argv.count("--level") == 4
+    assert plan[0].argv.count("--level") == 2
     assert "--overwrite" in plan[0].argv
     assert "--prune-scope" not in plan[0].argv
     assert "--full-rebuild" not in plan[0].argv
-    assert plan[0].argv.count("--metric") == 8
+    assert plan[0].argv.count("--metric") == 9
     assert "composite_heat_risk" in plan[0].argv
+    assert "composite_water_risk" in plan[0].argv
     assert "metric_a" in plan[0].argv
     assert "metric_b" in plan[0].argv
-
-
-def test_climate_hazards_plans_only_sub_basin_when_basin_is_complete() -> None:
-    args = argparse.Namespace(
-        level="hydro",
-        state=None,
-        metrics=["tas_annual_mean"],
-        models=None,
-        scenarios=None,
-        workers=None,
-        verbose=False,
-        spi_legacy=False,
-        spi_distribution=None,
-        skip_compute=False,
-        skip_masters=False,
-        overwrite=False,
-        audit_only=False,
-        skip_optimised=False,
-        skip_audit=False,
-    )
-    scope = _climate_scope(
-        levels=["basin", "sub_basin"],
-        pending_by_level={"sub_basin": ["tas_annual_mean"]},
-    )
-    scope.by_level["basin"] = ClimateLevelReadiness(
-        level="basin",
-        selected_metrics=("tas_annual_mean",),
-        runnable_metrics=("tas_annual_mean",),
-        compute_pending_metrics=(),
-        masters_pending_metrics=(),
-        optimized_pending_metrics=(),
-        complete_metrics=("tas_annual_mean",),
-        unrunnable_metrics=(),
-        unrunnable_reasons_by_metric={},
-    )
-    plan = build_climate_hazards_plan(args, runtime_scope=scope)
-    assert [step.label for step in plan] == [
-        "climate-compute:sub_basin",
-        "climate-masters:sub_basin",
-        "processed-optimised-build:sub_basin",
-        "processed-optimised-audit",
-    ]
-    assert "--level" in plan[2].argv
-    assert "sub_basin" in plan[2].argv
 
 
 def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(monkeypatch) -> None:
@@ -397,7 +340,7 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
         [
             "dashboard-package",
             "--level",
-            "hydro",
+            "admin",
             "--overwrite",
             "--include-pytest",
         ]
@@ -413,6 +356,16 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
             pending_metrics=["population_total"],
             has_global_issues=False,
         ),
+        "built-up-area": BundleRuntimeScope(
+            selected_metrics=["built_up_area_km2"],
+            pending_metrics=["built_up_area_km2"],
+            has_global_issues=False,
+        ),
+        "lulc": BundleRuntimeScope(
+            selected_metrics=["lulc_agri_area_km2"],
+            pending_metrics=["lulc_agri_area_km2"],
+            has_global_issues=False,
+        ),
         "groundwater": BundleRuntimeScope(
             selected_metrics=["gw_stage_extraction_pct"],
             pending_metrics=["gw_stage_extraction_pct"],
@@ -422,12 +375,20 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
         lambda *_args, **_kwargs: _climate_scope(
-            levels=["basin", "sub_basin"],
+            levels=["district", "block"],
             pending_by_level={
-                "basin": ["tas_annual_mean"],
-                "sub_basin": ["tas_annual_mean"],
+                "district": ["tas_annual_mean"],
+                "block": ["tas_annual_mean"],
             },
         ),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_composite_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_proposal_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
     )
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_runtime_scope",
@@ -435,7 +396,14 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     )
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_bundle_metrics",
-        lambda bundle, _args: ["tas_annual_mean", "aq_water_stress", "population_total", "gw_stage_extraction_pct"]
+        lambda bundle, _args: [
+            "tas_annual_mean",
+            "aq_water_stress",
+            "population_total",
+            "built_up_area_km2",
+            "lulc_agri_area_km2",
+            "gw_stage_extraction_pct",
+        ]
         if bundle == "dashboard-package"
         else [],
     )
@@ -443,14 +411,16 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     labels = [step.label for step in plan]
     assert labels[0:5] == [
         "blocks-geojson",
-        "climate-compute:basin",
-        "climate-compute:sub_basin",
-        "climate-masters:basin",
-        "climate-masters:sub_basin",
+        "climate-compute:district:Telangana",
+        "climate-compute:block:Telangana",
+        "climate-masters:district",
+        "climate-masters:block",
     ]
     assert labels.count("processed-optimised-build") == 1
     assert labels.count("processed-optimised-audit") == 1
     assert "population-admin-masters" in labels
+    assert "built-up-area-admin-masters" in labels
+    assert "lulc-admin-masters" in labels
     assert "groundwater-district-masters" in labels
     assert labels[-1] == "pytest-validation"
 
@@ -469,9 +439,19 @@ def test_dashboard_package_audit_only_allows_missing_jrc_inputs(monkeypatch) -> 
         "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
         lambda *_args, **_kwargs: _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
     )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_composite_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(selected_metrics=["composite_heat_risk"], pending_metrics=["composite_heat_risk"], has_global_issues=False),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_proposal_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(selected_metrics=["composite_health_risk"], pending_metrics=["composite_health_risk"], has_global_issues=False),
+    )
     scope_map = {
         "aqueduct": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "population-exposure": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "built-up-area": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "lulc": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "groundwater": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "jrc-flood-depth": BundleRuntimeScope(
             selected_metrics=["jrc_flood_depth_rp10"],
@@ -509,6 +489,8 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
     scope_map = {
         "aqueduct": BundleRuntimeScope(selected_metrics=["aq_water_stress"], pending_metrics=["aq_water_stress"], has_global_issues=False),
         "population-exposure": BundleRuntimeScope(selected_metrics=["population_total"], pending_metrics=["population_total"], has_global_issues=False),
+        "built-up-area": BundleRuntimeScope(selected_metrics=["built_up_area_km2"], pending_metrics=["built_up_area_km2"], has_global_issues=False),
+        "lulc": BundleRuntimeScope(selected_metrics=["lulc_agri_area_km2"], pending_metrics=["lulc_agri_area_km2"], has_global_issues=False),
         "groundwater": BundleRuntimeScope(selected_metrics=["gw_stage_extraction_pct"], pending_metrics=["gw_stage_extraction_pct"], has_global_issues=False),
         "jrc-flood-depth": BundleRuntimeScope(
             selected_metrics=["jrc_flood_depth_rp10", "jrc_flood_depth_rp50"],
@@ -524,6 +506,22 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
         ),
     )
     monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_composite_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(
+            selected_metrics=["composite_heat_risk", "composite_heat_stress"],
+            pending_metrics=["composite_heat_risk", "composite_heat_stress"],
+            has_global_issues=False,
+        ),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_proposal_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(
+            selected_metrics=["composite_health_risk", "composite_industrial_risk"],
+            pending_metrics=["composite_health_risk", "composite_industrial_risk"],
+            has_global_issues=False,
+        ),
+    )
+    monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_runtime_scope",
         lambda bundle, *_args, **_kwargs: scope_map[bundle],
     )
@@ -533,6 +531,8 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
             "tas_annual_mean",
             "aq_water_stress",
             "population_total",
+            "built_up_area_km2",
+            "lulc_agri_area_km2",
             "gw_stage_extraction_pct",
             "jrc_flood_depth_rp10",
             "jrc_flood_depth_rp50",
@@ -543,6 +543,10 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
     plan = build_dashboard_package_plan(args)
     labels = [step.label for step in plan]
     assert labels.count("blocks-geojson") == 1
+    assert "proposal-bundles:district" in labels
+    assert "proposal-bundles:block" in labels
+    assert labels.index("proposal-bundles:district") > labels.index("composite-masters:block")
+    assert labels.index("proposal-bundles:district") < labels.index("aqueduct-admin-crosswalk")
     assert "jrc-flood-depth-admin-masters" in labels
     assert labels.count("processed-optimised-build") == 1
     assert labels.count("processed-optimised-audit") == 1
@@ -567,6 +571,7 @@ def test_population_bundle_builds_expected_steps() -> None:
         "blocks-geojson",
         "population-admin-masters",
         "processed-optimised-build",
+        "processed-optimised-state-values",
         "processed-optimised-audit",
     ]
 
@@ -589,11 +594,16 @@ def test_groundwater_bundle_builds_expected_steps() -> None:
     assert [step.label for step in plan] == [
         "groundwater-district-masters",
         "processed-optimised-build",
+        "processed-optimised-state-values",
         "processed-optimised-audit",
     ]
 
 
-def test_jrc_bundle_builds_expected_steps_and_never_forwards_builder_dry_run() -> None:
+def test_jrc_bundle_builds_expected_steps_and_never_forwards_builder_dry_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
     args = argparse.Namespace(
         overwrite=True,
         audit_only=False,
@@ -638,19 +648,237 @@ def test_jrc_bundle_builds_expected_steps_and_never_forwards_builder_dry_run() -
     assert "--overwrite" not in plan[2].argv
 
 
+def test_jrc_bundle_builds_composite_master_before_optimised_audit() -> None:
+    # Regression guard: the JRC plan must build the Riverine Flood composite master
+    # from the freshly built JRC metric masters BEFORE the optimized publish + audit.
+    # Without this the optimized build packages and the audit checks a stale/empty
+    # composite_flood_jrc_depth master and the run fails.
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        source_dir="/tmp/jrc",
+        assume_units="m",
+        districts_path=None,
+        blocks_path=None,
+        qa_dir=None,
+        # The JRC subcommand's --state is a single string (not an argparse nargs list).
+        state="Telangana",
+        verbose=False,
+        dry_run=True,
+        plan_only=False,
+    )
+    selected = [
+        "composite_flood_jrc_depth",
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
+        "jrc_flood_depth_rp100",
+    ]
+    scope = BundleRuntimeScope(
+        selected_metrics=selected,
+        pending_metrics=selected,
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    labels = [step.label for step in plan]
+    # Order is the contract being protected (positional, not presence-based).
+    assert (
+        labels.index("jrc-flood-depth-admin-masters")
+        < labels.index("composite-masters:district")
+        < labels.index("composite-masters:block")
+        < labels.index("processed-optimised-build")
+        < labels.index("processed-optimised-audit")
+    )
+    composite_district = plan[labels.index("composite-masters:district")]
+    assert "--metric" in composite_district.argv
+    assert "composite_flood_jrc_depth" in composite_district.argv
+    # force_overwrite=True: derived composite always rebuilt from just-built masters.
+    assert "--overwrite" in composite_district.argv
+    # Regression guard: a string --state must pass through whole, never char-split
+    # (--state Telangana, not --state T --state e ...).
+    state_idx = [i for i, tok in enumerate(composite_district.argv) if tok == "--state"]
+    assert len(state_idx) == 1
+    assert composite_district.argv[state_idx[0] + 1] == "Telangana"
+    # Raw JRC metric slugs must never be passed to build_composite_metrics.
+    for raw in ("jrc_flood_depth_index_rp100", "jrc_flood_extent_rp100", "jrc_flood_depth_rp100"):
+        assert raw not in composite_district.argv
+
+
+def test_jrc_bundle_composite_keeps_comma_named_ut_whole() -> None:
+    # Regression guard (CHG-0115): the UT "Dadra, Nagar Haveli, Daman & Diu" is the
+    # only Indian state/UT whose canonical name contains commas. The JRC composite
+    # step must pass it WHOLE to build_composite_metrics; the prior _append_repeat /
+    # _resolve_admin_states CSV split fractured it into three phantom states ("Dadra",
+    # "Nagar Haveli", "Daman & Diu") with no source masters, yielding empty composite
+    # parquets that failed the parity audit. Red/green: 3 --state tokens before, 1 after.
+    ut = "Dadra, Nagar Haveli, Daman & Diu"
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        source_dir="/tmp/jrc",
+        assume_units="m",
+        districts_path=None,
+        blocks_path=None,
+        qa_dir=None,
+        state=ut,
+        verbose=False,
+        dry_run=True,
+        plan_only=False,
+    )
+    selected = [
+        "composite_flood_jrc_depth",
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
+        "jrc_flood_depth_rp100",
+    ]
+    scope = BundleRuntimeScope(
+        selected_metrics=selected,
+        pending_metrics=selected,
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    labels = [step.label for step in plan]
+
+    # Both composite steps must carry exactly one --state token, the whole UT name.
+    for label in ("composite-masters:district", "composite-masters:block"):
+        argv = plan[labels.index(label)].argv
+        state_idx = [i for i, tok in enumerate(argv) if tok == "--state"]
+        assert len(state_idx) == 1, f"{label} fractured --state: {argv}"
+        assert argv[state_idx[0] + 1] == ut
+
+    # Writer/reader name parity pin: the admin-masters builder that writes the source
+    # masters must key off the SAME whole name the composite reader will look up.
+    builder = plan[labels.index("jrc-flood-depth-admin-masters")].argv
+    builder_state_idx = [i for i, tok in enumerate(builder) if tok == "--state"]
+    assert len(builder_state_idx) == 1
+    assert builder[builder_state_idx[0] + 1] == ut
+
+
 def test_jrc_bundle_metric_resolution_includes_derived_index_slug() -> None:
     args = argparse.Namespace(include_jrc_flood_depth=False, level="admin", metric_slug=None)
 
     metrics = _resolve_bundle_metrics("jrc-flood-depth", args)
 
     assert metrics == [
+        "composite_flood_jrc_depth",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
-        "jrc_flood_depth_rp10",
-        "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
-        "jrc_flood_depth_rp500",
     ]
+
+
+def test_rural_facilities_bundle_metric_resolution_and_plan() -> None:
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        dry_run=True,
+        plan_only=False,
+        rural_facilities_source_dir="/tmp/rural",
+        rural_facilities_qa_dir="/tmp/qa",
+        rural_facilities_overlay_dir="/tmp/overlay",
+    )
+    metrics = _resolve_bundle_metrics("rural-facilities", args)
+    assert metrics == [
+        "rural_facilities_total_count",
+        "rural_facilities_agro_count",
+        "rural_facilities_education_count",
+        "rural_facilities_health_count",
+        "rural_facilities_service_count",
+        "rural_facilities_total_count_per_100k",
+        "rural_facilities_agro_count_per_100k",
+        "rural_facilities_education_count_per_100k",
+        "rural_facilities_health_count_per_100k",
+        "rural_facilities_service_count_per_100k",
+    ]
+    scope = BundleRuntimeScope(selected_metrics=metrics, pending_metrics=metrics, has_global_issues=False)
+    plan = build_rural_facilities_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == [
+        "blocks-geojson",
+        "rural-facilities-admin-masters",
+        "admin-exposure-summary",
+        "processed-optimised-build",
+        "processed-optimised-state-values",
+        "processed-optimised-audit",
+    ]
+    assert "--source-dir" in plan[1].argv
+    assert "--qa-dir" in plan[1].argv
+    assert "--overlay-dir" in plan[1].argv
+
+
+def test_built_up_area_bundle_metric_resolution_and_plan() -> None:
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        dry_run=True,
+        plan_only=False,
+        built_up_raster="/tmp/built.tif",
+        built_up_qa_dir="/tmp/qa",
+        built_up_overlay_dir="/tmp/overlay",
+    )
+    metrics = _resolve_bundle_metrics("built-up-area", args)
+    assert metrics == ["built_up_area_km2", "built_up_area_share_pct"]
+    scope = BundleRuntimeScope(selected_metrics=metrics, pending_metrics=metrics, has_global_issues=False)
+    plan = build_built_up_area_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == [
+        "blocks-geojson",
+        "built-up-area-admin-masters",
+        "processed-optimised-build",
+        "admin-exposure-summary",
+        "processed-optimised-audit",
+    ]
+    assert "--raster" in plan[1].argv
+    assert "--qa-dir" in plan[1].argv
+    assert "--overlay-dir" in plan[1].argv
+
+
+def test_lulc_bundle_metric_resolution_and_plan() -> None:
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        dry_run=True,
+        plan_only=False,
+        lulc_raster="/tmp/lulc.tif",
+        lulc_qa_dir="/tmp/qa",
+        lulc_overlay_dir="/tmp/overlay",
+        lulc_allow_total_outlier=True,
+        lulc_allow_unexpected_values=True,
+        lulc_allow_share_outlier=True,
+    )
+    metrics = _resolve_bundle_metrics("lulc", args)
+    assert metrics == ["lulc_agri_area_km2", "lulc_agri_share_pct"]
+    scope = BundleRuntimeScope(selected_metrics=metrics, pending_metrics=metrics, has_global_issues=False)
+    plan = build_lulc_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == [
+        "blocks-geojson",
+        "lulc-admin-masters",
+        "processed-optimised-build",
+        "admin-exposure-summary",
+        "processed-optimised-audit",
+    ]
+    assert "--raster" in plan[1].argv
+    assert "--qa-dir" in plan[1].argv
+    assert "--overlay-dir" in plan[1].argv
+    assert "--allow-total-outlier" in plan[1].argv
+    assert "--allow-unexpected-values" in plan[1].argv
+    assert "--allow-share-outlier" in plan[1].argv
+
+
+def test_dashboard_package_can_include_rural_facilities() -> None:
+    args = argparse.Namespace(include_jrc_flood_depth=False, include_rural_facilities=True, level="admin", metric_slug=None)
+    metrics = _resolve_bundle_metrics("dashboard-package", args)
+    assert "rural_facilities_total_count" in metrics
+    assert "rural_facilities_service_count_per_100k" in metrics
+    assert "built_up_area_km2" in metrics
+    assert "lulc_agri_area_km2" in metrics
 
 
 def test_dashboard_package_jrc_scope_resolution_includes_derived_index_slug() -> None:
@@ -739,7 +967,7 @@ def test_execute_plan_plan_only_uses_plan_prefix() -> None:
 
 
 def test_execute_plan_returns_nonzero_and_prints_failed_step_summary(monkeypatch) -> None:
-    plan = [PlannedCommand(label="climate-compute:basin", argv=["python", "-m", "example"])]
+    plan = [PlannedCommand(label="climate-compute:block", argv=["python", "-m", "example"])]
 
     def _raise_called_process_error(*_args, **_kwargs):
         raise subprocess.CalledProcessError(returncode=7, cmd=["python", "-m", "example"])
@@ -752,13 +980,13 @@ def test_execute_plan_returns_nonzero_and_prints_failed_step_summary(monkeypatch
     text = buf.getvalue()
 
     assert rc == 7
-    assert "STEP FAILED [1/1] climate-compute:basin (exit=7)" in text
+    assert "STEP FAILED [1/1] climate-compute:block (exit=7)" in text
 
 
 def test_main_returns_nonzero_when_climate_readiness_remains_incomplete(monkeypatch) -> None:
     scopes = [
-        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
-        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district", "block"], pending_by_level={"block": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district", "block"], pending_by_level={"block": ["tas_annual_mean"]}),
     ]
 
     monkeypatch.setattr(
@@ -773,8 +1001,12 @@ def test_main_returns_nonzero_when_climate_readiness_remains_incomplete(monkeypa
         "tools.runs.prepare_dashboard.execute_plan",
         lambda *args, **kwargs: 0,
     )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
+        lambda *_args, **_kwargs: (),
+    )
 
-    rc = main(["climate-hazards", "--level", "hydro"])
+    rc = main(["climate-hazards", "--level", "admin"])
 
     assert rc == 1
 
@@ -790,7 +1022,7 @@ def test_main_skips_post_run_readiness_when_execute_plan_fails(
         resolve_calls += 1
         if resolve_calls > 1:
             raise AssertionError("post-run readiness should be skipped after a failed step")
-        return _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]})
+        return _climate_scope(levels=["district", "block"], pending_by_level={"block": ["tas_annual_mean"]})
 
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
@@ -805,7 +1037,7 @@ def test_main_skips_post_run_readiness_when_execute_plan_fails(
         lambda *args, **kwargs: 2,
     )
 
-    rc = main(["climate-hazards", "--level", "hydro"])
+    rc = main(["climate-hazards", "--level", "admin"])
 
     captured = capsys.readouterr().out
     assert rc == 2
@@ -815,12 +1047,12 @@ def test_main_skips_post_run_readiness_when_execute_plan_fails(
 
 def test_main_returns_zero_when_climate_readiness_becomes_complete(monkeypatch) -> None:
     scopes = [
-        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district", "block"], pending_by_level={"block": ["tas_annual_mean"]}),
         ClimateRuntimeScope(
-            levels=("basin", "sub_basin"),
+            levels=("district", "block"),
             by_level={
-                "basin": ClimateLevelReadiness(
-                    level="basin",
+                "district": ClimateLevelReadiness(
+                    level="district",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=(),
@@ -830,8 +1062,8 @@ def test_main_returns_zero_when_climate_readiness_becomes_complete(monkeypatch) 
                     unrunnable_metrics=(),
                     unrunnable_reasons_by_metric={},
                 ),
-                "sub_basin": ClimateLevelReadiness(
-                    level="sub_basin",
+                "block": ClimateLevelReadiness(
+                    level="block",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=(),
@@ -859,7 +1091,7 @@ def test_main_returns_zero_when_climate_readiness_becomes_complete(monkeypatch) 
         lambda *args, **kwargs: 0,
     )
 
-    rc = main(["climate-hazards", "--level", "hydro"])
+    rc = main(["climate-hazards", "--level", "admin"])
 
     assert rc == 0
 
@@ -869,12 +1101,12 @@ def test_main_returns_zero_when_only_skipped_stage_pending_remains(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     scopes = [
-        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
         ClimateRuntimeScope(
-            levels=("basin",),
+            levels=("district",),
             by_level={
-                "basin": ClimateLevelReadiness(
-                    level="basin",
+                "district": ClimateLevelReadiness(
+                    level="district",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=(),
@@ -901,67 +1133,28 @@ def test_main_returns_zero_when_only_skipped_stage_pending_remains(
         "tools.runs.prepare_dashboard.execute_plan",
         lambda *args, **kwargs: 0,
     )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
+        lambda *_args, **_kwargs: (),
+    )
 
-    rc = main(["climate-hazards", "--level", "basin", "--skip-masters", "--skip-optimised"])
+    rc = main(["climate-hazards", "--level", "district", "--skip-masters", "--skip-optimised"])
 
     captured = capsys.readouterr().out
     assert rc == 0
     assert "POST-RUN CLIMATE READINESS" in captured
-    assert "informational basin: masters_pending=1 (--skip-masters)" in captured
-    assert "informational basin: optimized_pending=1 (--skip-optimised)" in captured
+    assert "informational district: masters_pending=1 (--skip-masters)" in captured
+    assert "informational district: optimized_pending=1 (--skip-optimised)" in captured
 
 
 def test_main_keeps_compute_pending_blocking_even_when_later_stages_are_skipped(monkeypatch) -> None:
     scopes = [
-        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
         ClimateRuntimeScope(
-            levels=("basin",),
+            levels=("district",),
             by_level={
-                "basin": ClimateLevelReadiness(
-                    level="basin",
-                    selected_metrics=("tas_annual_mean",),
-                    runnable_metrics=("tas_annual_mean",),
-                    compute_pending_metrics=("tas_annual_mean",),
-                    masters_pending_metrics=("tas_annual_mean",),
-                    optimized_pending_metrics=("tas_annual_mean",),
-                    complete_metrics=(),
-                    unrunnable_metrics=(),
-                    unrunnable_reasons_by_metric={},
-                )
-            },
-            global_issues=(),
-        ),
-    ]
-
-    monkeypatch.setattr(
-        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
-        lambda *_args, **_kwargs: scopes.pop(0),
-    )
-    monkeypatch.setattr(
-        "tools.runs.prepare_dashboard.build_climate_hazards_plan",
-        lambda *args, **kwargs: [PlannedCommand(label="noop", argv=["python", "-m", "noop"])],
-    )
-    monkeypatch.setattr(
-        "tools.runs.prepare_dashboard.execute_plan",
-        lambda *args, **kwargs: 0,
-    )
-
-    rc = main(["climate-hazards", "--level", "basin", "--skip-masters", "--skip-optimised"])
-
-    assert rc == 1
-
-
-def test_main_prints_post_run_failure_diagnostics(
-    monkeypatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    scopes = [
-        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
-        ClimateRuntimeScope(
-            levels=("basin",),
-            by_level={
-                "basin": ClimateLevelReadiness(
-                    level="basin",
+                "district": ClimateLevelReadiness(
+                    level="district",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=("tas_annual_mean",),
@@ -990,10 +1183,59 @@ def test_main_prints_post_run_failure_diagnostics(
     )
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
-        lambda *_args, **_kwargs: ("basin/tas_annual_mean/hydro: compute marker invalid for ACCESS-CM2/historical: compute_marker_output_count_mismatch",),
+        lambda *_args, **_kwargs: (),
     )
 
-    rc = main(["climate-hazards", "--level", "basin"])
+    rc = main(["climate-hazards", "--level", "district", "--skip-masters", "--skip-optimised"])
+
+    assert rc == 1
+
+
+def test_main_prints_post_run_failure_diagnostics(
+    monkeypatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scopes = [
+        _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
+        ClimateRuntimeScope(
+            levels=("district",),
+            by_level={
+                "district": ClimateLevelReadiness(
+                    level="district",
+                    selected_metrics=("tas_annual_mean",),
+                    runnable_metrics=("tas_annual_mean",),
+                    compute_pending_metrics=("tas_annual_mean",),
+                    masters_pending_metrics=("tas_annual_mean",),
+                    optimized_pending_metrics=("tas_annual_mean",),
+                    complete_metrics=(),
+                    unrunnable_metrics=(),
+                    unrunnable_reasons_by_metric={},
+                )
+            },
+            global_issues=(),
+        ),
+    ]
+
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: scopes.pop(0),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.build_climate_hazards_plan",
+        lambda *args, **kwargs: [PlannedCommand(label="noop", argv=["python", "-m", "noop"])],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.execute_plan",
+        lambda *args, **kwargs: 0,
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
+        lambda *_args, **_kwargs: (
+            "district/tas_annual_mean/Telangana: compute marker invalid for ACCESS-CM2/historical: compute_marker_output_count_mismatch",
+        ),
+    )
+
+    rc = main(["climate-hazards", "--level", "district"])
 
     captured = capsys.readouterr().out
     assert rc == 1
@@ -1008,7 +1250,7 @@ def test_climate_runtime_scope_passes_filter_scope_to_ensemble_marker_validation
     args = parser.parse_args([
         "climate-hazards",
         "--level",
-        "hydro",
+        "district",
         "--metrics",
         "tas_annual_mean",
         "--models",
@@ -1064,9 +1306,9 @@ def test_climate_runtime_scope_passes_filter_scope_to_ensemble_marker_validation
 
     from tools.runs.prepare_dashboard import _resolve_climate_runtime_scope
 
-    scope = _resolve_climate_runtime_scope(args, levels=["basin"])
+    scope = _resolve_climate_runtime_scope(args, levels=["district"])
 
-    readiness = scope.by_level["basin"]
+    readiness = scope.by_level["district"]
     assert readiness.compute_pending_metrics == ()
     assert readiness.complete_metrics == ("tas_annual_mean",)
     assert len(calls) == 1
@@ -1081,3 +1323,260 @@ def test_validate_bundle_with_pytest_uses_default_targets() -> None:
     assert plan[-1].label == "pytest-validation"
     for test_path in DEFAULT_VALIDATION_TESTS:
         assert test_path in plan[-1].argv
+
+
+# --- CHG-0064: JRC state parameterization + same-run publish ------------------
+
+def _jrc_standalone_args(**overrides) -> argparse.Namespace:
+    base = dict(
+        overwrite=False,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        state="Maharashtra",
+        source_manifest=None,
+        rp100_only=False,
+        source_dir="/tmp/jrc",
+        assume_units="m",
+        districts_path=None,
+        blocks_path=None,
+        qa_dir=None,
+        overlay_dir=None,
+        dry_run=False,
+        plan_only=False,
+    )
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+def test_jrc_state_is_forwarded_to_builder() -> None:
+    args = _jrc_standalone_args(overlay_dir="/tmp/ov")
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp10"],
+        pending_metrics=["jrc_flood_depth_rp10"],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, include_blocks_geojson=False, runtime_scope=scope)
+    builder = next(s for s in plan if s.label == "jrc-flood-depth-admin-masters")
+    argv = builder.argv
+    assert "--state" in argv and argv[argv.index("--state") + 1] == "Maharashtra"
+    assert "--overlay-dir" in argv and argv[argv.index("--overlay-dir") + 1] == "/tmp/ov"
+    assert "--allow-unversioned-source" in argv
+
+
+def test_jrc_strict_rp100_manifest_is_forwarded_to_builder() -> None:
+    args = _jrc_standalone_args(
+        source_manifest="/tmp/source_manifest.json",
+        rp100_only=True,
+        source_dir=None,
+        assume_units=None,
+    )
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp100", "jrc_flood_extent_rp100", "jrc_flood_depth_index_rp100"],
+        pending_metrics=[],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, include_blocks_geojson=False, runtime_scope=scope)
+    builder = next(s for s in plan if s.label == "jrc-flood-depth-admin-masters")
+    argv = builder.argv
+    assert "--source-manifest" in argv
+    assert argv[argv.index("--source-manifest") + 1] == "/tmp/source_manifest.json"
+    assert "--rp100-only" in argv
+    assert "--source-dir" not in argv
+    assert "--allow-unversioned-source" not in argv
+
+
+def test_jrc_source_manifest_requires_rp100_only() -> None:
+    args = _jrc_standalone_args(
+        source_manifest="/tmp/source_manifest.json",
+        rp100_only=False,
+        source_dir=None,
+        assume_units=None,
+    )
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp100"],
+        pending_metrics=["jrc_flood_depth_rp100"],
+        has_global_issues=False,
+    )
+    with pytest.raises(SystemExit, match="requires --rp100-only with --source-manifest"):
+        build_jrc_flood_depth_plan(args, include_blocks_geojson=False, runtime_scope=scope)
+
+
+def test_jrc_explicit_state_forces_builder_and_publishes_full_set_when_audit_clean() -> None:
+    # Pre-build audit is clean (Telangana already published) -> pending empty ->
+    # runtime_needed False. A non-default --state must still force the builder AND
+    # publish the FULL JRC metric set in the same run (regression guard for the
+    # "_select_metrics_for_execution would return []" trap).
+    args = _jrc_standalone_args()
+    selected = [
+        "jrc_flood_depth_rp10",
+        "jrc_flood_depth_rp50",
+        "jrc_flood_depth_rp100",
+        "jrc_flood_depth_rp500",
+        "jrc_flood_extent_rp100",
+    ]
+    scope = BundleRuntimeScope(selected_metrics=selected, pending_metrics=[], has_global_issues=False)
+    assert scope.runtime_needed is False
+    plan = build_jrc_flood_depth_plan(args, include_blocks_geojson=False, runtime_scope=scope)
+    labels = [s.label for s in plan]
+    assert labels == [
+        "jrc-flood-depth-admin-masters",
+        "processed-optimised-build",
+        "processed-optimised-audit",
+    ]
+    build_step = plan[labels.index("processed-optimised-build")]
+    assert build_step.argv.count("--metric") == len(selected)
+    for slug in selected:
+        assert slug in build_step.argv
+    # The optimised step must not force --overwrite here (overwrite=False).
+    assert "--overwrite" not in build_step.argv
+
+
+def test_jrc_skips_blocks_geojson_when_canonical_blocks_exist(tmp_path) -> None:
+    # CHG-0065: a no-overwrite run with an existing canonical blocks file must NOT
+    # schedule blocks-geojson (the JRC builder only reads it).
+    blocks = tmp_path / "blocks_4326.geojson"
+    blocks.write_text("{}", encoding="utf-8")
+    args = _jrc_standalone_args(overwrite=False, blocks_path=str(blocks))
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp10"],
+        pending_metrics=["jrc_flood_depth_rp10"],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    labels = [s.label for s in plan]
+    assert "blocks-geojson" not in labels
+    assert labels[0] == "jrc-flood-depth-admin-masters"
+
+
+def test_jrc_builds_blocks_geojson_when_canonical_blocks_missing(tmp_path) -> None:
+    # CHG-0065: if the canonical blocks file is absent, it must still be built first.
+    missing = tmp_path / "does_not_exist" / "blocks_4326.geojson"
+    args = _jrc_standalone_args(overwrite=False, blocks_path=str(missing))
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp10"],
+        pending_metrics=["jrc_flood_depth_rp10"],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    assert [s.label for s in plan][0] == "blocks-geojson"
+
+
+def test_dashboard_package_maps_jrc_state_and_overlay_dir(monkeypatch) -> None:
+    # Guards the synthetic-namespace dict-update: --jrc-state / --jrc-overlay-dir
+    # must reach the builder without colliding with the package-level --state.
+    parser = build_cli()
+    args = parser.parse_args(
+        [
+            "dashboard-package",
+            "--level",
+            "admin",
+            "--overwrite",
+            "--include-jrc-flood-depth",
+            "--jrc-source-dir",
+            "/tmp/jrc",
+            "--jrc-assume-units",
+            "m",
+            "--jrc-state",
+            "Maharashtra",
+            "--jrc-overlay-dir",
+            "/tmp/ov",
+        ]
+    )
+    scope_map = {
+        "aqueduct": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "population-exposure": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "built-up-area": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "lulc": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "groundwater": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "jrc-flood-depth": BundleRuntimeScope(
+            selected_metrics=["jrc_flood_depth_rp10"],
+            pending_metrics=["jrc_flood_depth_rp10"],
+            has_global_issues=False,
+        ),
+    }
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_a, **_k: _climate_scope(levels=["district"], pending_by_level={"district": []}),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_composite_runtime_scope",
+        lambda **_k: BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_proposal_runtime_scope",
+        lambda **_k: BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_runtime_scope",
+        lambda bundle, *_a, **_k: scope_map[bundle],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_bundle_metrics",
+        lambda bundle, _a: ["jrc_flood_depth_rp10"] if bundle == "dashboard-package" else [],
+    )
+    plan = build_dashboard_package_plan(args)  # must not raise (dict-update fix)
+    builder = next(s for s in plan if s.label == "jrc-flood-depth-admin-masters")
+    argv = builder.argv
+    assert argv[argv.index("--state") + 1] == "Maharashtra"
+    assert argv[argv.index("--overlay-dir") + 1] == "/tmp/ov"
+
+
+def test_climate_metrics_exclude_water_and_composites() -> None:
+    from india_resilience_tool.config.metrics_registry import get_metric_spec, is_climate_compute_metric
+    from tools.runs.prepare_dashboard import _resolve_climate_metrics_for_level
+
+    args = argparse.Namespace(level="district", metrics=None, scenarios=None)
+    selected, _ = _resolve_climate_metrics_for_level(args, level="district")
+    # No externally sourced water metrics and no composites leak into climate compute.
+    assert not any(slug.startswith("water_scarcity") for slug in selected)
+    assert not any(slug.startswith("composite_") for slug in selected)
+    # Everything that remains satisfies the positive compute contract.
+    assert all(is_climate_compute_metric(get_metric_spec(slug)) for slug in selected)
+
+
+def test_water_availability_plan_builds_expected_district_only_steps() -> None:
+    from tools.runs.prepare_dashboard import build_water_availability_plan
+
+    args = argparse.Namespace(
+        overwrite=True,
+        plan_only=False,
+        dry_run=False,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        verbose=False,
+        state=["Telangana"],
+        water_workbook=None,
+    )
+    scope = BundleRuntimeScope(
+        selected_metrics=[
+            "composite_water_risk",
+            "water_scarcity_percapita",
+            "water_scarcity_percapita_2050",
+            "water_scarcity_deterioration_2050",
+        ],
+        pending_metrics=[
+            "composite_water_risk",
+            "water_scarcity_percapita",
+            "water_scarcity_percapita_2050",
+            "water_scarcity_deterioration_2050",
+        ],
+        has_global_issues=False,
+    )
+    plan = build_water_availability_plan(args, runtime_scope=scope)
+    labels = [step.label for step in plan]
+    assert labels == [
+        "water-availability-district-masters",
+        "composite-masters:district",
+        "processed-optimised-build",
+        "processed-optimised-state-values",
+        "processed-optimised-audit",
+    ]
+    # The composite step is targeted to composite_water_risk only, district level.
+    composite_step = plan[labels.index("composite-masters:district")]
+    assert "--metric" in composite_step.argv
+    assert "composite_water_risk" in composite_step.argv
+    assert "--level" in composite_step.argv
+    assert "district" in composite_step.argv
+    assert "block" not in composite_step.argv

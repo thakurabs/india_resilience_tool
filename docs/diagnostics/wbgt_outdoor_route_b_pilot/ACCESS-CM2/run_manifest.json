@@ -1,0 +1,105 @@
+{
+  "method": "route-b-native-reference-paired-v1",
+  "source_lock": {
+    "carbonplan_commit": "f662b37200fe219db912ebd09ceb52fdac979861",
+    "metsim_commit": "edbd68fecd7decf0f03b32d1226f44327bd297b7",
+    "files": {
+      "02_generate.ipynb": {
+        "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/02_generate.ipynb",
+        "sha256": "a3b029836df47e03e1df8e4318f49607a1a861b20956ba64301e1b276906c513"
+      },
+      "05_aggregate.ipynb": {
+        "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/05_aggregate.ipynb",
+        "sha256": "79019b5174d31b8b790bffe9bff678f04b0c92f1f7abf895eb3f84520050c18f"
+      },
+      "06_bias_correction.ipynb": {
+        "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/06_bias_correction.ipynb",
+        "sha256": "22c1bff8fbea53fc83eb5453b6ec74c48e80a8b2042e3cae56d76df9d7a6cd48"
+      },
+      "07_solar_radiation_wind.ipynb": {
+        "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/07_solar_radiation_wind.ipynb",
+        "sha256": "5a0acf2c3c33d40e29be5f5b3eddfc4a42c54227c52703020b88d1347d10f83f"
+      },
+      "08_shade_sun_adjustment.ipynb": {
+        "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/08_shade_sun_adjustment.ipynb",
+        "sha256": "6a6e5f3d6896ddf6697746cd7c95385d2a245b2c5889fd2691499182a08cb810"
+      },
+      "10_packaging.ipynb": {
+        "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/10_packaging.ipynb",
+        "sha256": "97e2a895f34981f6723840a7044d6161561bbbb79ec201fc91de9df910f1e2af"
+      },
+      "utils.py": {
+        "url": "https://raw.githubusercontent.com/carbonplan/extreme-heat/f662b37200fe219db912ebd09ceb52fdac979861/notebooks/utils.py",
+        "sha256": "a6aa37aceb48942af31c5dcae5ed5c43a3faf9cf944ab487b3803866f26cfe8c"
+      },
+      "metsim_constants.py": {
+        "url": "https://raw.githubusercontent.com/carbonplan/MetSim/edbd68fecd7decf0f03b32d1226f44327bd297b7/metsim/constants.py",
+        "sha256": "4b106a543dc4fa9265e823d25e645b04350b12caf36ad670324b34920b7a0c28"
+      },
+      "metsim_disaggregate.py": {
+        "url": "https://raw.githubusercontent.com/carbonplan/MetSim/edbd68fecd7decf0f03b32d1226f44327bd297b7/metsim/disaggregate.py",
+        "sha256": "3446c73995aff864ab52088a51a9acf3eef9f42713f7e41f0f111e43c00b8a71"
+      },
+      "metsim_physics.py": {
+        "url": "https://raw.githubusercontent.com/carbonplan/MetSim/edbd68fecd7decf0f03b32d1226f44327bd297b7/metsim/physics.py",
+        "sha256": "3565ff9739a53cfd4a92b088f4d8e9243ce04ee6c673310f3f353f8ab9d802cb"
+      }
+    }
+  },
+  "model": "ACCESS-CM2",
+  "code_sha256": {
+    "wbgt_route_b_run.py": "8987fb369e4195da62ec2d6cbd55994fdbaa2b08952d0147f01c27a3c5939895",
+    "wbgt_route_b.py": "5f6776b8868387cd3ecb82ee8c4e79ca3e5707025791cad880b10e18f40b30fe"
+  },
+  "support": {
+    "signature": {
+      "version": "route-b-pilot-inputs-v1",
+      "states": [
+        "Kerala",
+        "Rajasthan",
+        "Himachal Pradesh"
+      ],
+      "reference_spacing": 0.05000000074505806,
+      "boundary_sha256": {
+        "districts_4326.geojson": "da5799101f7b15aecaef6d150c36f7079cadcbac293d410de737f35ffd3684e2",
+        "blocks_4326.geojson": "361fef5842817c3cb60cb09d085b7a20f9dc160dd1d8fa2bc81efe77254d4b74"
+      },
+      "elevation_sha256": "9ee3cd620b7ed9b77e779897a3a9b0dbae94cfb38616ed867a8eb8e23ce76dd7",
+      "grid_sha256": "fc5f509e9561b3efec0f172bedfacf10e269b4ee0b74ee458d91b8d9f460bd2b"
+    },
+    "signature_sha256": "a6ac95cb3c16a37663c18eaea46499efb2ee60a4d618a2bf43da097ab065f78e",
+    "units": 656,
+    "cells": 784,
+    "artifacts": {
+      "reference_mapping.npz": "bed6974a4d4f476b47e6c63cc9e781703757afe44ff35b0f1d30fa64108cde4a",
+      "admin_areas.npz": "097ebd957f986cdc4249d549dec761246f01a262c1c9d17558f76f5437eb77ce",
+      "units.csv": "9a5b878660ad88bfe7b5b1a96ebf13d6f642d148ea0cbb65122cd53a446d4a67",
+      "cells.csv": "483fe8612369115a0f84a1f23d70dc8fdef8a5ef344215917f07ec1874d44b61",
+      "native_reference_grid.npz": "cd4de7572b39ffc8d56fc16faca299ccfbb456e4a5da503fcab8d48c84c738b3"
+    }
+  },
+  "reference": "f2008840842e501a666dcc80942fda48b04368c070a04a715a05aadc621c0f58",
+  "drivers": {
+    "historical": "faffce95a95dac316afe8099005bd3a6fec9fb0ab0477b9e146053ea7dfa4abb",
+    "ssp245": "a61872abf11bea95c404a8026ad9c07c87fb02cc6c35c861c98e5fe1e76673cf",
+    "ssp585": "09ada63a3783f3bfa8d9bcfa91bbf66e1a717550696dd9d41c7127ab9c817fcc"
+  },
+  "signature_sha256": "2efd5aa64386fe36ce43771ba224806274be1dd3c375d4a517ea461f4b7f4d89",
+  "status": "PILOT_COMPLETE_DIAGNOSTIC_ONLY",
+  "units_eligible": 630,
+  "units_total": 656,
+  "cells_eligible": 774,
+  "warnings": [],
+  "elapsed_seconds": 605.4208436389454,
+  "peak_rss_mb": 3598.1796875,
+  "artifact_sha256": {
+    "yearly_metrics.csv": "b44eeca3b9f04a7a98de330624ecdb264cb3194766f4d38d5594417f77f21078",
+    "radiation_diagnostics.csv": "69025a7bd70c3737875e7d3232167467a20b097afeb21b77a77fc82766c3b039",
+    "holdout_scores.csv": "f7fe2cadf6faa404ef8da02a1151506429e41cc5529d3dcd09c478c38d567c84",
+    "application_window_sensitivity.csv": "1b295a15b95c787dcd286d5bc0f94dbf697b567dcaf547da39ec4f3220111963",
+    "cell_support.csv": "72cfda07ea76c426e279568999e7e977e053729218a9e206420309fe09ce9764",
+    "unit_support.csv": "f87d68753fc54b0f9d3ebafc10856d0aa55a29d9a4acef85d1a448d9e7b9c72f",
+    "timings.csv": "69f300ce68fc29411d18d9de3e5ecb2214c6974fcad4c1def03cdbc06f2109c7",
+    "cell_metrics_2005.csv": "b3aca8fe6f0bba1c8064fc8dc4293a8e1512ffac903bf906b9640a66b9384251"
+  }
+}

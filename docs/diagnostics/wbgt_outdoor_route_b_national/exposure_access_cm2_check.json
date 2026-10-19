@@ -1,0 +1,311 @@
+{
+  "change": "CHG-0667",
+  "models_predicted": [
+    "ACCESS-CM2"
+  ],
+  "models_without_complete_drivers": [],
+  "verification": {
+    "predicted_units": 15,
+    "actual_units": 15,
+    "predicted_unit_years": 384,
+    "actual_unit_years": 384,
+    "units_predicted_not_observed": [],
+    "units_observed_not_predicted": [],
+    "exact_unit_match": true,
+    "exact_unit_year_match": true
+  },
+  "predictions": {
+    "ACCESS-CM2": {
+      "model": "ACCESS-CM2",
+      "screened_cell_days": 23,
+      "screened_cells_total": 6,
+      "screened_calibration_cells": 0,
+      "cells_eligible": 4938,
+      "units_eligible": 7752,
+      "unit_years_lost": 384,
+      "eligible_unit_years": 1108536,
+      "unit_years_lost_share": 0.000346,
+      "by_window": [
+        {
+          "model": "ACCESS-CM2",
+          "scenario": "ssp245",
+          "window": "2020-2039",
+          "level": "district",
+          "units_affected": 5,
+          "years_in_window": 20,
+          "unit_years_lost": 100,
+          "states": [
+            "Mizoram"
+          ]
+        },
+        {
+          "model": "ACCESS-CM2",
+          "scenario": "ssp245",
+          "window": "2020-2039",
+          "level": "block",
+          "units_affected": 8,
+          "years_in_window": 20,
+          "unit_years_lost": 160,
+          "states": [
+            "Mizoram"
+          ]
+        },
+        {
+          "model": "ACCESS-CM2",
+          "scenario": "ssp245",
+          "window": "2040-2059",
+          "level": "district",
+          "units_affected": 1,
+          "years_in_window": 20,
+          "unit_years_lost": 20,
+          "states": [
+            "Ladakh"
+          ]
+        },
+        {
+          "model": "ACCESS-CM2",
+          "scenario": "ssp245",
+          "window": "2040-2059",
+          "level": "block",
+          "units_affected": 1,
+          "years_in_window": 20,
+          "unit_years_lost": 20,
+          "states": [
+            "Ladakh"
+          ]
+        },
+        {
+          "model": "ACCESS-CM2",
+          "scenario": "ssp245",
+          "window": "2060-2080",
+          "level": "district",
+          "units_affected": 1,
+          "years_in_window": 21,
+          "unit_years_lost": 21,
+          "states": [
+            "Ladakh"
+          ]
+        },
+        {
+          "model": "ACCESS-CM2",
+          "scenario": "ssp245",
+          "window": "2060-2080",
+          "level": "block",
+          "units_affected": 1,
+          "years_in_window": 21,
+          "unit_years_lost": 21,
+          "states": [
+            "Ladakh"
+          ]
+        },
+        {
+          "model": "ACCESS-CM2",
+          "scenario": "ssp585",
+          "window": "2060-2080",
+          "level": "district",
+          "units_affected": 1,
+          "years_in_window": 21,
+          "unit_years_lost": 21,
+          "states": [
+            "Ladakh"
+          ]
+        },
+        {
+          "model": "ACCESS-CM2",
+          "scenario": "ssp585",
+          "window": "2060-2080",
+          "level": "block",
+          "units_affected": 1,
+          "years_in_window": 21,
+          "unit_years_lost": 21,
+          "states": [
+            "Ladakh"
+          ]
+        }
+      ],
+      "by_master_period": {
+        "ssp245|2020-2040": {
+          "years_in_period": 21,
+          "years_lost_max": 20,
+          "units_affected": 13,
+          "fully_lost_units": 0
+        },
+        "ssp245|2040-2060": {
+          "years_in_period": 21,
+          "years_lost_max": 20,
+          "units_affected": 2,
+          "fully_lost_units": 0
+        },
+        "ssp245|2060-2080": {
+          "years_in_period": 21,
+          "years_lost_max": 21,
+          "units_affected": 2,
+          "fully_lost_units": 2
+        },
+        "ssp585|2040-2060": {
+          "years_in_period": 21,
+          "years_lost_max": 1,
+          "units_affected": 2,
+          "fully_lost_units": 0
+        },
+        "ssp585|2060-2080": {
+          "years_in_period": 21,
+          "years_lost_max": 21,
+          "units_affected": 2,
+          "fully_lost_units": 2
+        }
+      },
+      "state_concentration": {
+        "Mizoram": 13,
+        "Ladakh": 6
+      },
+      "affected_unit_indices": [
+        337,
+        456,
+        457,
+        458,
+        461,
+        465,
+        3918,
+        4686,
+        4687,
+        4688,
+        4695,
+        4696,
+        4697,
+        4705,
+        4706
+      ]
+    }
+  },
+  "ensemble_effect": {
+    "models_scanned": 1,
+    "units_with_any_model_missing": 15,
+    "models_missing_per_unit": {
+      "1": 15
+    },
+    "worst_units": [
+      {
+        "unit_index": 337,
+        "models_missing": 1,
+        "state": "Ladakh",
+        "level": "district",
+        "district": "Leh Ladakh",
+        "block": null
+      },
+      {
+        "unit_index": 456,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "district",
+        "district": "Champhai",
+        "block": null
+      },
+      {
+        "unit_index": 457,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "district",
+        "district": "Hnahthial",
+        "block": null
+      },
+      {
+        "unit_index": 458,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "district",
+        "district": "Khawzawl",
+        "block": null
+      },
+      {
+        "unit_index": 461,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "district",
+        "district": "Lunglei",
+        "block": null
+      },
+      {
+        "unit_index": 465,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "district",
+        "district": "Serchhip",
+        "block": null
+      },
+      {
+        "unit_index": 3918,
+        "models_missing": 1,
+        "state": "Ladakh",
+        "level": "block",
+        "district": "Leh Ladakh",
+        "block": "Leh"
+      },
+      {
+        "unit_index": 4686,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "block",
+        "district": "Champhai",
+        "block": "Khawbung"
+      },
+      {
+        "unit_index": 4687,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "block",
+        "district": "Hnahthial",
+        "block": "Hnahthial"
+      },
+      {
+        "unit_index": 4688,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "block",
+        "district": "Khawzawl",
+        "block": "Khawzawl"
+      },
+      {
+        "unit_index": 4695,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "block",
+        "district": "Lunglei",
+        "block": "Bunghmun"
+      },
+      {
+        "unit_index": 4696,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "block",
+        "district": "Lunglei",
+        "block": "Lunglei"
+      },
+      {
+        "unit_index": 4697,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "block",
+        "district": "Lunglei",
+        "block": "Lungsen"
+      },
+      {
+        "unit_index": 4705,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "block",
+        "district": "Serchhip",
+        "block": "East Lungdar"
+      },
+      {
+        "unit_index": 4706,
+        "models_missing": 1,
+        "state": "Mizoram",
+        "level": "block",
+        "district": "Serchhip",
+        "block": "Serchhip"
+      }
+    ],
+    "note": "A unit-year missing in some models but not others reduces that unit-year's n_models rather than failing outright, so the ensemble would rest on a varying subset unless the contract forbids it."
+  }
+}

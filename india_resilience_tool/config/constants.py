@@ -20,6 +20,14 @@ SIMPLIFY_TOL_ADM1: float = 0.015
 SIMPLIFY_TOL_BASIN_RENDER: float = 0.0035
 SIMPLIFY_TOL_SUBBASIN_RENDER: float = 0.005
 
+# ---- Minimum polygon area thresholds (degrees^2) ----
+# These drop sliver/tiny polygons during boundary load so the rendered unit set
+# (and any area-weighted aggregation over it) is stable. They are load-bearing
+# for state-value parity: the runtime geometry load and any offline precompute
+# MUST use the same thresholds, so keep them here as the single source of truth.
+ADM2_MIN_AREA: float = 0.0003
+ADM3_MIN_AREA: float = 0.00005
+
 # ---- Bounding box for India ----
 MIN_LON: float = 68.0
 MAX_LON: float = 97.5
@@ -57,9 +65,6 @@ SCENARIO_DISPLAY: dict[str, str] = {
     "ssp245": "SSP2-4.5",
     "ssp585": "SSP5-8.5",
     "historical": "Historical",
-    "bau": "Business-as-usual",
-    "opt": "Optimistic",
-    "pes": "Pessimistic",
     "snapshot": "Snapshot",
 }
 
@@ -68,9 +73,6 @@ SCENARIO_UI_LABEL: dict[str, str] = {
     "ssp245": "Middle-of-the-road (SSP2-4.5)",
     "ssp585": "Fossil-fuelled development (SSP5-8.5)",
     "historical": "Historical",
-    "bau": "Business-as-usual",
-    "opt": "Optimistic",
-    "pes": "Pessimistic",
     "snapshot": "Snapshot",
 }
 
@@ -87,18 +89,6 @@ SCENARIO_HELP_MD: dict[str, str] = {
         "Often used to stress-test under higher emissions."
     ),
     "historical": "Historical\nReference historical period used for comparison (period depends on the dataset).",
-    "bau": (
-        "Business-as-usual\n"
-        "Aqueduct future pathway representing continued current trajectories without major additional intervention."
-    ),
-    "opt": (
-        "Optimistic\n"
-        "Aqueduct future pathway representing stronger mitigation and adaptation outcomes."
-    ),
-    "pes": (
-        "Pessimistic\n"
-        "Aqueduct future pathway representing weaker mitigation and higher water-risk pressure."
-    ),
     "snapshot": (
         "Snapshot\n"
         "A fixed, non-climate scenario data snapshot. Use this for static layers such as population exposure."

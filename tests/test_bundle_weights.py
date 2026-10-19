@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import math
 
+import pytest
+
+from india_resilience_tool.config import bundle_weights
 from india_resilience_tool.config.bundle_weights import (
+    EXPECTED_HEADLINE_WEIGHT_TOTALS,
     LANDING_BUNDLE_WEIGHTS,
+    get_bundle_attribute_slugs,
+    get_bundle_baseline_referenced_slugs,
+    get_bundle_headline_weight_total,
+    get_bundle_headline_weights,
     get_bundle_weights,
     validate_bundle_weights,
 )
@@ -38,16 +47,121 @@ def test_heat_stress_bundle_weights_are_stable_and_sum_to_one() -> None:
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
+        "twb_days_ge_28",
         "twb_days_ge_30",
-        "wbd_le_3",
-        "wbd_gt3_le6",
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
-        "wbd_le_3_consecutive_days",
         "wsdi_warm_spell_days",
-        "twb_days_ge_28",
+    ]
+    assert [entry.weight for entry in entries] == [
+        0.20 / 2.0,
+        0.20 / 2.0,
+        0.40 / 3.0,
+        0.40 / 3.0,
+        0.40 / 3.0,
+        0.20 / 2.0,
+        0.20 / 2.0,
+        0.20 / 1.0,
     ]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    assert [entry.metric_slug for entry in get_bundle_headline_weights("Heat Stress")] == [
+        "twb_annual_mean",
+        "twb_summer_mean",
+        "twb_annual_max",
+        "twb_days_ge_28",
+        "twb_days_ge_30",
+        "tasmin_tropical_nights_gt28",
+    ]
+    assert get_bundle_baseline_referenced_slugs("Heat Stress") == (
+        "tn90p_warm_nights_pct",
+        "wsdi_warm_spell_days",
+    )
+    assert get_bundle_headline_weight_total("Heat Stress") == pytest.approx(0.70)
+    assert EXPECTED_HEADLINE_WEIGHT_TOTALS["Heat Stress"] == pytest.approx(0.70)
+
+
+def test_extreme_rainfall_headline_excludes_the_percentile_referenced_metrics() -> None:
+    entries = get_bundle_weights("Extreme Rainfall | Flash Flood Risk")
+
+    assert [entry.metric_slug for entry in entries] == [
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "r20mm_very_heavy_precip_days",
+        "r95p_very_wet_precip",
+        "r95ptot_contribution_pct",
+        "cwd_consecutive_wet_days",
+    ]
+    assert math.isclose(
+        sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9
+    )
+    assert [
+        entry.metric_slug
+        for entry in get_bundle_headline_weights("Extreme Rainfall | Flash Flood Risk")
+    ] == [
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "r20mm_very_heavy_precip_days",
+        "cwd_consecutive_wet_days",
+    ]
+    assert get_bundle_baseline_referenced_slugs(
+        "Extreme Rainfall | Flash Flood Risk"
+    ) == (
+        "r95p_very_wet_precip",
+        "r95ptot_contribution_pct",
+    )
+    assert get_bundle_headline_weight_total(
+        "Extreme Rainfall | Flash Flood Risk"
+    ) == pytest.approx(0.75)
+    assert EXPECTED_HEADLINE_WEIGHT_TOTALS[
+        "Extreme Rainfall | Flash Flood Risk"
+    ] == pytest.approx(0.75)
+
+
+def test_bundle_weight_validation_rejects_cross_bundle_baseline_flag_divergence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries = list(get_bundle_weights("Heat Stress"))
+    target_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry.metric_slug == "tn90p_warm_nights_pct"
+    )
+    entries[target_index] = replace(entries[target_index], is_baseline_referenced=False)
+    monkeypatch.setitem(
+        bundle_weights.LANDING_BUNDLE_WEIGHTS,
+        "Heat Stress",
+        tuple(entries),
+    )
+
+    issues = validate_bundle_weights()
+
+    assert any(
+        "tn90p_warm_nights_pct" in issue
+        and "divergent is_baseline_referenced" in issue
+        for issue in issues
+    )
+
+
+def test_cold_risk_headline_excludes_the_percentile_referenced_metrics() -> None:
+    assert [
+        entry.metric_slug for entry in get_bundle_headline_weights("Cold Risk")
+    ] == [
+        "tas_winter_mean",
+        "tasmin_winter_mean",
+        "tnn_annual_min",
+        "tasmin_winter_min",
+        "tnle10_cold_nights",
+        "tnle5_severe_cold_nights",
+        "txle15_cold_days",
+        "tnle10_consecutive_cold_nights",
+    ]
+    assert get_bundle_baseline_referenced_slugs("Cold Risk") == (
+        "tx10p_cool_days_pct",
+        "tn10p_cool_nights_pct",
+        "csdi_cold_spell_days",
+    )
+    assert get_bundle_headline_weight_total("Cold Risk") == pytest.approx(0.75)
+    assert EXPECTED_HEADLINE_WEIGHT_TOTALS["Cold Risk"] == pytest.approx(0.75)
 
 
 def test_cold_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
@@ -69,27 +183,79 @@ def test_cold_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
 
+def test_drought_headline_is_the_absolute_dry_spell_metric_not_spi() -> None:
+    assert [
+        entry.metric_slug for entry in get_bundle_headline_weights("Drought Risk")
+    ] == ["pr_consecutive_dry_days_lt1mm"]
+    assert get_bundle_baseline_referenced_slugs("Drought Risk") == (
+        "spi3_count_events_lt_minus1",
+        "spi6_count_events_lt_minus1",
+        "spi12_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "spi6_max_spell_lt_minus1",
+        "spi12_max_spell_lt_minus1",
+    )
+    assert get_bundle_headline_weight_total("Drought Risk") == pytest.approx(0.40)
+    assert EXPECTED_HEADLINE_WEIGHT_TOTALS["Drought Risk"] == pytest.approx(0.40)
+
+
+def test_drought_lens_preserves_the_approved_relative_spi_weighting() -> None:
+    """The workbook's SPI proportions must survive being rescaled to 0.60."""
+    lens = {
+        entry.metric_slug: entry.weight
+        for entry in get_bundle_weights("Drought Risk")
+        if entry.is_baseline_referenced
+    }
+    assert sum(lens.values()) == pytest.approx(0.60)
+    approved = {
+        "spi3_count_events_lt_minus1": 0.08,
+        "spi6_count_events_lt_minus1": 0.12,
+        "spi12_count_events_lt_minus1": 0.20,
+        "spi3_max_spell_lt_minus1": 0.12,
+        "spi6_max_spell_lt_minus1": 0.18,
+        "spi12_max_spell_lt_minus1": 0.30,
+    }
+    for slug, original in approved.items():
+        assert lens[slug] / 0.60 == pytest.approx(original)
+
+
 def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
     entries = get_bundle_weights("Drought Risk")
 
     assert [entry.metric_slug for entry in entries] == [
+        "pr_consecutive_dry_days_lt1mm",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "spi6_max_spell_lt_minus1",
+        "spi12_max_spell_lt_minus1",
     ]
-    assert [entry.weight for entry in entries] == [0.20, 0.30, 0.50]
+    assert [entry.weight for entry in entries] == pytest.approx(
+        [0.40, 0.048, 0.072, 0.12, 0.072, 0.108, 0.18]
+    )
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
 
 def test_jrc_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Flood Inundation Depth (JRC)")
+    entries = get_bundle_weights("Riverine Flood")
 
-    assert [entry.metric_slug for entry in entries] == ["jrc_flood_depth_index_rp100"]
-    assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    non_attr = [e for e in entries if not e.is_attribute]
+    attr = [e for e in entries if e.is_attribute]
+
+    assert [e.metric_slug for e in non_attr] == ["jrc_flood_depth_index_rp100"]
+    assert [e.metric_slug for e in attr] == ["jrc_flood_depth_rp100", "jrc_flood_extent_rp100"]
+    assert all(e.weight == 0.0 for e in attr)
+    assert math.isclose(sum(e.weight for e in non_attr), 1.0, rel_tol=0.0, abs_tol=1e-9)
+
+    assert get_bundle_attribute_slugs("Riverine Flood") == (
+        "jrc_flood_depth_rp100",
+        "jrc_flood_extent_rp100",
+    )
 
 
 def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Flood & Extreme Rainfall Risk")
+    entries = get_bundle_weights("Extreme Rainfall | Flash Flood Risk")
 
     assert [entry.metric_slug for entry in entries] == [
         "pr_max_1day_precip",
@@ -100,23 +266,11 @@ def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
         "cwd_consecutive_wet_days",
     ]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    assert all("Flood Depth Index remains deferred" not in (entry.substitution_note or "") for entry in entries)
 
 
-def test_agriculture_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Agriculture & Growing Conditions")
-
-    assert [entry.metric_slug for entry in entries] == [
-        "gsl_growing_season",
-        "tasmax_summer_mean",
-        "txge35_extreme_heat_days",
-        "wsdi_warm_spell_days",
-        "tasmin_winter_mean",
-        "tnle10_cold_nights",
-        "spi3_drought_index",
-        "prcptot_annual_total",
-        "dtr_daily_temp_range",
-    ]
-    assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+def test_retired_agriculture_growing_conditions_has_no_active_bundle_weights() -> None:
+    assert get_bundle_weights("Agriculture & Growing Conditions") == ()
 
 
 def test_validate_bundle_weights_reports_no_issues() -> None:
@@ -129,7 +283,7 @@ def test_all_visible_glance_bundles_have_custom_weights_in_this_pass() -> None:
         "Heat Stress",
         "Cold Risk",
         "Drought Risk",
-        "Flood Inundation Depth (JRC)",
-        "Flood & Extreme Rainfall Risk",
-        "Agriculture & Growing Conditions",
+        "Riverine Flood",
+        "Water Risk",
+        "Extreme Rainfall | Flash Flood Risk",
     }

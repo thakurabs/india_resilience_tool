@@ -1,0 +1,39 @@
+cells in Jaisalmer+Barmer: 79
+
+Mean over cells and models (days/yr; C). For 'NEX change' rows: mean=mean change, p99=p99 change, d26_28=p90 change, d27_28=median change
+                     mean    p99    max  d26_28  d27_28  d_ge28
+source                                                         
+ERA5 1990-2010      19.05  27.46  28.75   48.83   12.51    1.12
+NEX change May-Sep   1.49   1.27    NaN    1.37    1.48     NaN
+NEX raw 1990-2010   16.00  26.59  29.29    7.56    1.91    0.97
+NEX raw 2040-2060   17.48  27.94  30.65   24.13    7.60    6.21
+QDM 2040-2060       20.52  28.85  30.89   84.05   42.23   26.23
+
+By model: days >= 28 per year
+source         ERA5 1990-2010  NEX raw 1990-2010  NEX raw 2040-2060  QDM 2040-2060
+model                                                                             
+ACCESS-CM2                1.1                2.6               20.7           57.5
+EC-Earth3                 1.1                1.7                8.0           30.5
+GFDL-ESM4                 1.1                0.2                1.1           16.1
+MIROC6                    1.1                0.3                0.5            9.1
+MPI-ESM1-2-LR             1.1                0.1                0.7           18.0
+
+Days >= 28 per year by month (mean over cells; ERA5 counted once per model so same scale)
+       ERA5 1990-2010  NEX raw 1990-2010  NEX raw 2040-2060  QDM 2040-2060
+month                                                                     
+4                0.00               0.00               0.00           0.07
+5                0.01               0.00               0.02           1.87
+6                0.15               0.13               0.77           6.98
+7                0.60               0.57               2.98           9.78
+8                0.34               0.24               2.07           5.70
+9                0.02               0.03               0.37           1.83
+10               0.00               0.00               0.00           0.01
+
+Jun-Sep daily means 1990-2010, cells in Jaisalmer+Barmer (tas C, hurs %; tas_on_humid = mean tas on days hurs>60)
+           source   tas  hurs  hurs_p90  tas_on_humid
+             ERA5 32.21 58.15     78.69         29.96
+   NEX ACCESS-CM2 31.58 50.34     72.00         29.79
+    NEX EC-Earth3 31.71 49.65     73.91         28.99
+    NEX GFDL-ESM4 31.50 48.91     71.46         28.63
+       NEX MIROC6 31.38 49.80     73.10         28.58
+NEX MPI-ESM1-2-LR 31.55 49.19     70.58         28.56

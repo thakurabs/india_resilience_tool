@@ -1,0 +1,785 @@
+district_key,state,district,n_slices_with_any_metric,has_master_row,status
+andaman nicobar islands|nicobars,Andaman & Nicobar Islands,Nicobars,7,True,roster_and_master
+andaman nicobar islands|north and middle andaman,Andaman & Nicobar Islands,North and Middle Andaman,7,True,roster_and_master
+andaman nicobar islands|south andamans,Andaman & Nicobar Islands,South Andamans,7,True,roster_and_master
+andhra pradesh|alluri sitharama raju,Andhra Pradesh,Alluri Sitharama Raju,7,True,roster_and_master
+andhra pradesh|anakapalli,Andhra Pradesh,Anakapalli,7,True,roster_and_master
+andhra pradesh|anantapur,Andhra Pradesh,Anantapur,7,True,roster_and_master
+andhra pradesh|annamayya,Andhra Pradesh,Annamayya,7,True,roster_and_master
+andhra pradesh|bapatla,Andhra Pradesh,Bapatla,7,True,roster_and_master
+andhra pradesh|chittoor,Andhra Pradesh,Chittoor,7,True,roster_and_master
+andhra pradesh|east godavari,Andhra Pradesh,East Godavari,7,True,roster_and_master
+andhra pradesh|eluru,Andhra Pradesh,Eluru,7,True,roster_and_master
+andhra pradesh|guntur,Andhra Pradesh,Guntur,7,True,roster_and_master
+andhra pradesh|kakinada,Andhra Pradesh,Kakinada,7,True,roster_and_master
+andhra pradesh|konaseema,Andhra Pradesh,Konaseema,7,True,roster_and_master
+andhra pradesh|krishna,Andhra Pradesh,Krishna,7,True,roster_and_master
+andhra pradesh|kurnool,Andhra Pradesh,Kurnool,7,True,roster_and_master
+andhra pradesh|nandyal,Andhra Pradesh,Nandyal,7,True,roster_and_master
+andhra pradesh|ntr,Andhra Pradesh,Ntr,7,True,roster_and_master
+andhra pradesh|palnadu,Andhra Pradesh,Palnadu,7,True,roster_and_master
+andhra pradesh|parvathipuram manyam,Andhra Pradesh,Parvathipuram Manyam,7,True,roster_and_master
+andhra pradesh|prakasam,Andhra Pradesh,Prakasam,7,True,roster_and_master
+andhra pradesh|spsr nellore,Andhra Pradesh,Spsr Nellore,7,True,roster_and_master
+andhra pradesh|sri sathya sai,Andhra Pradesh,Sri Sathya Sai,7,True,roster_and_master
+andhra pradesh|srikakulam,Andhra Pradesh,Srikakulam,7,True,roster_and_master
+andhra pradesh|tirupati,Andhra Pradesh,Tirupati,7,True,roster_and_master
+andhra pradesh|visakhapatanam,Andhra Pradesh,Visakhapatanam,7,True,roster_and_master
+andhra pradesh|vizianagaram,Andhra Pradesh,Vizianagaram,7,True,roster_and_master
+andhra pradesh|west godavari,Andhra Pradesh,West Godavari,7,True,roster_and_master
+andhra pradesh|ysr,Andhra Pradesh,Y.S.R.,7,True,roster_and_master
+arunachal pradesh|anjaw,Arunachal Pradesh,Anjaw,7,True,roster_and_master
+arunachal pradesh|changlang,Arunachal Pradesh,Changlang,7,True,roster_and_master
+arunachal pradesh|dibang valley,Arunachal Pradesh,Dibang Valley,7,True,roster_and_master
+arunachal pradesh|east kameng,Arunachal Pradesh,East Kameng,7,True,roster_and_master
+arunachal pradesh|east siang,Arunachal Pradesh,East Siang,7,True,roster_and_master
+arunachal pradesh|itanagar capital complex,Arunachal Pradesh,Itanagar Capital Complex,7,True,roster_and_master
+arunachal pradesh|kamle,Arunachal Pradesh,Kamle,7,True,roster_and_master
+arunachal pradesh|kra daadi,Arunachal Pradesh,Kra Daadi,7,True,roster_and_master
+arunachal pradesh|kurung kumey,Arunachal Pradesh,Kurung Kumey,7,True,roster_and_master
+arunachal pradesh|leparada,Arunachal Pradesh,Leparada,7,True,roster_and_master
+arunachal pradesh|lohit,Arunachal Pradesh,Lohit,7,True,roster_and_master
+arunachal pradesh|longding,Arunachal Pradesh,Longding,7,True,roster_and_master
+arunachal pradesh|lower dibang valley,Arunachal Pradesh,Lower Dibang Valley,7,True,roster_and_master
+arunachal pradesh|lower siang,Arunachal Pradesh,Lower Siang,7,True,roster_and_master
+arunachal pradesh|lower subansiri,Arunachal Pradesh,Lower Subansiri,7,True,roster_and_master
+arunachal pradesh|namsai,Arunachal Pradesh,Namsai,7,True,roster_and_master
+arunachal pradesh|pakke kessang,Arunachal Pradesh,Pakke Kessang,7,True,roster_and_master
+arunachal pradesh|papum pare,Arunachal Pradesh,Papum Pare,7,True,roster_and_master
+arunachal pradesh|shi yomi,Arunachal Pradesh,Shi Yomi,7,True,roster_and_master
+arunachal pradesh|siang,Arunachal Pradesh,Siang,7,True,roster_and_master
+arunachal pradesh|tawang,Arunachal Pradesh,Tawang,7,True,roster_and_master
+arunachal pradesh|tirap,Arunachal Pradesh,Tirap,7,True,roster_and_master
+arunachal pradesh|upper siang,Arunachal Pradesh,Upper Siang,7,True,roster_and_master
+arunachal pradesh|upper subansiri,Arunachal Pradesh,Upper Subansiri,7,True,roster_and_master
+arunachal pradesh|west kameng,Arunachal Pradesh,West Kameng,7,True,roster_and_master
+arunachal pradesh|west siang,Arunachal Pradesh,West Siang,7,True,roster_and_master
+assam|bajali,Assam,Bajali,7,True,roster_and_master
+assam|baksa,Assam,Baksa,7,True,roster_and_master
+assam|barpeta,Assam,Barpeta,7,True,roster_and_master
+assam|biswanath,Assam,Biswanath,7,True,roster_and_master
+assam|bongaigaon,Assam,Bongaigaon,7,True,roster_and_master
+assam|cachar,Assam,Cachar,7,True,roster_and_master
+assam|charaideo,Assam,Charaideo,7,True,roster_and_master
+assam|chirang,Assam,Chirang,7,True,roster_and_master
+assam|darrang,Assam,Darrang,7,True,roster_and_master
+assam|dhemaji,Assam,Dhemaji,7,True,roster_and_master
+assam|dhubri,Assam,Dhubri,7,True,roster_and_master
+assam|dibrugarh,Assam,Dibrugarh,7,True,roster_and_master
+assam|dima hasao,Assam,Dima Hasao,7,True,roster_and_master
+assam|goalpara,Assam,Goalpara,7,True,roster_and_master
+assam|golaghat,Assam,Golaghat,7,True,roster_and_master
+assam|hailakandi,Assam,Hailakandi,7,True,roster_and_master
+assam|hojai,Assam,Hojai,7,True,roster_and_master
+assam|jorhat,Assam,Jorhat,7,True,roster_and_master
+assam|kamrup,Assam,Kamrup,7,True,roster_and_master
+assam|kamrup metro,Assam,Kamrup Metro,7,True,roster_and_master
+assam|karbi anglong,Assam,Karbi Anglong,7,True,roster_and_master
+assam|karimganj,Assam,Karimganj,7,True,roster_and_master
+assam|kokrajhar,Assam,Kokrajhar,7,True,roster_and_master
+assam|lakhimpur,Assam,Lakhimpur,7,True,roster_and_master
+assam|majuli,Assam,Majuli,7,True,roster_and_master
+assam|marigaon,Assam,Marigaon,7,True,roster_and_master
+assam|nagaon,Assam,Nagaon,7,True,roster_and_master
+assam|nalbari,Assam,Nalbari,7,True,roster_and_master
+assam|sivasagar,Assam,Sivasagar,7,True,roster_and_master
+assam|sonitpur,Assam,Sonitpur,7,True,roster_and_master
+assam|south salmara mancachar,Assam,South Salmara Mancachar,7,True,roster_and_master
+assam|tamulpur,Assam,Tamulpur,7,True,roster_and_master
+assam|tinsukia,Assam,Tinsukia,7,True,roster_and_master
+assam|udalguri,Assam,Udalguri,7,True,roster_and_master
+assam|west karbi anglong,Assam,West Karbi Anglong,7,True,roster_and_master
+bihar|araria,Bihar,Araria,7,True,roster_and_master
+bihar|arwal,Bihar,Arwal,7,True,roster_and_master
+bihar|aurangabad,Bihar,Aurangabad,7,True,roster_and_master
+bihar|banka,Bihar,Banka,7,True,roster_and_master
+bihar|begusarai,Bihar,Begusarai,7,True,roster_and_master
+bihar|bhagalpur,Bihar,Bhagalpur,7,True,roster_and_master
+bihar|bhojpur,Bihar,Bhojpur,7,True,roster_and_master
+bihar|buxar,Bihar,Buxar,7,True,roster_and_master
+bihar|darbhanga,Bihar,Darbhanga,7,True,roster_and_master
+bihar|gaya,Bihar,Gaya,7,True,roster_and_master
+bihar|gopalganj,Bihar,Gopalganj,7,True,roster_and_master
+bihar|jamui,Bihar,Jamui,7,True,roster_and_master
+bihar|jehanabad,Bihar,Jehanabad,7,True,roster_and_master
+bihar|kaimur bhabua,Bihar,Kaimur (Bhabua),7,True,roster_and_master
+bihar|katihar,Bihar,Katihar,7,True,roster_and_master
+bihar|khagaria,Bihar,Khagaria,7,True,roster_and_master
+bihar|kishanganj,Bihar,Kishanganj,7,True,roster_and_master
+bihar|lakhisarai,Bihar,Lakhisarai,7,True,roster_and_master
+bihar|madhepura,Bihar,Madhepura,7,True,roster_and_master
+bihar|madhubani,Bihar,Madhubani,7,True,roster_and_master
+bihar|munger,Bihar,Munger,7,True,roster_and_master
+bihar|muzaffarpur,Bihar,Muzaffarpur,7,True,roster_and_master
+bihar|nalanda,Bihar,Nalanda,7,True,roster_and_master
+bihar|nawada,Bihar,Nawada,7,True,roster_and_master
+bihar|pashchim champaran,Bihar,Pashchim Champaran,7,True,roster_and_master
+bihar|patna,Bihar,Patna,7,True,roster_and_master
+bihar|purbi champaran,Bihar,Purbi Champaran,7,True,roster_and_master
+bihar|purnia,Bihar,Purnia,7,True,roster_and_master
+bihar|rohtas,Bihar,Rohtas,7,True,roster_and_master
+bihar|saharsa,Bihar,Saharsa,7,True,roster_and_master
+bihar|samastipur,Bihar,Samastipur,7,True,roster_and_master
+bihar|saran,Bihar,Saran,7,True,roster_and_master
+bihar|sheikhpura,Bihar,Sheikhpura,7,True,roster_and_master
+bihar|sheohar,Bihar,Sheohar,7,True,roster_and_master
+bihar|sitamarhi,Bihar,Sitamarhi,7,True,roster_and_master
+bihar|siwan,Bihar,Siwan,7,True,roster_and_master
+bihar|supaul,Bihar,Supaul,7,True,roster_and_master
+bihar|vaishali,Bihar,Vaishali,7,True,roster_and_master
+chandigarh|chandigarh,Chandigarh,Chandigarh,7,True,roster_and_master
+chhattisgarh|balod,Chhattisgarh,Balod,7,True,roster_and_master
+chhattisgarh|baloda bazar,Chhattisgarh,Baloda Bazar,7,True,roster_and_master
+chhattisgarh|balrampur,Chhattisgarh,Balrampur,7,True,roster_and_master
+chhattisgarh|bastar,Chhattisgarh,Bastar,7,True,roster_and_master
+chhattisgarh|bemetara,Chhattisgarh,Bemetara,7,True,roster_and_master
+chhattisgarh|bijapur,Chhattisgarh,Bijapur,7,True,roster_and_master
+chhattisgarh|bilaspur,Chhattisgarh,Bilaspur,7,True,roster_and_master
+chhattisgarh|dantewada,Chhattisgarh,Dantewada,7,True,roster_and_master
+chhattisgarh|dhamtari,Chhattisgarh,Dhamtari,7,True,roster_and_master
+chhattisgarh|durg,Chhattisgarh,Durg,7,True,roster_and_master
+chhattisgarh|gariyaband,Chhattisgarh,Gariyaband,7,True,roster_and_master
+chhattisgarh|gaurella pendra marwahi,Chhattisgarh,Gaurella Pendra Marwahi,7,True,roster_and_master
+chhattisgarh|janjgir champa,Chhattisgarh,Janjgir-Champa,7,True,roster_and_master
+chhattisgarh|jashpur,Chhattisgarh,Jashpur,7,True,roster_and_master
+chhattisgarh|kabirdham,Chhattisgarh,Kabirdham,7,True,roster_and_master
+chhattisgarh|kanker,Chhattisgarh,Kanker,7,True,roster_and_master
+chhattisgarh|khairgarh chhuikhadan gandai,Chhattisgarh,Khairgarh Chhuikhadan Gandai,7,True,roster_and_master
+chhattisgarh|kondagaon,Chhattisgarh,Kondagaon,7,True,roster_and_master
+chhattisgarh|korba,Chhattisgarh,Korba,7,True,roster_and_master
+chhattisgarh|korea,Chhattisgarh,Korea,7,True,roster_and_master
+chhattisgarh|mahasamund,Chhattisgarh,Mahasamund,7,True,roster_and_master
+chhattisgarh|manendragarh chirimiri bharatpur,Chhattisgarh,Manendragarh Chirimiri Bharatpur,7,True,roster_and_master
+chhattisgarh|mohla manpur ambagarh chouki,Chhattisgarh,Mohla Manpur Ambagarh Chouki,7,True,roster_and_master
+chhattisgarh|mungeli,Chhattisgarh,Mungeli,7,True,roster_and_master
+chhattisgarh|narayanpur,Chhattisgarh,Narayanpur,7,True,roster_and_master
+chhattisgarh|raigarh,Chhattisgarh,Raigarh,7,True,roster_and_master
+chhattisgarh|raipur,Chhattisgarh,Raipur,7,True,roster_and_master
+chhattisgarh|rajnandgaon,Chhattisgarh,Rajnandgaon,7,True,roster_and_master
+chhattisgarh|sakti,Chhattisgarh,Sakti,7,True,roster_and_master
+chhattisgarh|sarangarh bilaigarh,Chhattisgarh,Sarangarh Bilaigarh,7,True,roster_and_master
+chhattisgarh|sukma,Chhattisgarh,Sukma,7,True,roster_and_master
+chhattisgarh|surajpur,Chhattisgarh,Surajpur,7,True,roster_and_master
+chhattisgarh|surguja,Chhattisgarh,Surguja,7,True,roster_and_master
+dadra nagar haveli daman diu|dadra and nagar haveli,"Dadra, Nagar Haveli, Daman & Diu",Dadra and Nagar Haveli,7,True,roster_and_master
+dadra nagar haveli daman diu|daman,"Dadra, Nagar Haveli, Daman & Diu",Daman,7,True,roster_and_master
+dadra nagar haveli daman diu|diu,"Dadra, Nagar Haveli, Daman & Diu",Diu,7,True,roster_and_master
+delhi|central,Delhi,Central,7,True,roster_and_master
+delhi|east,Delhi,East,7,True,roster_and_master
+delhi|new delhi,Delhi,New Delhi,7,True,roster_and_master
+delhi|north,Delhi,North,7,True,roster_and_master
+delhi|north east,Delhi,North East,7,True,roster_and_master
+delhi|north west,Delhi,North West,7,True,roster_and_master
+delhi|shahdara,Delhi,Shahdara,7,True,roster_and_master
+delhi|south,Delhi,South,7,True,roster_and_master
+delhi|south east,Delhi,South East,7,True,roster_and_master
+delhi|south west,Delhi,South West,7,True,roster_and_master
+delhi|west,Delhi,West,7,True,roster_and_master
+goa|north goa,Goa,North Goa,7,True,roster_and_master
+goa|south goa,Goa,South Goa,7,True,roster_and_master
+gujarat|ahmadabad,Gujarat,Ahmadabad,7,True,roster_and_master
+gujarat|amreli,Gujarat,Amreli,7,True,roster_and_master
+gujarat|anand,Gujarat,Anand,7,True,roster_and_master
+gujarat|arvalli,Gujarat,Arvalli,7,True,roster_and_master
+gujarat|banas kantha,Gujarat,Banas Kantha,7,True,roster_and_master
+gujarat|bharuch,Gujarat,Bharuch,7,True,roster_and_master
+gujarat|bhavnagar,Gujarat,Bhavnagar,7,True,roster_and_master
+gujarat|botad,Gujarat,Botad,7,True,roster_and_master
+gujarat|chhotaudepur,Gujarat,Chhotaudepur,7,True,roster_and_master
+gujarat|dang,Gujarat,Dang,7,True,roster_and_master
+gujarat|devbhumi dwarka,Gujarat,Devbhumi Dwarka,7,True,roster_and_master
+gujarat|dohad,Gujarat,Dohad,7,True,roster_and_master
+gujarat|gandhinagar,Gujarat,Gandhinagar,7,True,roster_and_master
+gujarat|gir somnath,Gujarat,Gir Somnath,7,True,roster_and_master
+gujarat|jamnagar,Gujarat,Jamnagar,7,True,roster_and_master
+gujarat|junagadh,Gujarat,Junagadh,7,True,roster_and_master
+gujarat|kachchh,Gujarat,Kachchh,7,True,roster_and_master
+gujarat|kheda,Gujarat,Kheda,7,True,roster_and_master
+gujarat|mahesana,Gujarat,Mahesana,7,True,roster_and_master
+gujarat|mahisagar,Gujarat,Mahisagar,7,True,roster_and_master
+gujarat|morbi,Gujarat,Morbi,7,True,roster_and_master
+gujarat|narmada,Gujarat,Narmada,7,True,roster_and_master
+gujarat|navsari,Gujarat,Navsari,7,True,roster_and_master
+gujarat|panch mahals,Gujarat,Panch Mahals,7,True,roster_and_master
+gujarat|patan,Gujarat,Patan,7,True,roster_and_master
+gujarat|porbandar,Gujarat,Porbandar,7,True,roster_and_master
+gujarat|rajkot,Gujarat,Rajkot,7,True,roster_and_master
+gujarat|sabar kantha,Gujarat,Sabar Kantha,7,True,roster_and_master
+gujarat|surat,Gujarat,Surat,7,True,roster_and_master
+gujarat|surendranagar,Gujarat,Surendranagar,7,True,roster_and_master
+gujarat|tapi,Gujarat,Tapi,7,True,roster_and_master
+gujarat|vadodara,Gujarat,Vadodara,7,True,roster_and_master
+gujarat|valsad,Gujarat,Valsad,7,True,roster_and_master
+haryana|ambala,Haryana,Ambala,7,True,roster_and_master
+haryana|bhiwani,Haryana,Bhiwani,7,True,roster_and_master
+haryana|charki dadri,Haryana,Charki Dadri,7,True,roster_and_master
+haryana|faridabad,Haryana,Faridabad,7,True,roster_and_master
+haryana|fatehabad,Haryana,Fatehabad,7,True,roster_and_master
+haryana|gurugram,Haryana,Gurugram,7,True,roster_and_master
+haryana|hisar,Haryana,Hisar,7,True,roster_and_master
+haryana|jhajjar,Haryana,Jhajjar,7,True,roster_and_master
+haryana|jind,Haryana,Jind,7,True,roster_and_master
+haryana|kaithal,Haryana,Kaithal,7,True,roster_and_master
+haryana|karnal,Haryana,Karnal,7,True,roster_and_master
+haryana|kurukshetra,Haryana,Kurukshetra,7,True,roster_and_master
+haryana|mahendragarh,Haryana,Mahendragarh,7,True,roster_and_master
+haryana|nuh,Haryana,Nuh,7,True,roster_and_master
+haryana|palwal,Haryana,Palwal,7,True,roster_and_master
+haryana|panchkula,Haryana,Panchkula,7,True,roster_and_master
+haryana|panipat,Haryana,Panipat,7,True,roster_and_master
+haryana|rewari,Haryana,Rewari,7,True,roster_and_master
+haryana|rohtak,Haryana,Rohtak,7,True,roster_and_master
+haryana|sirsa,Haryana,Sirsa,7,True,roster_and_master
+haryana|sonipat,Haryana,Sonipat,7,True,roster_and_master
+haryana|yamunanagar,Haryana,Yamunanagar,7,True,roster_and_master
+himachal pradesh|bilaspur,Himachal Pradesh,Bilaspur,7,True,roster_and_master
+himachal pradesh|chamba,Himachal Pradesh,Chamba,7,True,roster_and_master
+himachal pradesh|hamirpur,Himachal Pradesh,Hamirpur,7,True,roster_and_master
+himachal pradesh|kangra,Himachal Pradesh,Kangra,7,True,roster_and_master
+himachal pradesh|kinnaur,Himachal Pradesh,Kinnaur,7,True,roster_and_master
+himachal pradesh|kullu,Himachal Pradesh,Kullu,7,True,roster_and_master
+himachal pradesh|lahul and spiti,Himachal Pradesh,Lahul and Spiti,7,True,roster_and_master
+himachal pradesh|mandi,Himachal Pradesh,Mandi,7,True,roster_and_master
+himachal pradesh|shimla,Himachal Pradesh,Shimla,7,True,roster_and_master
+himachal pradesh|sirmaur,Himachal Pradesh,Sirmaur,7,True,roster_and_master
+himachal pradesh|solan,Himachal Pradesh,Solan,7,True,roster_and_master
+himachal pradesh|una,Himachal Pradesh,Una,7,True,roster_and_master
+jammu kashmir|anantnag,Jammu & Kashmir,Anantnag,7,True,roster_and_master
+jammu kashmir|bandipora,Jammu & Kashmir,Bandipora,7,True,roster_and_master
+jammu kashmir|baramulla,Jammu & Kashmir,Baramulla,7,True,roster_and_master
+jammu kashmir|budgam,Jammu & Kashmir,Budgam,7,True,roster_and_master
+jammu kashmir|doda,Jammu & Kashmir,Doda,7,True,roster_and_master
+jammu kashmir|ganderbal,Jammu & Kashmir,Ganderbal,7,True,roster_and_master
+jammu kashmir|jammu,Jammu & Kashmir,Jammu,7,True,roster_and_master
+jammu kashmir|kathua,Jammu & Kashmir,Kathua,7,True,roster_and_master
+jammu kashmir|kishtwar,Jammu & Kashmir,Kishtwar,7,True,roster_and_master
+jammu kashmir|kulgam,Jammu & Kashmir,Kulgam,7,True,roster_and_master
+jammu kashmir|kupwara,Jammu & Kashmir,Kupwara,7,True,roster_and_master
+jammu kashmir|mirpur,Jammu & Kashmir,Mirpur,7,True,roster_and_master
+jammu kashmir|muzaffarabad,Jammu & Kashmir,Muzaffarabad,7,True,roster_and_master
+jammu kashmir|poonch,Jammu & Kashmir,Poonch,7,True,roster_and_master
+jammu kashmir|pulwama,Jammu & Kashmir,Pulwama,7,True,roster_and_master
+jammu kashmir|rajouri,Jammu & Kashmir,Rajouri,7,True,roster_and_master
+jammu kashmir|ramban,Jammu & Kashmir,Ramban,7,True,roster_and_master
+jammu kashmir|reasi,Jammu & Kashmir,Reasi,7,True,roster_and_master
+jammu kashmir|samba,Jammu & Kashmir,Samba,7,True,roster_and_master
+jammu kashmir|shopian,Jammu & Kashmir,Shopian,7,True,roster_and_master
+jammu kashmir|srinagar,Jammu & Kashmir,Srinagar,7,True,roster_and_master
+jammu kashmir|udhampur,Jammu & Kashmir,Udhampur,7,True,roster_and_master
+jharkhand|bokaro,Jharkhand,Bokaro,7,True,roster_and_master
+jharkhand|chatra,Jharkhand,Chatra,7,True,roster_and_master
+jharkhand|deoghar,Jharkhand,Deoghar,7,True,roster_and_master
+jharkhand|dhanbad,Jharkhand,Dhanbad,7,True,roster_and_master
+jharkhand|dumka,Jharkhand,Dumka,7,True,roster_and_master
+jharkhand|east singhbum,Jharkhand,East Singhbum,7,True,roster_and_master
+jharkhand|garhwa,Jharkhand,Garhwa,7,True,roster_and_master
+jharkhand|giridih,Jharkhand,Giridih,7,True,roster_and_master
+jharkhand|godda,Jharkhand,Godda,7,True,roster_and_master
+jharkhand|gumla,Jharkhand,Gumla,7,True,roster_and_master
+jharkhand|hazaribagh,Jharkhand,Hazaribagh,7,True,roster_and_master
+jharkhand|jamtara,Jharkhand,Jamtara,7,True,roster_and_master
+jharkhand|khunti,Jharkhand,Khunti,7,True,roster_and_master
+jharkhand|koderma,Jharkhand,Koderma,7,True,roster_and_master
+jharkhand|latehar,Jharkhand,Latehar,7,True,roster_and_master
+jharkhand|lohardaga,Jharkhand,Lohardaga,7,True,roster_and_master
+jharkhand|pakur,Jharkhand,Pakur,7,True,roster_and_master
+jharkhand|palamu,Jharkhand,Palamu,7,True,roster_and_master
+jharkhand|ramgarh,Jharkhand,Ramgarh,7,True,roster_and_master
+jharkhand|ranchi,Jharkhand,Ranchi,7,True,roster_and_master
+jharkhand|sahebganj,Jharkhand,Sahebganj,7,True,roster_and_master
+jharkhand|saraikela kharsawan,Jharkhand,Saraikela Kharsawan,7,True,roster_and_master
+jharkhand|simdega,Jharkhand,Simdega,7,True,roster_and_master
+jharkhand|west singhbhum,Jharkhand,West Singhbhum,7,True,roster_and_master
+karnataka|bagalkote,Karnataka,Bagalkote,7,True,roster_and_master
+karnataka|ballari,Karnataka,Ballari,7,True,roster_and_master
+karnataka|belagavi,Karnataka,Belagavi,7,True,roster_and_master
+karnataka|bengaluru rural,Karnataka,Bengaluru Rural,7,True,roster_and_master
+karnataka|bengaluru urban,Karnataka,Bengaluru Urban,7,True,roster_and_master
+karnataka|bidar,Karnataka,Bidar,7,True,roster_and_master
+karnataka|chamarajanagara,Karnataka,Chamarajanagara,7,True,roster_and_master
+karnataka|chikkaballapura,Karnataka,Chikkaballapura,7,True,roster_and_master
+karnataka|chikkamagaluru,Karnataka,Chikkamagaluru,7,True,roster_and_master
+karnataka|chitradurga,Karnataka,Chitradurga,7,True,roster_and_master
+karnataka|dakshina kannada,Karnataka,Dakshina Kannada,7,True,roster_and_master
+karnataka|davangere,Karnataka,Davangere,7,True,roster_and_master
+karnataka|dharwad,Karnataka,Dharwad,7,True,roster_and_master
+karnataka|gadag,Karnataka,Gadag,7,True,roster_and_master
+karnataka|hassan,Karnataka,Hassan,7,True,roster_and_master
+karnataka|haveri,Karnataka,Haveri,7,True,roster_and_master
+karnataka|kalaburagi,Karnataka,Kalaburagi,7,True,roster_and_master
+karnataka|kodagu,Karnataka,Kodagu,7,True,roster_and_master
+karnataka|kolar,Karnataka,Kolar,7,True,roster_and_master
+karnataka|koppal,Karnataka,Koppal,7,True,roster_and_master
+karnataka|mandya,Karnataka,Mandya,7,True,roster_and_master
+karnataka|mysuru,Karnataka,Mysuru,7,True,roster_and_master
+karnataka|raichur,Karnataka,Raichur,7,True,roster_and_master
+karnataka|ramanagara,Karnataka,Ramanagara,7,True,roster_and_master
+karnataka|shivamogga,Karnataka,Shivamogga,7,True,roster_and_master
+karnataka|tumakuru,Karnataka,Tumakuru,7,True,roster_and_master
+karnataka|udupi,Karnataka,Udupi,7,True,roster_and_master
+karnataka|uttara kannada,Karnataka,Uttara Kannada,7,True,roster_and_master
+karnataka|vijayanagar,Karnataka,Vijayanagar,7,True,roster_and_master
+karnataka|vijayapura,Karnataka,Vijayapura,7,True,roster_and_master
+karnataka|yadgir,Karnataka,Yadgir,7,True,roster_and_master
+kerala|alappuzha,Kerala,Alappuzha,7,True,roster_and_master
+kerala|ernakulam,Kerala,Ernakulam,7,True,roster_and_master
+kerala|idukki,Kerala,Idukki,7,True,roster_and_master
+kerala|kannur,Kerala,Kannur,7,True,roster_and_master
+kerala|kasaragod,Kerala,Kasaragod,7,True,roster_and_master
+kerala|kollam,Kerala,Kollam,7,True,roster_and_master
+kerala|kottayam,Kerala,Kottayam,7,True,roster_and_master
+kerala|kozhikode,Kerala,Kozhikode,7,True,roster_and_master
+kerala|malappuram,Kerala,Malappuram,7,True,roster_and_master
+kerala|palakkad,Kerala,Palakkad,7,True,roster_and_master
+kerala|pathanamthitta,Kerala,Pathanamthitta,7,True,roster_and_master
+kerala|thiruvananthapuram,Kerala,Thiruvananthapuram,7,True,roster_and_master
+kerala|thrissur,Kerala,Thrissur,7,True,roster_and_master
+kerala|wayanad,Kerala,Wayanad,7,True,roster_and_master
+ladakh|kargil,Ladakh,Kargil,7,True,roster_and_master
+ladakh|leh ladakh,Ladakh,Leh Ladakh,7,True,roster_and_master
+lakshadweep|lakshadweep,Lakshadweep,Lakshadweep,7,True,roster_and_master
+madhya pradesh|agar malwa,Madhya Pradesh,Agar Malwa,7,True,roster_and_master
+madhya pradesh|alirajpur,Madhya Pradesh,Alirajpur,7,True,roster_and_master
+madhya pradesh|anuppur,Madhya Pradesh,Anuppur,7,True,roster_and_master
+madhya pradesh|ashoknagar,Madhya Pradesh,Ashoknagar,7,True,roster_and_master
+madhya pradesh|balaghat,Madhya Pradesh,Balaghat,7,True,roster_and_master
+madhya pradesh|barwani,Madhya Pradesh,Barwani,7,True,roster_and_master
+madhya pradesh|betul,Madhya Pradesh,Betul,7,True,roster_and_master
+madhya pradesh|bhind,Madhya Pradesh,Bhind,7,True,roster_and_master
+madhya pradesh|bhopal,Madhya Pradesh,Bhopal,7,True,roster_and_master
+madhya pradesh|burhanpur,Madhya Pradesh,Burhanpur,7,True,roster_and_master
+madhya pradesh|chhatarpur,Madhya Pradesh,Chhatarpur,7,True,roster_and_master
+madhya pradesh|chhindwara,Madhya Pradesh,Chhindwara,7,True,roster_and_master
+madhya pradesh|damoh,Madhya Pradesh,Damoh,7,True,roster_and_master
+madhya pradesh|datia,Madhya Pradesh,Datia,7,True,roster_and_master
+madhya pradesh|dewas,Madhya Pradesh,Dewas,7,True,roster_and_master
+madhya pradesh|dhar,Madhya Pradesh,Dhar,7,True,roster_and_master
+madhya pradesh|dindori,Madhya Pradesh,Dindori,7,True,roster_and_master
+madhya pradesh|east nimar,Madhya Pradesh,East Nimar,7,True,roster_and_master
+madhya pradesh|guna,Madhya Pradesh,Guna,7,True,roster_and_master
+madhya pradesh|gwalior,Madhya Pradesh,Gwalior,7,True,roster_and_master
+madhya pradesh|harda,Madhya Pradesh,Harda,7,True,roster_and_master
+madhya pradesh|indore,Madhya Pradesh,Indore,7,True,roster_and_master
+madhya pradesh|jabalpur,Madhya Pradesh,Jabalpur,7,True,roster_and_master
+madhya pradesh|jhabua,Madhya Pradesh,Jhabua,7,True,roster_and_master
+madhya pradesh|katni,Madhya Pradesh,Katni,7,True,roster_and_master
+madhya pradesh|khargone,Madhya Pradesh,Khargone,7,True,roster_and_master
+madhya pradesh|mandla,Madhya Pradesh,Mandla,7,True,roster_and_master
+madhya pradesh|mandsaur,Madhya Pradesh,Mandsaur,7,True,roster_and_master
+madhya pradesh|morena,Madhya Pradesh,Morena,7,True,roster_and_master
+madhya pradesh|narmadapuram,Madhya Pradesh,Narmadapuram,7,True,roster_and_master
+madhya pradesh|narsinghpur,Madhya Pradesh,Narsinghpur,7,True,roster_and_master
+madhya pradesh|neemuch,Madhya Pradesh,Neemuch,7,True,roster_and_master
+madhya pradesh|niwari,Madhya Pradesh,Niwari,7,True,roster_and_master
+madhya pradesh|panna,Madhya Pradesh,Panna,7,True,roster_and_master
+madhya pradesh|raisen,Madhya Pradesh,Raisen,7,True,roster_and_master
+madhya pradesh|rajgarh,Madhya Pradesh,Rajgarh,7,True,roster_and_master
+madhya pradesh|ratlam,Madhya Pradesh,Ratlam,7,True,roster_and_master
+madhya pradesh|rewa,Madhya Pradesh,Rewa,7,True,roster_and_master
+madhya pradesh|sagar,Madhya Pradesh,Sagar,7,True,roster_and_master
+madhya pradesh|satna,Madhya Pradesh,Satna,7,True,roster_and_master
+madhya pradesh|sehore,Madhya Pradesh,Sehore,7,True,roster_and_master
+madhya pradesh|seoni,Madhya Pradesh,Seoni,7,True,roster_and_master
+madhya pradesh|shahdol,Madhya Pradesh,Shahdol,7,True,roster_and_master
+madhya pradesh|shajapur,Madhya Pradesh,Shajapur,7,True,roster_and_master
+madhya pradesh|sheopur,Madhya Pradesh,Sheopur,7,True,roster_and_master
+madhya pradesh|shivpuri,Madhya Pradesh,Shivpuri,7,True,roster_and_master
+madhya pradesh|sidhi,Madhya Pradesh,Sidhi,7,True,roster_and_master
+madhya pradesh|singrauli,Madhya Pradesh,Singrauli,7,True,roster_and_master
+madhya pradesh|tikamgarh,Madhya Pradesh,Tikamgarh,7,True,roster_and_master
+madhya pradesh|ujjain,Madhya Pradesh,Ujjain,7,True,roster_and_master
+madhya pradesh|umaria,Madhya Pradesh,Umaria,7,True,roster_and_master
+madhya pradesh|vidisha,Madhya Pradesh,Vidisha,7,True,roster_and_master
+maharashtra|ahmednagar,Maharashtra,Ahmednagar,7,True,roster_and_master
+maharashtra|akola,Maharashtra,Akola,7,True,roster_and_master
+maharashtra|amravati,Maharashtra,Amravati,7,True,roster_and_master
+maharashtra|aurangabad,Maharashtra,Aurangabad,7,True,roster_and_master
+maharashtra|beed,Maharashtra,Beed,7,True,roster_and_master
+maharashtra|bhandara,Maharashtra,Bhandara,7,True,roster_and_master
+maharashtra|buldhana,Maharashtra,Buldhana,7,True,roster_and_master
+maharashtra|chandrapur,Maharashtra,Chandrapur,7,True,roster_and_master
+maharashtra|dhule,Maharashtra,Dhule,7,True,roster_and_master
+maharashtra|gadchiroli,Maharashtra,Gadchiroli,7,True,roster_and_master
+maharashtra|gondia,Maharashtra,Gondia,7,True,roster_and_master
+maharashtra|hingoli,Maharashtra,Hingoli,7,True,roster_and_master
+maharashtra|jalgaon,Maharashtra,Jalgaon,7,True,roster_and_master
+maharashtra|jalna,Maharashtra,Jalna,7,True,roster_and_master
+maharashtra|kolhapur,Maharashtra,Kolhapur,7,True,roster_and_master
+maharashtra|latur,Maharashtra,Latur,7,True,roster_and_master
+maharashtra|mumbai,Maharashtra,Mumbai,7,True,roster_and_master
+maharashtra|mumbai suburban,Maharashtra,Mumbai Suburban,7,True,roster_and_master
+maharashtra|nagpur,Maharashtra,Nagpur,7,True,roster_and_master
+maharashtra|nanded,Maharashtra,Nanded,7,True,roster_and_master
+maharashtra|nandurbar,Maharashtra,Nandurbar,7,True,roster_and_master
+maharashtra|nashik,Maharashtra,Nashik,7,True,roster_and_master
+maharashtra|osmanabad,Maharashtra,Osmanabad,7,True,roster_and_master
+maharashtra|palghar,Maharashtra,Palghar,7,True,roster_and_master
+maharashtra|parbhani,Maharashtra,Parbhani,7,True,roster_and_master
+maharashtra|pune,Maharashtra,Pune,7,True,roster_and_master
+maharashtra|raigad,Maharashtra,Raigad,7,True,roster_and_master
+maharashtra|ratnagiri,Maharashtra,Ratnagiri,7,True,roster_and_master
+maharashtra|sangli,Maharashtra,Sangli,7,True,roster_and_master
+maharashtra|satara,Maharashtra,Satara,7,True,roster_and_master
+maharashtra|sindhudurg,Maharashtra,Sindhudurg,7,True,roster_and_master
+maharashtra|solapur,Maharashtra,Solapur,7,True,roster_and_master
+maharashtra|thane,Maharashtra,Thane,7,True,roster_and_master
+maharashtra|wardha,Maharashtra,Wardha,7,True,roster_and_master
+maharashtra|washim,Maharashtra,Washim,7,True,roster_and_master
+maharashtra|yavatmal,Maharashtra,Yavatmal,7,True,roster_and_master
+manipur|bishnupur,Manipur,Bishnupur,7,True,roster_and_master
+manipur|chandel,Manipur,Chandel,7,True,roster_and_master
+manipur|churachandpur,Manipur,Churachandpur,7,True,roster_and_master
+manipur|imphal east,Manipur,Imphal East,7,True,roster_and_master
+manipur|imphal west,Manipur,Imphal West,7,True,roster_and_master
+manipur|jiribam,Manipur,Jiribam,7,True,roster_and_master
+manipur|kakching,Manipur,Kakching,7,True,roster_and_master
+manipur|kamjong,Manipur,Kamjong,7,True,roster_and_master
+manipur|kangpokpi,Manipur,Kangpokpi,7,True,roster_and_master
+manipur|noney,Manipur,Noney,7,True,roster_and_master
+manipur|pherzawl,Manipur,Pherzawl,7,True,roster_and_master
+manipur|senapati,Manipur,Senapati,7,True,roster_and_master
+manipur|tamenglong,Manipur,Tamenglong,7,True,roster_and_master
+manipur|tengnoupal,Manipur,Tengnoupal,7,True,roster_and_master
+manipur|thoubal,Manipur,Thoubal,7,True,roster_and_master
+manipur|ukhrul,Manipur,Ukhrul,7,True,roster_and_master
+meghalaya|east garo hills,Meghalaya,East Garo Hills,7,True,roster_and_master
+meghalaya|east jaintia hills,Meghalaya,East Jaintia Hills,7,True,roster_and_master
+meghalaya|east khasi hills,Meghalaya,East Khasi Hills,7,True,roster_and_master
+meghalaya|eastern west khasi hills,Meghalaya,Eastern West Khasi Hills,7,True,roster_and_master
+meghalaya|north garo hills,Meghalaya,North Garo Hills,7,True,roster_and_master
+meghalaya|ri bhoi,Meghalaya,Ri Bhoi,7,True,roster_and_master
+meghalaya|south garo hills,Meghalaya,South Garo Hills,7,True,roster_and_master
+meghalaya|south west garo hills,Meghalaya,South West Garo Hills,7,True,roster_and_master
+meghalaya|south west khasi hills,Meghalaya,South West Khasi Hills,7,True,roster_and_master
+meghalaya|west garo hills,Meghalaya,West Garo Hills,7,True,roster_and_master
+meghalaya|west jaintia hills,Meghalaya,West Jaintia Hills,7,True,roster_and_master
+meghalaya|west khasi hills,Meghalaya,West Khasi Hills,7,True,roster_and_master
+mizoram|aizawl,Mizoram,Aizawl,7,True,roster_and_master
+mizoram|champhai,Mizoram,Champhai,7,True,roster_and_master
+mizoram|hnahthial,Mizoram,Hnahthial,7,True,roster_and_master
+mizoram|khawzawl,Mizoram,Khawzawl,7,True,roster_and_master
+mizoram|kolasib,Mizoram,Kolasib,7,True,roster_and_master
+mizoram|lawngtlai,Mizoram,Lawngtlai,7,True,roster_and_master
+mizoram|lunglei,Mizoram,Lunglei,7,True,roster_and_master
+mizoram|mamit,Mizoram,Mamit,7,True,roster_and_master
+mizoram|saiha,Mizoram,Saiha,7,True,roster_and_master
+mizoram|saitual,Mizoram,Saitual,7,True,roster_and_master
+mizoram|serchhip,Mizoram,Serchhip,7,True,roster_and_master
+nagaland|chumoukedima,Nagaland,Chumoukedima,7,True,roster_and_master
+nagaland|dimapur,Nagaland,Dimapur,7,True,roster_and_master
+nagaland|kiphire,Nagaland,Kiphire,7,True,roster_and_master
+nagaland|kohima,Nagaland,Kohima,7,True,roster_and_master
+nagaland|longleng,Nagaland,Longleng,7,True,roster_and_master
+nagaland|mokokchung,Nagaland,Mokokchung,7,True,roster_and_master
+nagaland|mon,Nagaland,Mon,7,True,roster_and_master
+nagaland|niuland,Nagaland,Niuland,7,True,roster_and_master
+nagaland|noklak,Nagaland,Noklak,7,True,roster_and_master
+nagaland|peren,Nagaland,Peren,7,True,roster_and_master
+nagaland|phek,Nagaland,Phek,7,True,roster_and_master
+nagaland|shamator,Nagaland,Shamator,7,True,roster_and_master
+nagaland|tseminyu,Nagaland,Tseminyu,7,True,roster_and_master
+nagaland|tuensang,Nagaland,Tuensang,7,True,roster_and_master
+nagaland|wokha,Nagaland,Wokha,7,True,roster_and_master
+nagaland|zunheboto,Nagaland,Zunheboto,7,True,roster_and_master
+odisha|anugul,Odisha,Anugul,7,True,roster_and_master
+odisha|balangir,Odisha,Balangir,7,True,roster_and_master
+odisha|baleshwar,Odisha,Baleshwar,7,True,roster_and_master
+odisha|bargarh,Odisha,Bargarh,7,True,roster_and_master
+odisha|bhadrak,Odisha,Bhadrak,7,True,roster_and_master
+odisha|boudh,Odisha,Boudh,7,True,roster_and_master
+odisha|cuttack,Odisha,Cuttack,7,True,roster_and_master
+odisha|deogarh,Odisha,Deogarh,7,True,roster_and_master
+odisha|dhenkanal,Odisha,Dhenkanal,7,True,roster_and_master
+odisha|gajapati,Odisha,Gajapati,7,True,roster_and_master
+odisha|ganjam,Odisha,Ganjam,7,True,roster_and_master
+odisha|jagatsinghapur,Odisha,Jagatsinghapur,7,True,roster_and_master
+odisha|jajapur,Odisha,Jajapur,7,True,roster_and_master
+odisha|jharsuguda,Odisha,Jharsuguda,7,True,roster_and_master
+odisha|kalahandi,Odisha,Kalahandi,7,True,roster_and_master
+odisha|kandhamal,Odisha,Kandhamal,7,True,roster_and_master
+odisha|kendrapara,Odisha,Kendrapara,7,True,roster_and_master
+odisha|kendujhar,Odisha,Kendujhar,7,True,roster_and_master
+odisha|khordha,Odisha,Khordha,7,True,roster_and_master
+odisha|koraput,Odisha,Koraput,7,True,roster_and_master
+odisha|malkangiri,Odisha,Malkangiri,7,True,roster_and_master
+odisha|mayurbhanj,Odisha,Mayurbhanj,7,True,roster_and_master
+odisha|nabarangpur,Odisha,Nabarangpur,7,True,roster_and_master
+odisha|nayagarh,Odisha,Nayagarh,7,True,roster_and_master
+odisha|nuapada,Odisha,Nuapada,7,True,roster_and_master
+odisha|puri,Odisha,Puri,7,True,roster_and_master
+odisha|rayagada,Odisha,Rayagada,7,True,roster_and_master
+odisha|sambalpur,Odisha,Sambalpur,7,True,roster_and_master
+odisha|sonepur,Odisha,Sonepur,7,True,roster_and_master
+odisha|sundargarh,Odisha,Sundargarh,7,True,roster_and_master
+puducherry|karaikal,Puducherry,Karaikal,7,True,roster_and_master
+puducherry|mahe,Puducherry,Mahe,7,True,roster_and_master
+puducherry|pondicherry,Puducherry,Pondicherry,7,True,roster_and_master
+puducherry|yanam,Puducherry,Yanam,7,True,roster_and_master
+punjab|amritsar,Punjab,Amritsar,7,True,roster_and_master
+punjab|barnala,Punjab,Barnala,7,True,roster_and_master
+punjab|bathinda,Punjab,Bathinda,7,True,roster_and_master
+punjab|faridkot,Punjab,Faridkot,7,True,roster_and_master
+punjab|fatehgarh sahib,Punjab,Fatehgarh Sahib,7,True,roster_and_master
+punjab|fazilka,Punjab,Fazilka,7,True,roster_and_master
+punjab|ferozepur,Punjab,Ferozepur,7,True,roster_and_master
+punjab|gurdaspur,Punjab,Gurdaspur,7,True,roster_and_master
+punjab|hoshiarpur,Punjab,Hoshiarpur,7,True,roster_and_master
+punjab|jalandhar,Punjab,Jalandhar,7,True,roster_and_master
+punjab|kapurthala,Punjab,Kapurthala,7,True,roster_and_master
+punjab|ludhiana,Punjab,Ludhiana,7,True,roster_and_master
+punjab|malerkotla,Punjab,Malerkotla,7,True,roster_and_master
+punjab|mansa,Punjab,Mansa,7,True,roster_and_master
+punjab|moga,Punjab,Moga,7,True,roster_and_master
+punjab|pathankot,Punjab,Pathankot,7,True,roster_and_master
+punjab|patiala,Punjab,Patiala,7,True,roster_and_master
+punjab|rupnagar,Punjab,Rupnagar,7,True,roster_and_master
+punjab|sas nagar,Punjab,S.A.S Nagar,7,True,roster_and_master
+punjab|sangrur,Punjab,Sangrur,7,True,roster_and_master
+punjab|shahid bhagat singh nagar,Punjab,Shahid Bhagat Singh Nagar,7,True,roster_and_master
+punjab|sri muktsar sahib,Punjab,Sri Muktsar Sahib,7,True,roster_and_master
+punjab|tarn taran,Punjab,Tarn Taran,7,True,roster_and_master
+rajasthan|ajmer,Rajasthan,Ajmer,7,True,roster_and_master
+rajasthan|alwar,Rajasthan,Alwar,7,True,roster_and_master
+rajasthan|anoopgarh,Rajasthan,Anoopgarh,7,True,roster_and_master
+rajasthan|balotra,Rajasthan,Balotra,7,True,roster_and_master
+rajasthan|banswara,Rajasthan,Banswara,7,True,roster_and_master
+rajasthan|baran,Rajasthan,Baran,7,True,roster_and_master
+rajasthan|barmer,Rajasthan,Barmer,7,True,roster_and_master
+rajasthan|beawar,Rajasthan,Beawar,7,True,roster_and_master
+rajasthan|bharatpur,Rajasthan,Bharatpur,7,True,roster_and_master
+rajasthan|bhilwara,Rajasthan,Bhilwara,7,True,roster_and_master
+rajasthan|bikaner,Rajasthan,Bikaner,7,True,roster_and_master
+rajasthan|bundi,Rajasthan,Bundi,7,True,roster_and_master
+rajasthan|chittorgarh,Rajasthan,Chittorgarh,7,True,roster_and_master
+rajasthan|churu,Rajasthan,Churu,7,True,roster_and_master
+rajasthan|dausa,Rajasthan,Dausa,7,True,roster_and_master
+rajasthan|deeg,Rajasthan,Deeg,7,True,roster_and_master
+rajasthan|dholpur,Rajasthan,Dholpur,7,True,roster_and_master
+rajasthan|didwana kuchaman,Rajasthan,Didwana Kuchaman,7,True,roster_and_master
+rajasthan|dudu,Rajasthan,Dudu,7,True,roster_and_master
+rajasthan|dungarpur,Rajasthan,Dungarpur,7,True,roster_and_master
+rajasthan|ganganagar,Rajasthan,Ganganagar,7,True,roster_and_master
+rajasthan|gangapurcity,Rajasthan,Gangapurcity,7,True,roster_and_master
+rajasthan|hanumangarh,Rajasthan,Hanumangarh,7,True,roster_and_master
+rajasthan|jaipur,Rajasthan,Jaipur,7,True,roster_and_master
+rajasthan|jaipur gramin,Rajasthan,Jaipur Gramin,7,True,roster_and_master
+rajasthan|jaisalmer,Rajasthan,Jaisalmer,7,True,roster_and_master
+rajasthan|jalore,Rajasthan,Jalore,7,True,roster_and_master
+rajasthan|jhalawar,Rajasthan,Jhalawar,7,True,roster_and_master
+rajasthan|jhunjhunu,Rajasthan,Jhunjhunu,7,True,roster_and_master
+rajasthan|jodhpur,Rajasthan,Jodhpur,7,True,roster_and_master
+rajasthan|jodhpur gramin,Rajasthan,Jodhpur Gramin,7,True,roster_and_master
+rajasthan|karauli,Rajasthan,Karauli,7,True,roster_and_master
+rajasthan|kekri,Rajasthan,Kekri,7,True,roster_and_master
+rajasthan|khairthal tijara,Rajasthan,Khairthal-Tijara,7,True,roster_and_master
+rajasthan|kota,Rajasthan,Kota,7,True,roster_and_master
+rajasthan|kotputli behror,Rajasthan,Kotputli-Behror,7,True,roster_and_master
+rajasthan|nagaur,Rajasthan,Nagaur,7,True,roster_and_master
+rajasthan|neem ka thana,Rajasthan,Neem Ka Thana,7,True,roster_and_master
+rajasthan|pali,Rajasthan,Pali,7,True,roster_and_master
+rajasthan|phalodi,Rajasthan,Phalodi,7,True,roster_and_master
+rajasthan|pratapgarh,Rajasthan,Pratapgarh,7,True,roster_and_master
+rajasthan|rajsamand,Rajasthan,Rajsamand,7,True,roster_and_master
+rajasthan|salumbar,Rajasthan,Salumbar,7,True,roster_and_master
+rajasthan|sawai madhopur,Rajasthan,Sawai Madhopur,7,True,roster_and_master
+rajasthan|shahpura,Rajasthan,Shahpura,7,True,roster_and_master
+rajasthan|sikar,Rajasthan,Sikar,7,True,roster_and_master
+rajasthan|sirohi,Rajasthan,Sirohi,7,True,roster_and_master
+rajasthan|tonk,Rajasthan,Tonk,7,True,roster_and_master
+rajasthan|udaipur,Rajasthan,Udaipur,7,True,roster_and_master
+sikkim|gangtok,Sikkim,Gangtok,7,True,roster_and_master
+sikkim|gyalshing,Sikkim,Gyalshing,7,True,roster_and_master
+sikkim|mangan,Sikkim,Mangan,7,True,roster_and_master
+sikkim|namchi,Sikkim,Namchi,7,True,roster_and_master
+sikkim|pakyong,Sikkim,Pakyong,7,True,roster_and_master
+sikkim|soreng,Sikkim,Soreng,7,True,roster_and_master
+tamil nadu|ariyalur,Tamil Nadu,Ariyalur,7,True,roster_and_master
+tamil nadu|chengalpattu,Tamil Nadu,Chengalpattu,7,True,roster_and_master
+tamil nadu|chennai,Tamil Nadu,Chennai,7,True,roster_and_master
+tamil nadu|coimbatore,Tamil Nadu,Coimbatore,7,True,roster_and_master
+tamil nadu|cuddalore,Tamil Nadu,Cuddalore,7,True,roster_and_master
+tamil nadu|dharmapuri,Tamil Nadu,Dharmapuri,7,True,roster_and_master
+tamil nadu|dindigul,Tamil Nadu,Dindigul,7,True,roster_and_master
+tamil nadu|erode,Tamil Nadu,Erode,7,True,roster_and_master
+tamil nadu|kallakurichi,Tamil Nadu,Kallakurichi,7,True,roster_and_master
+tamil nadu|kanchipuram,Tamil Nadu,Kanchipuram,7,True,roster_and_master
+tamil nadu|kanniyakumari,Tamil Nadu,Kanniyakumari,7,True,roster_and_master
+tamil nadu|karur,Tamil Nadu,Karur,7,True,roster_and_master
+tamil nadu|krishnagiri,Tamil Nadu,Krishnagiri,7,True,roster_and_master
+tamil nadu|madurai,Tamil Nadu,Madurai,7,True,roster_and_master
+tamil nadu|mayiladuthurai,Tamil Nadu,Mayiladuthurai,7,True,roster_and_master
+tamil nadu|nagapattinam,Tamil Nadu,Nagapattinam,7,True,roster_and_master
+tamil nadu|namakkal,Tamil Nadu,Namakkal,7,True,roster_and_master
+tamil nadu|perambalur,Tamil Nadu,Perambalur,7,True,roster_and_master
+tamil nadu|pudukkottai,Tamil Nadu,Pudukkottai,7,True,roster_and_master
+tamil nadu|ramanathapuram,Tamil Nadu,Ramanathapuram,7,True,roster_and_master
+tamil nadu|ranipet,Tamil Nadu,Ranipet,7,True,roster_and_master
+tamil nadu|salem,Tamil Nadu,Salem,7,True,roster_and_master
+tamil nadu|sivaganga,Tamil Nadu,Sivaganga,7,True,roster_and_master
+tamil nadu|tenkasi,Tamil Nadu,Tenkasi,7,True,roster_and_master
+tamil nadu|thanjavur,Tamil Nadu,Thanjavur,7,True,roster_and_master
+tamil nadu|the nilgiris,Tamil Nadu,The Nilgiris,7,True,roster_and_master
+tamil nadu|theni,Tamil Nadu,Theni,7,True,roster_and_master
+tamil nadu|thiruvallur,Tamil Nadu,Thiruvallur,7,True,roster_and_master
+tamil nadu|thiruvarur,Tamil Nadu,Thiruvarur,7,True,roster_and_master
+tamil nadu|tiruchirappalli,Tamil Nadu,Tiruchirappalli,7,True,roster_and_master
+tamil nadu|tirunelveli,Tamil Nadu,Tirunelveli,7,True,roster_and_master
+tamil nadu|tirupathur,Tamil Nadu,Tirupathur,7,True,roster_and_master
+tamil nadu|tiruppur,Tamil Nadu,Tiruppur,7,True,roster_and_master
+tamil nadu|tiruvannamalai,Tamil Nadu,Tiruvannamalai,7,True,roster_and_master
+tamil nadu|tuticorin,Tamil Nadu,Tuticorin,7,True,roster_and_master
+tamil nadu|vellore,Tamil Nadu,Vellore,7,True,roster_and_master
+tamil nadu|villupuram,Tamil Nadu,Villupuram,7,True,roster_and_master
+tamil nadu|virudhunagar,Tamil Nadu,Virudhunagar,7,True,roster_and_master
+telangana|adilabad,Telangana,Adilabad,7,True,roster_and_master
+telangana|bhadradri kothagudem,Telangana,Bhadradri Kothagudem,7,True,roster_and_master
+telangana|hanumakonda,Telangana,Hanumakonda,7,True,roster_and_master
+telangana|hyderabad,Telangana,Hyderabad,7,True,roster_and_master
+telangana|jagitial,Telangana,Jagitial,7,True,roster_and_master
+telangana|jangoan,Telangana,Jangoan,7,True,roster_and_master
+telangana|jayashankar bhupalapally,Telangana,Jayashankar Bhupalapally,7,True,roster_and_master
+telangana|jogulamba gadwal,Telangana,Jogulamba Gadwal,7,True,roster_and_master
+telangana|kamareddy,Telangana,Kamareddy,7,True,roster_and_master
+telangana|karimnagar,Telangana,Karimnagar,7,True,roster_and_master
+telangana|khammam,Telangana,Khammam,7,True,roster_and_master
+telangana|kumuram bheem asifabad,Telangana,Kumuram Bheem Asifabad,7,True,roster_and_master
+telangana|mahabubabad,Telangana,Mahabubabad,7,True,roster_and_master
+telangana|mahabubnagar,Telangana,Mahabubnagar,7,True,roster_and_master
+telangana|mancherial,Telangana,Mancherial,7,True,roster_and_master
+telangana|medak,Telangana,Medak,7,True,roster_and_master
+telangana|medchal malkajgiri,Telangana,Medchal Malkajgiri,7,True,roster_and_master
+telangana|mulugu,Telangana,Mulugu,7,True,roster_and_master
+telangana|nagarkurnool,Telangana,Nagarkurnool,7,True,roster_and_master
+telangana|nalgonda,Telangana,Nalgonda,7,True,roster_and_master
+telangana|narayanpet,Telangana,Narayanpet,7,True,roster_and_master
+telangana|nirmal,Telangana,Nirmal,7,True,roster_and_master
+telangana|nizamabad,Telangana,Nizamabad,7,True,roster_and_master
+telangana|peddapalli,Telangana,Peddapalli,7,True,roster_and_master
+telangana|rajanna sircilla,Telangana,Rajanna Sircilla,7,True,roster_and_master
+telangana|ranga reddy,Telangana,Ranga Reddy,7,True,roster_and_master
+telangana|sangareddy,Telangana,Sangareddy,7,True,roster_and_master
+telangana|siddipet,Telangana,Siddipet,7,True,roster_and_master
+telangana|suryapet,Telangana,Suryapet,7,True,roster_and_master
+telangana|vikarabad,Telangana,Vikarabad,7,True,roster_and_master
+telangana|wanaparthy,Telangana,Wanaparthy,7,True,roster_and_master
+telangana|warangal,Telangana,Warangal,7,True,roster_and_master
+telangana|yadadri bhuvanagiri,Telangana,Yadadri Bhuvanagiri,7,True,roster_and_master
+tripura|dhalai,Tripura,Dhalai,7,True,roster_and_master
+tripura|gomati,Tripura,Gomati,7,True,roster_and_master
+tripura|khowai,Tripura,Khowai,7,True,roster_and_master
+tripura|north tripura,Tripura,North Tripura,7,True,roster_and_master
+tripura|sepahijala,Tripura,Sepahijala,7,True,roster_and_master
+tripura|south tripura,Tripura,South Tripura,7,True,roster_and_master
+tripura|unakoti,Tripura,Unakoti,7,True,roster_and_master
+tripura|west tripura,Tripura,West Tripura,7,True,roster_and_master
+uttar pradesh|agra,Uttar Pradesh,Agra,7,True,roster_and_master
+uttar pradesh|aligarh,Uttar Pradesh,Aligarh,7,True,roster_and_master
+uttar pradesh|ambedkar nagar,Uttar Pradesh,Ambedkar Nagar,7,True,roster_and_master
+uttar pradesh|amethi,Uttar Pradesh,Amethi,7,True,roster_and_master
+uttar pradesh|amroha,Uttar Pradesh,Amroha,7,True,roster_and_master
+uttar pradesh|auraiya,Uttar Pradesh,Auraiya,7,True,roster_and_master
+uttar pradesh|ayodhya,Uttar Pradesh,Ayodhya,7,True,roster_and_master
+uttar pradesh|azamgarh,Uttar Pradesh,Azamgarh,7,True,roster_and_master
+uttar pradesh|baghpat,Uttar Pradesh,Baghpat,7,True,roster_and_master
+uttar pradesh|bahraich,Uttar Pradesh,Bahraich,7,True,roster_and_master
+uttar pradesh|ballia,Uttar Pradesh,Ballia,7,True,roster_and_master
+uttar pradesh|balrampur,Uttar Pradesh,Balrampur,7,True,roster_and_master
+uttar pradesh|banda,Uttar Pradesh,Banda,7,True,roster_and_master
+uttar pradesh|barabanki,Uttar Pradesh,Barabanki,7,True,roster_and_master
+uttar pradesh|bareilly,Uttar Pradesh,Bareilly,7,True,roster_and_master
+uttar pradesh|basti,Uttar Pradesh,Basti,7,True,roster_and_master
+uttar pradesh|bhadohi,Uttar Pradesh,Bhadohi,7,True,roster_and_master
+uttar pradesh|bijnor,Uttar Pradesh,Bijnor,7,True,roster_and_master
+uttar pradesh|budaun,Uttar Pradesh,Budaun,7,True,roster_and_master
+uttar pradesh|bulandshahr,Uttar Pradesh,Bulandshahr,7,True,roster_and_master
+uttar pradesh|chandauli,Uttar Pradesh,Chandauli,7,True,roster_and_master
+uttar pradesh|chitrakoot,Uttar Pradesh,Chitrakoot,7,True,roster_and_master
+uttar pradesh|deoria,Uttar Pradesh,Deoria,7,True,roster_and_master
+uttar pradesh|etah,Uttar Pradesh,Etah,7,True,roster_and_master
+uttar pradesh|etawah,Uttar Pradesh,Etawah,7,True,roster_and_master
+uttar pradesh|farrukhabad,Uttar Pradesh,Farrukhabad,7,True,roster_and_master
+uttar pradesh|fatehpur,Uttar Pradesh,Fatehpur,7,True,roster_and_master
+uttar pradesh|firozabad,Uttar Pradesh,Firozabad,7,True,roster_and_master
+uttar pradesh|gautam buddha nagar,Uttar Pradesh,Gautam Buddha Nagar,7,True,roster_and_master
+uttar pradesh|ghaziabad,Uttar Pradesh,Ghaziabad,7,True,roster_and_master
+uttar pradesh|ghazipur,Uttar Pradesh,Ghazipur,7,True,roster_and_master
+uttar pradesh|gonda,Uttar Pradesh,Gonda,7,True,roster_and_master
+uttar pradesh|gorakhpur,Uttar Pradesh,Gorakhpur,7,True,roster_and_master
+uttar pradesh|hamirpur,Uttar Pradesh,Hamirpur,7,True,roster_and_master
+uttar pradesh|hapur,Uttar Pradesh,Hapur,7,True,roster_and_master
+uttar pradesh|hardoi,Uttar Pradesh,Hardoi,7,True,roster_and_master
+uttar pradesh|hathras,Uttar Pradesh,Hathras,7,True,roster_and_master
+uttar pradesh|jalaun,Uttar Pradesh,Jalaun,7,True,roster_and_master
+uttar pradesh|jaunpur,Uttar Pradesh,Jaunpur,7,True,roster_and_master
+uttar pradesh|jhansi,Uttar Pradesh,Jhansi,7,True,roster_and_master
+uttar pradesh|kannauj,Uttar Pradesh,Kannauj,7,True,roster_and_master
+uttar pradesh|kanpur dehat,Uttar Pradesh,Kanpur Dehat,7,True,roster_and_master
+uttar pradesh|kanpur nagar,Uttar Pradesh,Kanpur Nagar,7,True,roster_and_master
+uttar pradesh|kasganj,Uttar Pradesh,Kasganj,7,True,roster_and_master
+uttar pradesh|kaushambi,Uttar Pradesh,Kaushambi,7,True,roster_and_master
+uttar pradesh|kheri,Uttar Pradesh,Kheri,7,True,roster_and_master
+uttar pradesh|kushi nagar,Uttar Pradesh,Kushi Nagar,7,True,roster_and_master
+uttar pradesh|lalitpur,Uttar Pradesh,Lalitpur,7,True,roster_and_master
+uttar pradesh|lucknow,Uttar Pradesh,Lucknow,7,True,roster_and_master
+uttar pradesh|maharajganj,Uttar Pradesh,Maharajganj,7,True,roster_and_master
+uttar pradesh|mahoba,Uttar Pradesh,Mahoba,7,True,roster_and_master
+uttar pradesh|mainpuri,Uttar Pradesh,Mainpuri,7,True,roster_and_master
+uttar pradesh|mathura,Uttar Pradesh,Mathura,7,True,roster_and_master
+uttar pradesh|mau,Uttar Pradesh,Mau,7,True,roster_and_master
+uttar pradesh|meerut,Uttar Pradesh,Meerut,7,True,roster_and_master
+uttar pradesh|mirzapur,Uttar Pradesh,Mirzapur,7,True,roster_and_master
+uttar pradesh|moradabad,Uttar Pradesh,Moradabad,7,True,roster_and_master
+uttar pradesh|muzaffarnagar,Uttar Pradesh,Muzaffarnagar,7,True,roster_and_master
+uttar pradesh|pilibhit,Uttar Pradesh,Pilibhit,7,True,roster_and_master
+uttar pradesh|pratapgarh,Uttar Pradesh,Pratapgarh,7,True,roster_and_master
+uttar pradesh|prayagraj,Uttar Pradesh,Prayagraj,7,True,roster_and_master
+uttar pradesh|rae bareli,Uttar Pradesh,Rae Bareli,7,True,roster_and_master
+uttar pradesh|rampur,Uttar Pradesh,Rampur,7,True,roster_and_master
+uttar pradesh|saharanpur,Uttar Pradesh,Saharanpur,7,True,roster_and_master
+uttar pradesh|sambhal,Uttar Pradesh,Sambhal,7,True,roster_and_master
+uttar pradesh|sant kabeer nagar,Uttar Pradesh,Sant Kabeer Nagar,7,True,roster_and_master
+uttar pradesh|shahjahanpur,Uttar Pradesh,Shahjahanpur,7,True,roster_and_master
+uttar pradesh|shamli,Uttar Pradesh,Shamli,7,True,roster_and_master
+uttar pradesh|shravasti,Uttar Pradesh,Shravasti,7,True,roster_and_master
+uttar pradesh|siddharth nagar,Uttar Pradesh,Siddharth Nagar,7,True,roster_and_master
+uttar pradesh|sitapur,Uttar Pradesh,Sitapur,7,True,roster_and_master
+uttar pradesh|sonbhadra,Uttar Pradesh,Sonbhadra,7,True,roster_and_master
+uttar pradesh|sultanpur,Uttar Pradesh,Sultanpur,7,True,roster_and_master
+uttar pradesh|unnao,Uttar Pradesh,Unnao,7,True,roster_and_master
+uttar pradesh|varanasi,Uttar Pradesh,Varanasi,7,True,roster_and_master
+uttarakhand|almora,Uttarakhand,Almora,7,True,roster_and_master
+uttarakhand|bageshwar,Uttarakhand,Bageshwar,7,True,roster_and_master
+uttarakhand|chamoli,Uttarakhand,Chamoli,7,True,roster_and_master
+uttarakhand|champawat,Uttarakhand,Champawat,7,True,roster_and_master
+uttarakhand|dehradun,Uttarakhand,Dehradun,7,True,roster_and_master
+uttarakhand|haridwar,Uttarakhand,Haridwar,7,True,roster_and_master
+uttarakhand|nainital,Uttarakhand,Nainital,7,True,roster_and_master
+uttarakhand|pauri garhwal,Uttarakhand,Pauri Garhwal,7,True,roster_and_master
+uttarakhand|pithoragarh,Uttarakhand,Pithoragarh,7,True,roster_and_master
+uttarakhand|rudra prayag,Uttarakhand,Rudra Prayag,7,True,roster_and_master
+uttarakhand|tehri garhwal,Uttarakhand,Tehri Garhwal,7,True,roster_and_master
+uttarakhand|udam singh nagar,Uttarakhand,Udam Singh Nagar,7,True,roster_and_master
+uttarakhand|uttar kashi,Uttarakhand,Uttar Kashi,7,True,roster_and_master
+west bengal|24 paraganas north,West Bengal,24 Paraganas North,7,True,roster_and_master
+west bengal|24 paraganas south,West Bengal,24 Paraganas South,7,True,roster_and_master
+west bengal|alipurduar,West Bengal,Alipurduar,7,True,roster_and_master
+west bengal|bankura,West Bengal,Bankura,7,True,roster_and_master
+west bengal|birbhum,West Bengal,Birbhum,7,True,roster_and_master
+west bengal|coochbehar,West Bengal,Coochbehar,7,True,roster_and_master
+west bengal|darjeeling,West Bengal,Darjeeling,7,True,roster_and_master
+west bengal|dinajpur dakshin,West Bengal,Dinajpur Dakshin,7,True,roster_and_master
+west bengal|dinajpur uttar,West Bengal,Dinajpur Uttar,7,True,roster_and_master
+west bengal|hooghly,West Bengal,Hooghly,7,True,roster_and_master
+west bengal|howrah,West Bengal,Howrah,7,True,roster_and_master
+west bengal|jalpaiguri,West Bengal,Jalpaiguri,7,True,roster_and_master
+west bengal|jhargram,West Bengal,Jhargram,7,True,roster_and_master
+west bengal|kalimpong,West Bengal,Kalimpong,7,True,roster_and_master
+west bengal|kolkata,West Bengal,Kolkata,7,True,roster_and_master
+west bengal|maldah,West Bengal,Maldah,7,True,roster_and_master
+west bengal|medinipur east,West Bengal,Medinipur East,7,True,roster_and_master
+west bengal|medinipur west,West Bengal,Medinipur West,7,True,roster_and_master
+west bengal|murshidabad,West Bengal,Murshidabad,7,True,roster_and_master
+west bengal|nadia,West Bengal,Nadia,7,True,roster_and_master
+west bengal|paschim bardhaman,West Bengal,Paschim Bardhaman,7,True,roster_and_master
+west bengal|purba bardhaman,West Bengal,Purba Bardhaman,7,True,roster_and_master
+west bengal|purulia,West Bengal,Purulia,7,True,roster_and_master

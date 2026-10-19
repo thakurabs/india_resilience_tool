@@ -1,0 +1,42 @@
+{
+  "change": "CHG-0651",
+  "date_utc": "2026-10-05",
+  "scope": "engineering recovery; not real-data pilot acceptance",
+  "regression_suite": {
+    "command": "python -m pytest -q tests/test_wbgt_route_b_run.py tests/test_wbgt_route_b_report.py tests/test_wbgt_route_b_finish.py tests/test_wbgt_route_b.py tests/test_wbgt_route_b_reference.py tests/test_uhe_daily.py",
+    "result": "50 passed before later report/recovery additions"
+  },
+  "additional_tests": {
+    "command": "python -m pytest -q tests/test_wbgt_route_b_recovery.py tests/test_wbgt_route_b_report.py",
+    "result": "8 passed, 1 skipped (Linux-only coordinator on Windows)"
+  },
+  "linux_coordinator_contract": "PASS: dependency order, shared flock, atomic status, tampered artifact blocks second model; subprocesses mocked",
+  "synthetic_report_and_review": "PASS on scratch/wbgt_route_b_integration_v2; does not constitute real-data completion",
+  "real_radiation_precision_probe": {
+    "latitude": 8.375,
+    "elevation_m": 53,
+    "model": "ACCESS-CM2",
+    "year": 1990,
+    "float32_max_residual_wm2": 1.0172526117457892e-05,
+    "float64_max_residual_wm2": 8.526512829121202e-14,
+    "gate_wm2": 1e-08
+  },
+  "reference": {
+    "verified_dates": 10957,
+    "annual_shards": 30,
+    "stored_npz_bytes": 9482300289
+  },
+  "final_regression_suite": {
+    "command": "python -m pytest -q tests/test_uhe_daily.py tests/test_wbgt_route_b.py tests/test_wbgt_route_b_run.py tests/test_wbgt_route_b_reference.py tests/test_wbgt_route_b_report.py tests/test_wbgt_route_b_finish.py tests/test_wbgt_route_b_recovery.py",
+    "result": "52 passed, 1 skipped in 5.33 seconds; skipped Linux-only test exercised separately in pinned Linux environment"
+  },
+  "access_completion": {
+    "status": "PILOT_COMPLETE_DIAGNOSTIC_ONLY",
+    "resumed_elapsed_seconds": 605.4208436389454,
+    "original_qdm_measured_hours": 6.047426194391317,
+    "peak_rss_mb": 3598.1796875,
+    "maximum_radiation_residual_wm2": 2.842170943040401e-13,
+    "independent_interim_holdout_matches_final": true,
+    "single_model_report_and_review": "PASS: scratch/wbgt_route_b_access_review"
+  }
+}

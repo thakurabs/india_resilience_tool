@@ -1,0 +1,8 @@
+check,candidate,n_common_days,max_abs_diff_c,tolerance_c,ok,n_days,boundary_days_max_abs_diff_c,boundary_days_finite,bit_identical,detail,counts_exactly_equal
+pilot_vs_frozen_nex_path,W1,367.0,0.0,1e-09,True,,,,,,
+pilot_vs_frozen_nex_path,C1,367.0,0.0,1e-09,True,,,,,,
+target_year_hours_equal_full_span,,,0.0,1e-09,True,365.0,0.0,True,,,
+single_cell_equals_batch,,,,,True,,,,True,29.923057059625222 vs 29.923057059625222,
+chunk_size_1_equals_whole,,,,,True,,,,True,,True
+chunk_size_3_equals_whole,,,,,True,,,,True,,True
+chunk_size_4_equals_whole,,,,,True,,,,True,,True

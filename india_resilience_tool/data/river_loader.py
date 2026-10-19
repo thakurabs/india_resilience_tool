@@ -334,10 +334,17 @@ def load_local_river_display(
     *,
     bbox: Optional[BBox] = None,
 ) -> gpd.GeoDataFrame:
-    """Load the cleaned river display artifact in EPSG:4326."""
+    """Load the cleaned river display artifact in EPSG:4326.
+
+    The optional `district_names_clean` column (added by
+    `tools.pipeline.enrich_river_network_districts`) is preserved when present;
+    its absence is not an error.
+    """
     gdf = gpd.read_file(str(path))
     gdf["geometry"] = gdf["geometry"].apply(drop_z)
     gdf = ensure_epsg4326(gdf)
     gdf = ensure_river_display_columns(gdf)
+    if "district_names_clean" in gdf.columns:
+        gdf["district_names_clean"] = gdf["district_names_clean"].fillna("").astype(str).str.strip()
     gdf = crop_to_bbox(gdf, bbox)
     return gdf.reset_index(drop=True)

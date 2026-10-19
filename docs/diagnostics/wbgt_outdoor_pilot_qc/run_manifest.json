@@ -1,0 +1,276 @@
+{
+  "tool": "tools/diagnostics/wbgt_outdoor_pilot_qc.py",
+  "spec": "docs/diagnostics/wbgt_outdoor_pilot_qc/SPEC.md",
+  "generated_utc": "2026-10-01T06:15:34.949133+00:00",
+  "git_branch": "add_flood_depth",
+  "git_sha": "459d5c7",
+  "git_dirty": true,
+  "command": "D:\\projects\\india_resilience_tool\\tools\\diagnostics\\wbgt_outdoor_pilot.py",
+  "python": "3.10.20",
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "xarray": "2025.6.1",
+  "geopandas": "1.1.3",
+  "psutil": "7.1.3",
+  "thermofeel": "2.3.0",
+  "method_signature_w1": "outdoor-pilot-v2:W1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-w1-dtr-slope0.03-amp0.1-0.8:rh-strict-rhpolicy-v1:pressure-isa-elev-sea-level-constant-no-dem:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped",
+  "method_signature_c1": "outdoor-pilot-v2:C1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-constant-daily-mean:rh-strict-rhpolicy-v1:pressure-isa-elev-sea-level-constant-no-dem:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped",
+  "rh_policy": "strict",
+  "frozen_method": "milestone 2 W1 == milestone 3 candidate B, unchanged",
+  "scope": {
+    "states": [
+      "Kerala",
+      "Rajasthan",
+      "Himachal Pradesh"
+    ],
+    "levels": [
+      "district",
+      "block"
+    ],
+    "model": "ACCESS-CM2",
+    "scenario": "historical",
+    "member": "r1i1p1f1",
+    "year": 2005
+  },
+  "elevation_convention": "elev-sea-level-constant-no-dem",
+  "day_boundary": "INFERRED from the CMIP6 daily convention; no NEX file publishes time_bnds, so this is not verified locally",
+  "budget": {
+    "wall_seconds": 3600.0,
+    "peak_rss_bytes": 4294967296,
+    "artifact_bytes": 5368709120,
+    "workers": 1
+  },
+  "limitations": [
+    "DIAGNOSTIC-ONLY: no output enters the dashboard, production metric registry, composites, frozen rulers or published maps.",
+    "Uncorrected NEX inputs; no bias correction is applied.",
+    "Six-site reconstruction evidence does not establish national accuracy.",
+    "Remaining NEX distribution and count errors are unresolved.",
+    "W1 may benefit from compensating reconstruction errors; its wind shape is a declared assumption, not an established physical reconstruction.",
+    ">=32 C outcomes include reference-sensitive results.",
+    "Rare-event regimes remain insufficiently evaluated.",
+    "Spatial ranking accuracy is NOT established.",
+    "Daily time-boundary semantics remain INFERRED; no NEX file publishes time_bnds.",
+    "Cell elevation in this run is a sea-level constant (elev-sea-level-constant-no-dem); no DEM is used. The 0.250 C difference measured between 0 m and 2276 m at fixed drivers is a single measured example, NOT a national upper bound on the elevation effect.",
+    "All thresholds, including >=28 and >=30 C, remain diagnostic-only on NEX.",
+    "Where this milestone's coverage failures are called a data problem rather than a code problem, that statement applies ONLY to those observed coverage failures. It does not extend to the other outdoor limitations listed here.",
+    "Method sensitivity (W1 vs C1) and model sensitivity (ACCESS-CM2 vs MRI-ESM2-0) were measured over different geographic and metric scopes; their rank-shift magnitudes are not comparable.",
+    "Numerical block-to-district aggregation agreement verifies aggregation consistency under the tested support. It does NOT prove that blocks tile districts; that is tested independently by geometry."
+  ],
+  "run_signatures": {
+    "baseline": "outdoor-pilot-v2:W1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-w1-dtr-slope0.03-amp0.1-0.8:rh-strict-rhpolicy-v1:pressure-isa-elev-sea-level-constant-no-dem:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped",
+    "rh": "outdoor-pilot-v2:W1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-w1-dtr-slope0.03-amp0.1-0.8:rh-clip100-rhpolicy-v1:pressure-isa-elev-sea-level-constant-no-dem:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped",
+    "elev": "outdoor-pilot-v2:W1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-w1-dtr-slope0.03-amp0.1-0.8:rh-strict-rhpolicy-v1:pressure-isa-elev-gmted2010-mea300-cellmean-7dcdaeb7a588c910:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped",
+    "combined": "outdoor-pilot-v2:W1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-w1-dtr-slope0.03-amp0.1-0.8:rh-clip100-rhpolicy-v1:pressure-isa-elev-gmted2010-mea300-cellmean-7dcdaeb7a588c910:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped"
+  },
+  "milestone": "4b",
+  "predecessor": "docs/diagnostics/wbgt_outdoor_pilot (milestone 4, commit 459d5c7)",
+  "stage": "all",
+  "runs": [
+    "baseline",
+    "rh",
+    "elev",
+    "combined"
+  ],
+  "run_matrix": [
+    {
+      "run": "baseline",
+      "rh_policy": "strict",
+      "elevation": "sea_level"
+    },
+    {
+      "run": "rh",
+      "rh_policy": "clip100",
+      "elevation": "sea_level"
+    },
+    {
+      "run": "elev",
+      "rh_policy": "strict",
+      "elevation": "gmted"
+    },
+    {
+      "run": "combined",
+      "rh_policy": "clip100",
+      "elevation": "gmted"
+    }
+  ],
+  "elevation_source": {
+    "product": "GMTED2010 30 arc-second mean (USGS/NGA, public domain)",
+    "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box",
+    "vertical_reference": "metres above the EGM96 geoid",
+    "horizontal_reference": "WGS84 geographic, decimal degrees",
+    "identity": "elev-gmted2010-mea300-cellmean-7dcdaeb7a588c910",
+    "tiles": [
+      {
+        "tile": "10S060E",
+        "url": "https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/topo/downloads/GMTED/Global_tiles_GMTED/300darcsec/mea/E060/10S060E_20101117_gmted_mea300.tif",
+        "path": "D:\\projects\\india_resilience_tool\\scratch\\wbgt_outdoor_pilot_qc\\elevation\\10S060E_20101117_gmted_mea300.tif",
+        "bytes": 17339076,
+        "sha256": "551b1ed96222480086985521b95bba6b2e5595a3c28e93f99b8ed9c44482d4dd",
+        "downloaded_now": false,
+        "seconds": 4.349998198449612e-05
+      },
+      {
+        "tile": "10N060E",
+        "url": "https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/topo/downloads/GMTED/Global_tiles_GMTED/300darcsec/mea/E060/10N060E_20101117_gmted_mea300.tif",
+        "path": "D:\\projects\\india_resilience_tool\\scratch\\wbgt_outdoor_pilot_qc\\elevation\\10N060E_20101117_gmted_mea300.tif",
+        "bytes": 17339077,
+        "sha256": "0a2645d027e5e160097b67d977f77a129c05fc9d9022423da68860a4bf826df4",
+        "downloaded_now": false,
+        "seconds": 5.2900053560733795e-05
+      },
+      {
+        "tile": "30N060E",
+        "url": "https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/topo/downloads/GMTED/Global_tiles_GMTED/300darcsec/mea/E060/30N060E_20101117_gmted_mea300.tif",
+        "path": "D:\\projects\\india_resilience_tool\\scratch\\wbgt_outdoor_pilot_qc\\elevation\\30N060E_20101117_gmted_mea300.tif",
+        "bytes": 17339077,
+        "sha256": "0f3746176740c52a462e623d849f9ab057a07e4cd966091f0278e5d4e72f03f6",
+        "downloaded_now": false,
+        "seconds": 7.139996159821749e-05
+      }
+    ],
+    "acquire_seconds": 0.06902060005813837,
+    "acquire_bytes": 52017230
+  },
+  "coverage_screen": 0.99,
+  "coverage_screen_denominator": "valid_fraction_of_represented",
+  "geometry_tolerances": {
+    "gap_fraction": 0.001,
+    "child_outside_fraction": 0.001,
+    "block_overlap_fraction": 0.001,
+    "sliver_floor_m2": 10000.0,
+    "crs": "EPSG:6933"
+  },
+  "wall_seconds": 208.61457159998827,
+  "compute_seconds": 197.0619968000101,
+  "peak_rss_bytes": 895741952,
+  "artifact_bytes": 56857394,
+  "budget_respected": {
+    "compute_wall": true,
+    "acquire_wall": true,
+    "acquire_bytes": true,
+    "peak_rss": true,
+    "artifacts": true
+  },
+  "acceptance": [
+    {
+      "check": "reproduces_frozen_district",
+      "ok": true,
+      "n_units": 75,
+      "unmatched_units": 0,
+      "nan_pattern_mismatches": 0,
+      "max_abs_mean_diff_c": 0.0,
+      "count_mismatches": 0,
+      "max_abs_count_diff_days": 0.0,
+      "valid_area_fraction_mismatches": 0,
+      "max_abs_area_fraction_diff": 0.0,
+      "tolerance_c": 1e-09,
+      "comparison_basis": "published CSV on both sides",
+      "detail": "frozen table docs\\diagnostics\\wbgt_outdoor_pilot\\district_values.csv"
+    },
+    {
+      "check": "reproduces_frozen_block",
+      "ok": true,
+      "n_units": 581,
+      "unmatched_units": 0,
+      "nan_pattern_mismatches": 0,
+      "max_abs_mean_diff_c": 0.0,
+      "count_mismatches": 0,
+      "max_abs_count_diff_days": 0.0,
+      "valid_area_fraction_mismatches": 0,
+      "max_abs_area_fraction_diff": 0.0,
+      "tolerance_c": 1e-09,
+      "comparison_basis": "published CSV on both sides",
+      "detail": "frozen table docs\\diagnostics\\wbgt_outdoor_pilot\\block_values.csv"
+    },
+    {
+      "check": "A3_rh_restores_cell_years",
+      "ok": true,
+      "detail": "11 cell-years restored by the RH treatment"
+    },
+    {
+      "check": "A4_elevation_changes_no_validity",
+      "ok": true,
+      "detail": "valid cell-year count identical to baseline"
+    },
+    {
+      "check": "A5_no_valid_coverage_never_numeric",
+      "ok": true,
+      "detail": "0 unsupported units carry a number"
+    },
+    {
+      "check": "A6_admin_checks_pass",
+      "ok": true,
+      "detail": "0 admin check failures"
+    },
+    {
+      "check": "A7_geometry_within_tolerance",
+      "ok": true,
+      "detail": "0 of 243 geometry checks outside the declared tolerances; all are reported"
+    },
+    {
+      "check": "A2_cell_parity_under_the_treated_path",
+      "ok": true,
+      "detail": "7 of 7 parity checks ok, run with the RH treatment and the acquired elevation applied"
+    }
+  ],
+  "parity": [
+    {
+      "check": "pilot_vs_frozen_nex_path",
+      "candidate": "W1",
+      "n_common_days": 367,
+      "max_abs_diff_c": 0.0,
+      "tolerance_c": 1e-09,
+      "ok": true,
+      "configuration": "rh=clip100, elevation=2.7 m"
+    },
+    {
+      "check": "pilot_vs_frozen_nex_path",
+      "candidate": "C1",
+      "n_common_days": 367,
+      "max_abs_diff_c": 0.0,
+      "tolerance_c": 1e-09,
+      "ok": true,
+      "configuration": "rh=clip100, elevation=2.7 m"
+    },
+    {
+      "check": "target_year_hours_equal_full_span",
+      "n_days": 365,
+      "max_abs_diff_c": 0.0,
+      "boundary_days_max_abs_diff_c": 0.0,
+      "boundary_days_finite": true,
+      "tolerance_c": 1e-09,
+      "ok": true,
+      "configuration": "rh=clip100, elevation=2.7 m"
+    },
+    {
+      "check": "single_cell_equals_batch",
+      "bit_identical": true,
+      "detail": "29.923057059625222 vs 29.923057059625222",
+      "ok": true,
+      "configuration": "rh=clip100, elevation field"
+    },
+    {
+      "check": "chunk_size_1_equals_whole",
+      "bit_identical": true,
+      "counts_exactly_equal": true,
+      "ok": true,
+      "configuration": "rh=clip100, elevation field"
+    },
+    {
+      "check": "chunk_size_3_equals_whole",
+      "bit_identical": true,
+      "counts_exactly_equal": true,
+      "ok": true,
+      "configuration": "rh=clip100, elevation field"
+    },
+    {
+      "check": "chunk_size_4_equals_whole",
+      "bit_identical": true,
+      "counts_exactly_equal": true,
+      "ok": true,
+      "configuration": "rh=clip100, elevation field"
+    }
+  ],
+  "admin_checks_failed": 0,
+  "aggregation_equality_caveat": "Numerical block-to-district agreement verifies aggregation consistency under the tested support. It does NOT prove that blocks tile districts; see geometry_checks.csv."
+}

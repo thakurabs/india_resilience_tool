@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from pathlib import Path
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from india_resilience_tool.data.optimized_bundle import list_optimized_states_for_metric_root
 
@@ -109,3 +110,128 @@ def list_available_states_from_processed_root(processed_root_str: str) -> list[s
             states.append(entry.name)
 
     return sorted(states)
+
+
+# -----------------------------------------------------------------------------
+# District-option helpers for the state="All" district selector (CHG-0279)
+# -----------------------------------------------------------------------------
+
+# Composite option values are ONLY produced by build_district_options; no other
+# code may emit this delimiter (guarded by tests + grep audit).
+DISTRICT_OPTION_DELIMITER = "||"
+
+
+def build_district_options(district_state_pairs: "Iterable[tuple[str, str]]") -> list[str]:
+    """Build district option values for the all-India district selector.
+
+    Unique district names stay bare (contract-preserving); names appearing in
+    more than one state become ``"<district>||<state>"`` composites so the
+    selection is unambiguous. Options are sorted by district name, then state.
+
+    Args:
+        district_state_pairs: Iterable of (district_name, state_name) pairs.
+
+    Returns:
+        Sorted list of option values (bare names and composites).
+    """
+    states_by_district: dict[str, set[str]] = {}
+    for district, state in district_state_pairs:
+        district_norm = str(district or "").strip()
+        state_norm = str(state or "").strip()
+        if not district_norm or district_norm == "All":
+            continue
+        states_by_district.setdefault(district_norm, set()).add(state_norm)
+
+    options: list[tuple[str, str]] = []
+    for district, states in states_by_district.items():
+        if len(states) > 1:
+            for state in states:
+                options.append((district, state))
+        else:
+            options.append((district, ""))
+
+    return [
+        district if not state else f"{district}{DISTRICT_OPTION_DELIMITER}{state}"
+        for district, state in sorted(options)
+    ]
+
+
+def split_district_option(value: str) -> "tuple[str, Optional[str]]":
+    """Parse an option value back to ``(district_name, state_or_None)``.
+
+    ``"All"`` is handled explicitly as ``("All", None)``; bare names return
+    ``(name, None)``.
+    """
+    text = str(value or "").strip()
+    if text == "All":
+        return "All", None
+    if DISTRICT_OPTION_DELIMITER in text:
+        district, _, state = text.partition(DISTRICT_OPTION_DELIMITER)
+        return district.strip(), (state.strip() or None)
+    return text, None
+
+
+def district_option_label(value: str) -> str:
+    """Display label for a district option: bare name, or ``"District — State"``."""
+    district, state = split_district_option(value)
+    if state:
+        return f"{district} — {state}"
+    return district
+
+
+def resolve_effective_state(
+    district_name: str,
+    district_state_map: "Mapping[str, Sequence[str]]",
+) -> "Optional[str]":
+    """Resolve a bare district name to its state when the mapping is unambiguous.
+
+    Args:
+        district_name: Bare district name (no composite delimiter).
+        district_state_map: ``{district_name: [state, ...]}`` built from the
+            same frame that produced the district options.
+
+    Returns:
+        The state name when the district maps to exactly one state, else None.
+    """
+    states = district_state_map.get(str(district_name or "").strip())
+    if not states:
+        return None
+    unique = {str(s).strip() for s in states if str(s).strip()}
+    if len(unique) == 1:
+        return next(iter(unique))
+    return None
+
+
+def resolve_district_option(
+    session_state: "Mapping[str, Any]",
+    options: "Sequence[str]",
+) -> str:
+    """Return the option value to seed into ``selected_district_option``.
+
+    A still-valid stored option is always kept — at rerun start a fresh widget
+    selection lands in ``selected_district_option`` before the canonical
+    ``selected_district`` is updated, so disagreement with the canonical value
+    must never trigger re-derivation. External canonical changes (map clicks,
+    resets, mode coercions) pop the stored option via
+    ``reset_district_option_state``; only then is the option re-derived from
+    ``selected_district`` (bare match first, then the composite matching a
+    previously stored effective state), falling back to ``"All"``.
+    """
+    canonical = str(session_state.get("selected_district") or "All").strip() or "All"
+    stored = str(session_state.get("selected_district_option") or "").strip()
+
+    if stored and stored in options:
+        return stored
+    if canonical == "All":
+        return "All"
+    if canonical in options:
+        return canonical
+    effective = str(session_state.get("_district_effective_state") or "").strip()
+    if effective and effective != "All":
+        composite = f"{canonical}{DISTRICT_OPTION_DELIMITER}{effective}"
+        if composite in options:
+            return composite
+    for option in options:
+        if split_district_option(option)[0] == canonical:
+            return option
+    return "All"

@@ -1,0 +1,158 @@
+{
+  "ACCESS-CM2": {
+    "status": "scanned",
+    "negative_huss_cell_days": 23,
+    "cells_affected": 6,
+    "model_scenario_years_affected": 6,
+    "most_negative_huss_kg_per_kg": -0.0013819512678310275,
+    "sample_years": [
+      "ssp245/2023",
+      "ssp245/2044",
+      "ssp245/2064",
+      "ssp245/2074",
+      "ssp245/2078",
+      "ssp585/2073"
+    ]
+  },
+  "ACCESS-ESM1-5": {
+    "status": "scanned",
+    "negative_huss_cell_days": 2004,
+    "cells_affected": 451,
+    "model_scenario_years_affected": 21,
+    "most_negative_huss_kg_per_kg": -0.002686811611056328,
+    "sample_years": [
+      "ssp245/2022",
+      "ssp245/2027",
+      "ssp245/2033",
+      "ssp245/2035",
+      "ssp245/2038",
+      "ssp245/2052",
+      "ssp245/2061",
+      "ssp245/2068"
+    ]
+  },
+  "CMCC-CM2-SR5": {
+    "status": "scanned",
+    "negative_huss_cell_days": 4,
+    "cells_affected": 4,
+    "model_scenario_years_affected": 2,
+    "most_negative_huss_kg_per_kg": -0.0006547391531057656,
+    "sample_years": [
+      "ssp585/2027",
+      "ssp585/2041"
+    ]
+  },
+  "CMCC-ESM2": {
+    "status": "scanned",
+    "negative_huss_cell_days": 27,
+    "cells_affected": 26,
+    "model_scenario_years_affected": 2,
+    "most_negative_huss_kg_per_kg": -0.0005925706936977804,
+    "sample_years": [
+      "ssp245/2027",
+      "ssp585/2028"
+    ]
+  },
+  "CanESM5": {
+    "status": "scanned",
+    "negative_huss_cell_days": 54,
+    "cells_affected": 42,
+    "model_scenario_years_affected": 2,
+    "most_negative_huss_kg_per_kg": -0.001498691039159894,
+    "sample_years": [
+      "ssp245/2051",
+      "ssp245/2052"
+    ]
+  },
+  "EC-Earth3": {
+    "status": "scanned",
+    "negative_huss_cell_days": 7,
+    "cells_affected": 4,
+    "model_scenario_years_affected": 3,
+    "most_negative_huss_kg_per_kg": -0.0009996616281569004,
+    "sample_years": [
+      "ssp245/2036",
+      "ssp245/2037",
+      "ssp585/2023"
+    ]
+  },
+  "EC-Earth3-Veg-LR": {
+    "status": "scanned",
+    "negative_huss_cell_days": 0,
+    "cells_affected": 0,
+    "model_scenario_years_affected": 0,
+    "most_negative_huss_kg_per_kg": 0.0,
+    "sample_years": []
+  },
+  "GFDL-CM4": {
+    "status": "scanned",
+    "negative_huss_cell_days": 0,
+    "cells_affected": 0,
+    "model_scenario_years_affected": 0,
+    "most_negative_huss_kg_per_kg": 0.0,
+    "sample_years": []
+  },
+  "GFDL-ESM4": {
+    "status": "scanned",
+    "negative_huss_cell_days": 0,
+    "cells_affected": 0,
+    "model_scenario_years_affected": 0,
+    "most_negative_huss_kg_per_kg": 0.0,
+    "sample_years": []
+  },
+  "INM-CM4-8": {
+    "status": "scanned",
+    "negative_huss_cell_days": 85,
+    "cells_affected": 64,
+    "model_scenario_years_affected": 5,
+    "most_negative_huss_kg_per_kg": -0.0010779883014038205,
+    "sample_years": [
+      "ssp245/2034",
+      "ssp585/2021",
+      "ssp585/2025",
+      "ssp585/2073",
+      "ssp585/2074"
+    ]
+  },
+  "INM-CM5-0": {
+    "status": "scanned",
+    "negative_huss_cell_days": 146,
+    "cells_affected": 50,
+    "model_scenario_years_affected": 11,
+    "most_negative_huss_kg_per_kg": -0.001162411761470139,
+    "sample_years": [
+      "ssp245/2032",
+      "ssp245/2035",
+      "ssp245/2043",
+      "ssp245/2045",
+      "ssp245/2055",
+      "ssp245/2063",
+      "ssp585/2036",
+      "ssp585/2040"
+    ]
+  },
+  "KACE-1-0-G": {
+    "status": "incomplete (0/152)"
+  },
+  "KIOST-ESM": {
+    "status": "incomplete (0/152)"
+  },
+  "MPI-ESM1-2-HR": {
+    "status": "incomplete (0/152)"
+  },
+  "MPI-ESM1-2-LR": {
+    "status": "incomplete (0/152)"
+  },
+  "MRI-ESM2-0": {
+    "status": "incomplete (0/152)"
+  },
+  "NorESM2-LM": {
+    "status": "incomplete (0/152)"
+  },
+  "NorESM2-MM": {
+    "status": "incomplete (0/152)"
+  },
+  "TaiESM1": {
+    "status": "incomplete (0/152)"
+  }
+}

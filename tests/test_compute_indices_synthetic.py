@@ -276,6 +276,20 @@ def kelvin(celsius: float) -> float:
 # =============================================================================
 # TIER A: REGISTRY & BUNDLE CONSISTENCY CHECKS
 # =============================================================================
+def _is_externally_produced(metric: dict) -> bool:
+    """Whether this metric is produced outside the climate pipeline.
+
+    A metric with ``source_type: "external"`` is assembled by a separate offline
+    chain -- the Route B outdoor WBGT metrics are fitted model by model and
+    published by `tools/pipeline/publish_route_b_outdoor.py` -- so there is no
+    compute function in `compute_indices_multiprocess.py` to call, and asserting
+    one would be asserting something untrue about how the metric exists. These
+    metrics owe a different debt instead, which the tests below collect: an
+    ``admin_rebuild_command`` that documents how to reproduce them.
+    """
+    return str(metric.get("source_type") or "").strip().lower() == "external"
+
+
 class TestTierARegistryConsistency:
     """Verify bundle ↔ registry ↔ compute function consistency."""
 
@@ -296,9 +310,20 @@ class TestTierARegistryConsistency:
         """Every metric in PIPELINE_METRICS_RAW must have a valid compute function."""
         missing_compute: list[str] = []
         
+        undocumented_external: list[str] = []
+
         for metric in PIPELINE_METRICS_RAW:
             slug = metric.get("slug", "(no slug)")
             compute_name = metric.get("compute")
+            if _is_externally_produced(metric):
+                # Produced offline, so it has no compute function by design. The
+                # obligation it does carry is a documented way to reproduce it.
+                if not str(metric.get("admin_rebuild_command") or "").strip():
+                    undocumented_external.append(
+                        f"{slug}: source_type is external but it declares no "
+                        "admin_rebuild_command, so there is no recorded way to "
+                        "reproduce it")
+                continue
             if not compute_name:
                 missing_compute.append(f"{slug}: has no compute function defined")
                 continue
@@ -306,6 +331,9 @@ class TestTierARegistryConsistency:
                 missing_compute.append(f"{slug}: compute '{compute_name}' not found")
 
         assert not missing_compute, "Missing compute functions:\n" + "\n".join(missing_compute)
+        assert not undocumented_external, (
+            "External metrics without a rebuild command:\n"
+            + "\n".join(undocumented_external))
 
     def test_all_bundle_metrics_have_valid_compute_functions(self) -> None:
         """Every metric in any bundle must have a valid compute function."""
@@ -317,6 +345,8 @@ class TestTierARegistryConsistency:
             for slug in slugs:
                 if slug not in pipeline:
                     continue  # Covered by test_all_bundle_slugs_exist_in_pipeline_registry
+                if _is_externally_produced(pipeline[slug]):
+                    continue  # produced offline; see _is_externally_produced
                 compute_name = pipeline[slug].get("compute")
                 if not compute_name:
                     missing_compute.append(f"{bundle_name}: {slug} has no compute")

@@ -15,8 +15,8 @@ from typing import Literal, Optional
 from india_resilience_tool.config.paths import get_paths_config
 
 
-AdminLevel = Literal["district", "block", "basin", "sub_basin"]
-SpatialFamily = Literal["admin", "hydro"]
+AdminLevel = Literal["district", "block"]
+SpatialFamily = Literal["admin"]
 
 OPTIMIZED_DIRNAME = "processed_optimised"
 _METRICS_DIRNAME = "metrics"
@@ -168,11 +168,43 @@ def optimized_yearly_models_path_from_metric_root(
     return metric_root / "yearly_models" / "hydro" / level_norm / "master.parquet"
 
 
+def optimized_state_values_path(
+    slug: str,
+    *,
+    level: AdminLevel,
+    data_dir: Optional[Path] = None,
+) -> Path:
+    """
+    Return the precomputed area-weighted state-values Parquet path for a metric/level.
+
+    Layout (one all-states file per metric/level, isolated from ``masters/``):
+      - ``metrics/<slug>/state_values/admin/<level>/all_states.parquet``
+
+    Only admin levels (``district``/``block``) are supported.
+    """
+    metric_root = resolve_optimized_metric_root(slug, data_dir=data_dir)
+    return optimized_state_values_path_from_metric_root(metric_root, level=level)
+
+
+def optimized_state_values_path_from_metric_root(
+    metric_root: Path | str,
+    *,
+    level: AdminLevel,
+) -> Path:
+    """Return the precomputed state-values path when the metric root is already known."""
+    metric_root = _metric_root_path(metric_root)
+    level_norm = str(level).strip().lower()
+    if level_norm not in {"district", "block"}:
+        raise ValueError(
+            f"State-values precompute is admin-only; unsupported level={level_norm!r}"
+        )
+    return metric_root / "state_values" / "admin" / level_norm / "all_states.parquet"
+
+
 def optimized_geometry_path(
     *,
     level: AdminLevel,
     state: Optional[str] = None,
-    basin_id: Optional[str] = None,
     data_dir: Optional[Path] = None,
 ) -> Path:
     """
@@ -188,18 +220,43 @@ def optimized_geometry_path(
         if not state:
             raise ValueError("State is required for block geometry.")
         return root / "admin" / "block" / f"state={str(state).strip()}.geojson"
-    if level_norm == "basin":
-        return root / "hydro" / "basin.geojson"
-    if level_norm == "sub_basin":
-        if not basin_id:
-            raise ValueError("basin_id is required for sub-basin geometry.")
-        return root / "hydro" / "sub_basin" / f"basin_id={str(basin_id).strip()}.geojson"
     raise ValueError(f"Unsupported geometry level: {level!r}")
 
 
 def optimized_context_path(name: str, *, data_dir: Optional[Path] = None) -> Path:
     """Return a named context artifact path inside the optimized bundle."""
     return resolve_optimized_bundle_root(data_dir=data_dir) / _CONTEXT_DIRNAME / str(name).strip()
+
+
+def optimized_adm1_path(*, data_dir: Optional[Path] = None) -> Path:
+    """Return the optimized ADM1 (state polygons) artifact path.
+
+    Used by the dashboard boot path to render the state selector without
+    cold-loading the full ADM2 monolith.
+    """
+    return (
+        resolve_optimized_bundle_root(data_dir=data_dir)
+        / _GEOMETRY_DIRNAME
+        / "admin"
+        / "adm1.geojson"
+    )
+
+
+def optimized_glance_root(
+    composite_slug: Optional[str] = None,
+    *,
+    scenario: Optional[str] = None,
+    period: Optional[str] = None,
+    data_dir: Optional[Path] = None,
+) -> Path:
+    """Return the optimized Glance view-model root or one scenario-period directory."""
+    root = resolve_optimized_bundle_root(data_dir=data_dir) / _CONTEXT_DIRNAME / "glance"
+    if composite_slug is None:
+        return root
+    slug_root = root / str(composite_slug).strip()
+    if scenario is None or period is None:
+        return slug_root
+    return slug_root / str(scenario).strip().lower() / str(period).strip()
 
 
 def optimized_master_sources_for_level(
@@ -216,7 +273,7 @@ def optimized_master_sources_for_level(
       - a concrete state returns one state Parquet
       - `All` returns every `state=*.parquet` file for the level
 
-    Hydro levels always return one file.
+    Only admin levels are exposed by the dashboard runtime.
     """
     level_norm = str(level).strip().lower()
     metric_root = resolve_optimized_metric_root(slug, data_dir=data_dir)
@@ -236,9 +293,6 @@ def optimized_master_sources_from_metric_root(
     """Return one or many optimized master paths when the metric root is already known."""
     metric_root = _metric_root_path(metric_root)
     level_norm = str(level).strip().lower()
-    if level_norm in {"basin", "sub_basin"}:
-        return (optimized_master_path_from_metric_root(metric_root, level=level_norm),)
-
     level_dir = metric_root / "masters" / "admin" / level_norm
     state_norm = str(selected_state or "All").strip() or "All"
     if state_norm != "All":

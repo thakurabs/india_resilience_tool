@@ -1,0 +1,711 @@
+{
+  "change_id": "CHG-0644",
+  "working_snapshot": "GIT:add_flood_depth@7bd2ddb+Route-B-working-changes",
+  "date": "2026-10-03",
+  "status": "ACQUISITION_INTEGRITY_PASS_SCIENTIFIC_QC_PENDING",
+  "sample_dates": 12,
+  "received_bytes_successful_run": 221970432,
+  "additional_header_probe_bytes": 196608,
+  "stored_bytes": 10391503,
+  "successful_run_elapsed_seconds": 72.77,
+  "retries_successful_run": 0,
+  "valid_masks_identical": true,
+  "records": [
+    {
+      "path": "scratch/uhe_daily/1985/wbgtmax.1985-01-15.npz",
+      "stored_bytes": 866684,
+      "artifact_sha256": "5d4245f5711efadd9046a508034f8eba028036af062f9e6932ff6f04b7d5f486",
+      "extrema": {
+        "minimum": {
+          "latitude": 35.574999487027526,
+          "longitude": 82.32500390894711,
+          "wbgt_c": -31.44611167907715
+        },
+        "maximum": {
+          "latitude": 7.174999063834548,
+          "longitude": 93.67500407807529,
+          "wbgt_c": 27.65369415283203
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:08:45.642888+00:00",
+        "array_sha256": "cfbd2359142fe002b2983d4d6ecbf0d1e47af7ca674fa487f22d6e8ed3b01695",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "1985-01-15",
+        "header_sha256": "df241ff5f0505a62d5ee798073494571872cac07694b87ffd2dbffe89a2a93d8",
+        "qc": {
+          "max_c": 27.65369415283203,
+          "mean_c": 6.432986987489671,
+          "min_c": -31.44611167907715,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "f67e454dcb312d1626069a0d2a13ca91330008fc741ef43e2207223b5090aa18",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/1985/wbgtmax.1985.01.15.tif",
+        "source_validator": "\"610d8e41-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/1985/wbgtmax.1985-04-15.npz",
+      "stored_bytes": 874584,
+      "artifact_sha256": "c1f93c0b899d5310d44da35c8ce4bf61054396f05d568c16505576aa478e0d69",
+      "extrema": {
+        "minimum": {
+          "latitude": 33.524999456480145,
+          "longitude": 83.1750039216131,
+          "wbgt_c": -10.3279390335083
+        },
+        "maximum": {
+          "latitude": 16.474999202415347,
+          "longitude": 81.27500389330089,
+          "wbgt_c": 32.482086181640625
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:08:50.870075+00:00",
+        "array_sha256": "ba136a101a03f2e1306cd24da01c9ed3c793ecdbf0dc203f4cd2618dc9b0d155",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "1985-04-15",
+        "header_sha256": "8c5565276b7caa8a190913442a902a8012dcbcf313a0da0474f8e59ebc39e8e5",
+        "qc": {
+          "max_c": 32.482086181640625,
+          "mean_c": 18.037621406898364,
+          "min_c": -10.3279390335083,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "886991415b37b8bd9aa72696602317d7fb99545659010a464e4cab244ad4db40",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/1985/wbgtmax.1985.04.15.tif",
+        "source_validator": "\"610d8e5f-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/1985/wbgtmax.1985-07-15.npz",
+      "stored_bytes": 856490,
+      "artifact_sha256": "4ab3ee003da646711d188b9835d2b61a15baf0741959179a148bb70c2d92107b",
+      "extrema": {
+        "minimum": {
+          "latitude": 28.374999379739165,
+          "longitude": 91.12500404007733,
+          "wbgt_c": -1.8107962608337402
+        },
+        "maximum": {
+          "latitude": 26.874999357387424,
+          "longitude": 68.32500370033085,
+          "wbgt_c": 32.41716003417969
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:08:55.776049+00:00",
+        "array_sha256": "835cd9ae52bee92fb58cd6c03eaa3c217c2d4d2c74aac869f04767c5dfdae75c",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "1985-07-15",
+        "header_sha256": "a9e9e017a82ee0a9c6aa14cada37f23e2990da33bda38cb4cd8181553f89b824",
+        "qc": {
+          "max_c": 32.41716003417969,
+          "mean_c": 21.398891320024063,
+          "min_c": -1.8107962608337402,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "197fc9ed0a955f1a5a6b687c4ae5bcf35c631020c84df40c080f110d35a7e41a",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/1985/wbgtmax.1985.07.15.tif",
+        "source_validator": "\"610d8e66-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/1985/wbgtmax.1985-10-15.npz",
+      "stored_bytes": 869418,
+      "artifact_sha256": "ab33ebd45395cece6a7fe544bc57090a603a7c0bdbd3adef94b96b1eac32f2fc",
+      "extrema": {
+        "minimum": {
+          "latitude": 35.374999484047294,
+          "longitude": 69.27500371448696,
+          "wbgt_c": -10.483147621154785
+        },
+        "maximum": {
+          "latitude": 25.324999334290624,
+          "longitude": 87.47500398568809,
+          "wbgt_c": 30.705747604370117
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:01.405227+00:00",
+        "array_sha256": "55450c201e2a79ecf77623f68dac7393f67a87e51e37736c98a50f87a992cc7e",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "1985-10-15",
+        "header_sha256": "4a82367edfd0b8219ee8d1967d6d3cd9463f101b0ffe7230f2a7d9e42c969156",
+        "qc": {
+          "max_c": 30.705747604370117,
+          "mean_c": 17.91529084765492,
+          "min_c": -10.483147621154785,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "71c4ec326a8d6f367d3c32835b26721d1be59b19dbc65668df1a2395687c09eb",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/1985/wbgtmax.1985.10.15.tif",
+        "source_validator": "\"610d8e6a-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/2000/wbgtmax.2000-01-15.npz",
+      "stored_bytes": 866736,
+      "artifact_sha256": "6d3aa75d494053f4c768dce0f5e6d215f4afa3e3676446bac96c2c3fa3aad68b",
+      "extrema": {
+        "minimum": {
+          "latitude": 35.02499947883189,
+          "longitude": 68.17500369809568,
+          "wbgt_c": -39.8552131652832
+        },
+        "maximum": {
+          "latitude": 9.924999104812741,
+          "longitude": 76.27500381879508,
+          "wbgt_c": 28.981285095214844
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:06.884579+00:00",
+        "array_sha256": "c050c7a057520ca6112950369652fcfdca8ca79d3a0045603bdf6974bb85ceda",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "2000-01-15",
+        "header_sha256": "4bcfd93576d8c4b812a65286576b779248aa94b2308ecfc347220b72a5841388",
+        "qc": {
+          "max_c": 28.981285095214844,
+          "mean_c": 5.652764997006253,
+          "min_c": -39.8552131652832,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "db6892113070d1f21af47a3331b50b5d4f290d7fb39c033a1af84312442e21f3",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2000/wbgtmax.2000.01.15.tif",
+        "source_validator": "\"610d8ddc-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/2000/wbgtmax.2000-04-15.npz",
+      "stored_bytes": 871313,
+      "artifact_sha256": "51d35dd1d79d35f13c846c91d8a2474f347c87afba8cf5bb54daffbcfca2076f",
+      "extrema": {
+        "minimum": {
+          "latitude": 32.97499944828451,
+          "longitude": 97.67500413767993,
+          "wbgt_c": -11.463408470153809
+        },
+        "maximum": {
+          "latitude": 16.474999202415347,
+          "longitude": 80.52500388212502,
+          "wbgt_c": 32.87092971801758
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:12.282055+00:00",
+        "array_sha256": "5cfa1d735a61fad23d70fe33cf994893a9eb3ba703d32310c74e96e98fd041bf",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "2000-04-15",
+        "header_sha256": "581109f7d297282c6505b5021fa152fccd243fb03fe15ea8ae5dfd75f81ddee6",
+        "qc": {
+          "max_c": 32.87092971801758,
+          "mean_c": 19.076689448146155,
+          "min_c": -11.463408470153809,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "5d2839590ae6b6ff3ca262cead62aec69a737f71951d67a13ff36840ec8cf379",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2000/wbgtmax.2000.04.15.tif",
+        "source_validator": "\"610d8df3-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/2000/wbgtmax.2000-07-15.npz",
+      "stored_bytes": 849991,
+      "artifact_sha256": "abdc12b7e3aa45413f5974dd8ef75104a178224d800197db835f7b6ffc4a5afa",
+      "extrema": {
+        "minimum": {
+          "latitude": 28.574999382719398,
+          "longitude": 88.72500400431454,
+          "wbgt_c": -0.1860201507806778
+        },
+        "maximum": {
+          "latitude": 31.62499942816794,
+          "longitude": 70.7750037368387,
+          "wbgt_c": 33.2094612121582
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:17.922620+00:00",
+        "array_sha256": "7ca576b7c6ff48864108bfc7eb7e0bb50e6bd04622dc1ae981d4213297bb88c3",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "2000-07-15",
+        "header_sha256": "55cb40ed24abfdaf7dbbd8a98bd336adf03b42cea7006558dcd2c2f22936c503",
+        "qc": {
+          "max_c": 33.2094612121582,
+          "mean_c": 22.632829374452648,
+          "min_c": -0.1860201507806778,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "effb2812138c9b26562e6f2be2403d6107e7f7e180a7e4b78568f884b07a0c9f",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2000/wbgtmax.2000.07.15.tif",
+        "source_validator": "\"610d8dfd-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/2000/wbgtmax.2000-10-15.npz",
+      "stored_bytes": 872613,
+      "artifact_sha256": "32c812adc5312874a8ce3e1f2a0fa7162de48f8acc3992bc85089e711c7e2ae4",
+      "extrema": {
+        "minimum": {
+          "latitude": 35.22499948181212,
+          "longitude": 88.57500400207937,
+          "wbgt_c": -10.83336067199707
+        },
+        "maximum": {
+          "latitude": 22.87499929778278,
+          "longitude": 91.47500404529274,
+          "wbgt_c": 31.312177658081055
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:23.740604+00:00",
+        "array_sha256": "41dd6ff7dfeb80162d6a97480014cb989631649071a76fc6df0d5d298606d380",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "2000-10-15",
+        "header_sha256": "cd1a76f203671218ad877f132b132607590e630a6d8885281685ad9cc7983f32",
+        "qc": {
+          "max_c": 31.312177658081055,
+          "mean_c": 17.497979025946055,
+          "min_c": -10.83336067199707,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "bad0f864b04719fe2c5324b4398a83feea8f0c6a0aaaa6af367bf6b6f07da25e",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2000/wbgtmax.2000.10.15.tif",
+        "source_validator": "\"610d8e09-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/2014/wbgtmax.2014-01-15.npz",
+      "stored_bytes": 871290,
+      "artifact_sha256": "627cc54481a032a76e5666ad62e715303ae224d411cfda05bdcdc836463a7bfe",
+      "extrema": {
+        "minimum": {
+          "latitude": 35.02499947883189,
+          "longitude": 68.17500369809568,
+          "wbgt_c": -24.227787017822266
+        },
+        "maximum": {
+          "latitude": 10.124999107792974,
+          "longitude": 76.27500381879508,
+          "wbgt_c": 29.137399673461914
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:30.545164+00:00",
+        "array_sha256": "61289ff18c6baf42734e11c0df44b97ce40b8ce8cfe38755d0192392d1b48bc4",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "2014-01-15",
+        "header_sha256": "46d67a924a615effa2b02b94580dbf8af170ad50d62cf3cbbab9c523545774f5",
+        "qc": {
+          "max_c": 29.137399673461914,
+          "mean_c": 7.773285516064828,
+          "min_c": -24.227787017822266,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "8beaa5754d0929122b0b1dad5cc07bf6e9ccb2fdf97ae46d79bae3dd11f1000e",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2014/wbgtmax.2014.01.15.tif",
+        "source_validator": "\"610d9288-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/2014/wbgtmax.2014-04-15.npz",
+      "stored_bytes": 872185,
+      "artifact_sha256": "eb5cde7d93038e40edd0b637babfa37debd7f7544b93a5fd2b037bb62ef15077",
+      "extrema": {
+        "minimum": {
+          "latitude": 36.02499949373305,
+          "longitude": 90.87500403635204,
+          "wbgt_c": -12.063541412353516
+        },
+        "maximum": {
+          "latitude": 17.17499921284616,
+          "longitude": 97.07500412873924,
+          "wbgt_c": 31.999235153198242
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:37.752251+00:00",
+        "array_sha256": "727f4712d9abf834634f3455093fbf4130d4425b092fac56f88c558cbf95de8d",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "2014-04-15",
+        "header_sha256": "4b1ec4d8e953ee9d128b9e8ec4bb09870aea6b8359f8d7c4f83c292d176309a6",
+        "qc": {
+          "max_c": 31.999235153198242,
+          "mean_c": 18.126827272410463,
+          "min_c": -12.063541412353516,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "f59d4c00343d8753d8b8830b2712b74e6c26558dfda388e7f7dde99cbf4ce554",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2014/wbgtmax.2014.04.15.tif",
+        "source_validator": "\"610d929a-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/2014/wbgtmax.2014-07-15.npz",
+      "stored_bytes": 854872,
+      "artifact_sha256": "2e24300a7712644f04e0fd67ad61fc4f8d105111ea17deaf78f5149a42c44454",
+      "extrema": {
+        "minimum": {
+          "latitude": 27.9749993737787,
+          "longitude": 86.92500397749245,
+          "wbgt_c": 0.8110203146934509
+        },
+        "maximum": {
+          "latitude": 31.0749994199723,
+          "longitude": 71.02500374056399,
+          "wbgt_c": 33.65681457519531
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:45.128947+00:00",
+        "array_sha256": "10a31b4fc80794f125796b378fb5a8d678fec4e16809f011a3bdaed5a92b71c0",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "2014-07-15",
+        "header_sha256": "72ec660d8a74805cd4b88f03563dd4100ebcfa2b890da8419973da5f7f1df12c",
+        "qc": {
+          "max_c": 33.65681457519531,
+          "mean_c": 23.179691229252168,
+          "min_c": 0.8110203146934509,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "368754a4ba909d2fd51f296c99a8c2c98f981b722c175c227b16d1a39df27d08",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2014/wbgtmax.2014.07.15.tif",
+        "source_validator": "\"610d929f-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    },
+    {
+      "path": "scratch/uhe_daily/2014/wbgtmax.2014-10-15.npz",
+      "stored_bytes": 865327,
+      "artifact_sha256": "4726d1ff2149d14769b147c3dac5d3ae485a80791978c0bb16983f400a010811",
+      "extrema": {
+        "minimum": {
+          "latitude": 37.374999513849616,
+          "longitude": 86.0250039640814,
+          "wbgt_c": -6.398036003112793
+        },
+        "maximum": {
+          "latitude": 23.174999302253127,
+          "longitude": 95.97500411234796,
+          "wbgt_c": 31.026262283325195
+        }
+      },
+      "metadata": {
+        "acquired_utc": "2026-10-03T07:09:52.939297+00:00",
+        "array_sha256": "3ed4ddf4a045e6b3060a1dc2971c698dd20d62e14ec4169783c2b6425b64eaf6",
+        "bounds": [
+          68.0,
+          6.0,
+          98.0,
+          38.0
+        ],
+        "crs": "EPSG:4326",
+        "date": "2014-10-15",
+        "header_sha256": "06d98c90047cbb54e3e5efdbb61bbd3e407508514898a1eab018f27a84a2d484",
+        "qc": {
+          "max_c": 31.026262283325195,
+          "mean_c": 18.542978451208086,
+          "min_c": -6.398036003112793,
+          "missing_cells": 135441,
+          "valid_cells": 248559,
+          "valid_fraction": 0.6472890625
+        },
+        "ranges": [
+          [
+            0,
+            65536
+          ],
+          [
+            18447966,
+            18432000
+          ]
+        ],
+        "received_bytes": 18497536,
+        "resolution_degrees": 0.05000000074505806,
+        "row_payload_sha256": "811c44a9b79348f5580cda8978f69e07054b2c7684d158aa31275ee4baa56b4f",
+        "schema": "irt-uhe-window-v1",
+        "source_bytes": 74895966,
+        "source_nodata": "None",
+        "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2014/wbgtmax.2014.10.15.tif",
+        "source_validator": "\"610d92cc-476d25e\"",
+        "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+        "units": "degC"
+      }
+    }
+  ]
+}

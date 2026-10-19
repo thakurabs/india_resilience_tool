@@ -1,0 +1,25 @@
+level,state,district,block,district_key,block_key,scenario,period,expected_score,expected_hex
+block,Andaman & Nicobar Islands,Nicobars,Campbell Bay,,Andaman & Nicobar Islands::Nicobars::Campbell Bay,snapshot,Current,0.57398,#ddf2fc
+block,Jharkhand,Palamu,Hariharganj,,Jharkhand::Palamu::Hariharganj,snapshot,Current,1.530612,#d5effc
+block,Bihar,Kaimur (Bhabua),Adhaura,,Bihar::Kaimur (Bhabua)::Adhaura,snapshot,Current,2.104592,#d5effc
+block,Haryana,Bhiwani,Bhiwani,,Haryana::Bhiwani::Bhiwani,snapshot,Current,19.834184,#67aada
+block,Madhya Pradesh,Seoni,Barghat,,Madhya Pradesh::Seoni::Barghat,snapshot,Current,19.834184,#67aada
+block,Tamil Nadu,Kanchipuram,Sriperumbudur,,Tamil Nadu::Kanchipuram::Sriperumbudur,snapshot,Current,19.834184,#67aada
+block,Andhra Pradesh,Konaseema,Ravulapalem,,Andhra Pradesh::Konaseema::Ravulapalem,snapshot,Current,92.665816,#b21a20
+block,Bihar,Nawada,Warisaliganj,,Bihar::Nawada::Warisaliganj,snapshot,Current,92.665816,#b21a20
+block,Karnataka,Mysuru,Tirumakudal-Narsipur,,Karnataka::Mysuru::Tirumakudal-Narsipur,snapshot,Current,92.665816,#b21a20
+block,Rajasthan,Deeg,Kumher,,Rajasthan::Deeg::Kumher,snapshot,Current,92.665816,#b21a20
+block,Uttar Pradesh,Ghazipur,Jakhania,,Uttar Pradesh::Ghazipur::Jakhania,snapshot,Current,92.665816,#b21a20
+block,West Bengal,Purulia,Raghunathpur-Ii,,West Bengal::Purulia::Raghunathpur-Ii,snapshot,Current,92.665816,#b21a20
+district,Andaman & Nicobar Islands,Nicobars,,Andaman & Nicobar Islands::Nicobars,,snapshot,Current,0.57398,#ddf2fc
+district,Manipur,Kangpokpi,,Manipur::Kangpokpi,,snapshot,Current,9.119898,#a9def8
+district,Jammu & Kashmir,Muzaffarabad,,Jammu & Kashmir::Muzaffarabad,,snapshot,Current,19.834184,#67aada
+district,Madhya Pradesh,Shivpuri,,Madhya Pradesh::Shivpuri,,snapshot,Current,27.359694,#4892ba
+district,Tamil Nadu,Erode,,Tamil Nadu::Erode,,snapshot,Current,36.415816,#49a96c
+district,Tamil Nadu,Salem,,Tamil Nadu::Salem,,snapshot,Current,45.471939,#82c64d
+district,Odisha,Ganjam,,Odisha::Ganjam,,snapshot,Current,54.528061,#f4e75b
+district,West Bengal,Dinajpur Uttar,,West Bengal::Dinajpur Uttar,,snapshot,Current,63.584184,#f7a13f
+district,West Bengal,24 Paraganas South,,West Bengal::24 Paraganas South,,snapshot,Current,72.640306,#ef5d29
+district,Punjab,Pathankot,,Punjab::Pathankot,,snapshot,Current,81.82398,#db3028
+district,Bihar,Patna,,Bihar::Patna,,snapshot,Current,92.665816,#b21a20
+district,Punjab,Sri Muktsar Sahib,,Punjab::Sri Muktsar Sahib,,snapshot,Current,99.936224,#921519

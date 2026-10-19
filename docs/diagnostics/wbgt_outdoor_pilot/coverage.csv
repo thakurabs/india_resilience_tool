@@ -1,0 +1,4 @@
+state,non_finite_cell_days,out_of_range_cell_days,tasmin_gt_tasmax_cell_days,invalid_cell_days,total_cell_days,load_seconds,grid_cells,intersecting_cells
+Kerala,51380,0,1,51381,121110,0.9535551000153646,330,86
+Rajasthan,367,3,0,370,472329,0.9746009999653324,1287,582
+Himachal Pradesh,0,21,0,21,99090,0.9278599000535905,270,116

@@ -13,7 +13,9 @@ from typing import Any, Callable, Mapping, Optional
 
 import pandas as pd
 
+from india_resilience_tool.analysis.map_enrichment import format_exclusion_reason
 from india_resilience_tool.config.paths import resolve_processed_optimised_root
+from india_resilience_tool.data.wbgt_contract import SHADE_SLUGS, shade_artifact_identity
 
 
 def make_district_case_study_builder(
@@ -212,6 +214,22 @@ def make_district_case_study_builder(
                 else "Unknown"
             )
 
+            # A blank value must say why. Metrics that carry per-unit coverage
+            # provenance (Route B, CarbonPlan shade) export the recorded exclusion
+            # reason and retained-area share beside the value (CHG-0701).
+            coverage_local = pd.to_numeric([row_local.get("support_coverage")], errors="coerce")[0]
+            missing_reason = (
+                format_exclusion_reason(row_local.get("exclusion_reason"), coverage=coverage_local)
+                if current_val_f_local is None and "exclusion_reason" in dm.columns
+                else ""
+            )
+            if slug in SHADE_SLUGS:
+                method_identity = shade_artifact_identity(master_path)
+                if method_identity is None:
+                    continue
+            else:
+                method_identity = ""
+
             records.append(
                 {
                     "index_slug": slug,
@@ -228,6 +246,9 @@ def make_district_case_study_builder(
                     "percentile_in_state": percentile_in_state,
                     "n_in_state": n_in_state_local,
                     "risk_class": risk_class,
+                    "missing_reason": missing_reason,
+                    "support_coverage": None if pd.isna(coverage_local) else float(coverage_local),
+                    "method_identity": method_identity,
                 }
             )
 

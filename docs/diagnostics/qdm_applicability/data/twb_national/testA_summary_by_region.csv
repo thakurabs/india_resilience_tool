@@ -1,0 +1,26 @@
+metric,region,family,floor,ref,err_raw,err_qdm,raw_2050,qdm_2050,shift_2050,chg_raw,chg_qdm,n_units,verdict
+twb_annual_max,Central (lat 18-24),degC,0.5,26.019,2.222,0.472,29.388,27.649,1.784,1.446,1.644,36,MATERIAL
+twb_annual_max,East + Northeast (lon>=84),degC,0.5,24.735,1.834,0.311,27.278,25.932,1.816,1.332,1.326,24,MATERIAL
+twb_annual_max,Himalaya (lat>=30),degC,0.5,12.846,3.41,0.512,16.647,14.414,3.156,1.496,1.564,15,MATERIAL
+twb_annual_max,Northwest + Gangetic plain (lat 24-30),degC,0.5,27.69,1.424,0.317,29.931,29.022,1.248,1.343,1.482,33,MATERIAL
+twb_annual_max,South (lat<18),degC,0.5,25.457,1.616,0.327,28.186,26.772,1.465,1.31,1.298,21,MATERIAL
+twb_annual_mean,Central (lat 18-24),degC,0.5,20.586,1.055,0.133,20.72,21.751,1.07,1.37,1.367,36,MATERIAL
+twb_annual_mean,East + Northeast (lon>=84),degC,0.5,17.945,1.308,0.133,19.335,19.036,1.299,1.282,1.282,24,MATERIAL
+twb_annual_mean,Himalaya (lat>=30),degC,0.5,-1.044,4.495,0.241,4.309,0.456,4.442,1.697,1.694,15,MATERIAL
+twb_annual_mean,Northwest + Gangetic plain (lat 24-30),degC,0.5,19.496,1.721,0.149,19.044,20.659,1.689,1.419,1.418,33,MATERIAL
+twb_annual_mean,South (lat<18),degC,0.5,21.905,0.681,0.11,23.265,22.898,0.697,1.158,1.156,21,MATERIAL
+twb_days_ge_28,Central (lat 18-24),count,5.0,0.188,4.5,0.258,17.557,6.061,11.637,14.287,5.942,36,FUTURE-ONLY (unverifiable)
+twb_days_ge_28,East + Northeast (lon>=84),count,5.0,1.917,31.905,0.965,58.341,17.415,41.936,29.133,16.335,24,MATERIAL
+twb_days_ge_28,Himalaya (lat>=30),count,5.0,0.833,2.14,0.217,6.844,5.046,2.064,4.43,4.523,15,NO EFFECT
+twb_days_ge_28,Northwest + Gangetic plain (lat 24-30),count,5.0,1.947,17.746,1.302,35.546,22.52,21.048,18.79,21.353,33,MATERIAL
+twb_days_ge_28,South (lat<18),count,5.0,0.512,1.019,0.107,12.329,3.124,9.438,11.4,2.763,21,FUTURE-ONLY (unverifiable)
+twb_days_ge_30,Central (lat 18-24),count,5.0,0.0,0.603,0.003,2.753,0.132,2.653,2.317,0.132,36,NO EFFECT
+twb_days_ge_30,East + Northeast (lon>=84),count,5.0,0.0,0.801,0.018,7.724,0.909,6.862,7.087,0.903,24,FUTURE-ONLY (unverifiable)
+twb_days_ge_30,Himalaya (lat>=30),count,5.0,0.0,0.075,0.002,1.176,0.363,0.84,1.135,0.362,15,NO EFFECT
+twb_days_ge_30,Northwest + Gangetic plain (lat 24-30),count,5.0,0.0,1.003,0.041,7.186,1.78,5.55,6.496,1.777,33,FUTURE-ONLY (unverifiable)
+twb_days_ge_30,South (lat<18),count,5.0,0.0,0.025,0.002,0.62,0.059,0.574,0.592,0.059,21,NO EFFECT
+twb_summer_mean,Central (lat 18-24),degC,0.5,20.973,2.536,0.234,19.468,22.054,2.596,1.285,1.289,36,MATERIAL
+twb_summer_mean,East + Northeast (lon>=84),degC,0.5,18.322,2.078,0.272,18.579,19.197,1.997,1.192,1.193,24,MATERIAL
+twb_summer_mean,Himalaya (lat>=30),degC,0.5,-1.92,4.78,0.421,3.645,-0.639,4.811,1.597,1.599,15,MATERIAL
+twb_summer_mean,Northwest + Gangetic plain (lat 24-30),degC,0.5,19.576,2.727,0.331,18.039,20.62,2.6,1.397,1.402,33,MATERIAL
+twb_summer_mean,South (lat<18),degC,0.5,23.026,1.085,0.216,23.216,24.0,1.056,1.184,1.184,21,MATERIAL

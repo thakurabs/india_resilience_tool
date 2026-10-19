@@ -1,0 +1,15 @@
+dominant_district,seasonal_mean_abs_monthly_bias,p90_bias,p95_bias,p99_bias,days_ge_28_error,days_ge_30_error,days_ge_32_error,units
+Kerala / Alappuzha,0,0,0,4,0,0,1,8
+Kerala / Ernakulam,0,0,0,2,4,0,3,10
+Kerala / Idukki,0,0,0,2,0,2,0,11
+Kerala / Kannur,0,1,0,6,0,3,1,10
+Kerala / Kasaragod,0,0,0,0,1,0,5,8
+Kerala / Kollam,0,0,0,0,0,0,0,12
+Kerala / Kottayam,0,0,0,2,0,0,0,9
+Kerala / Kozhikode,0,0,0,2,0,0,0,4
+Kerala / Malappuram,0,0,0,6,3,0,1,15
+Kerala / Palakkad,0,0,0,5,0,1,3,19
+Kerala / Pathanamthitta,0,0,0,0,0,0,0,9
+Kerala / Thiruvananthapuram,0,0,0,0,0,0,0,14
+Kerala / Thrissur,0,0,0,0,0,0,11,11
+Kerala / Wayanad,0,0,1,3,1,0,0,9

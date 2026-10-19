@@ -1,0 +1,26 @@
+{
+  "commit": "512a323 (code identical to the Route B gate D candidate)",
+  "measured_utc": "2026-10-09T18:45:55Z",
+  "scope": "full suite",
+  "exit_code": 1,
+  "elapsed_seconds": 10132.7,
+  "source": "scratch/wbgt_route_b_national/gate_tests.json (Route B gate D, PASS, 0 regressions)",
+  "note": "Full suite on the post-Route-B tree before any CarbonPlan shade code existed (shade files first appear 2026-10-10). The shade release gate counts any failure outside this list as a regression.",
+  "failures": [
+    "tests/test_admin_boundaries_block_placeholder.py::test_blank_block_name_is_recovered_via_placeholder",
+    "tests/test_admin_boundaries_block_placeholder.py::test_blank_district_name_is_still_dropped",
+    "tests/test_color_range_controls.py::test_single_unit_scale_value_preserves_floor_1",
+    "tests/test_compute_indices_task_planning.py::test_metric_role_varnames_uses_level_aware_percentile_and_drought_baselines",
+    "tests/test_heat_risk_gridfirst.py::test_gridfirst_threshold_day_metrics_cover_txge30_and_tropical_nights_gt25_without_baseline",
+    "tests/test_map_view_layout.py::test_clamp_map_height_enforces_maximum",
+    "tests/test_no_emojis.py::test_no_emoji_characters_in_repo_text",
+    "tests/test_optimized_bundle.py::test_audit_processed_optimised_state_scope_does_not_write_global_report_by_default",
+    "tests/test_optimized_bundle.py::test_audit_processed_optimised_state_scope_writes_only_explicit_scoped_report",
+    "tests/test_optimized_bundle.py::test_build_processed_optimised_overwrite_preserves_prior_level_outputs_and_rebuilds_manifest_inventory",
+    "tests/test_optimized_bundle.py::test_build_processed_optimised_prune_scope_removes_selected_owned_roots_only",
+    "tests/test_optimized_bundle.py::test_build_processed_optimised_state_scope_preserves_other_states_and_shared_globals",
+    "tests/test_optimized_bundle.py::test_build_processed_optimised_writes_proposal_bundle_admin_masters",
+    "tests/test_optimized_bundle.py::test_list_optimized_yearly_metrics_reports_state_block_metrics",
+    "tests/test_optimized_bundle.py::test_strict_audit_requires_block_yearly_models_when_ensemble_exists"
+  ]
+}

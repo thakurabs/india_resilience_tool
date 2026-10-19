@@ -1,0 +1,37 @@
+state,model,level,check,ok,detail
+Kerala,ACCESS-CM2,district,unique_admin_keys,True,0 duplicate keys
+Kerala,ACCESS-CM2,district,threshold_ordering,True,0 rows violate days_ge_32 <= days_ge_30 <= days_ge_28
+Kerala,ACCESS-CM2,district,counts_within_0_365,True,"0 rows outside [0, 365]"
+Kerala,ACCESS-CM2,district,missing_never_becomes_zero,True,0 NaN-value rows carry a zero count
+Kerala,ACCESS-CM2,district,unsupported_units_retained_as_nan,True,0 unsupported units
+Kerala,ACCESS-CM2,district,weighted_mean_within_cell_range,True,0 of 14 units outside their cell range
+Kerala,ACCESS-CM2,block,unique_admin_keys,True,0 duplicate keys
+Kerala,ACCESS-CM2,block,threshold_ordering,True,0 rows violate days_ge_32 <= days_ge_30 <= days_ge_28
+Kerala,ACCESS-CM2,block,counts_within_0_365,True,"0 rows outside [0, 365]"
+Kerala,ACCESS-CM2,block,missing_never_becomes_zero,True,0 NaN-value rows carry a zero count
+Kerala,ACCESS-CM2,block,unsupported_units_retained_as_nan,True,0 unsupported units
+Kerala,ACCESS-CM2,block,weighted_mean_within_cell_range,True,0 of 152 units outside their cell range
+Rajasthan,ACCESS-CM2,district,unique_admin_keys,True,0 duplicate keys
+Rajasthan,ACCESS-CM2,district,threshold_ordering,True,0 rows violate days_ge_32 <= days_ge_30 <= days_ge_28
+Rajasthan,ACCESS-CM2,district,counts_within_0_365,True,"0 rows outside [0, 365]"
+Rajasthan,ACCESS-CM2,district,missing_never_becomes_zero,True,0 NaN-value rows carry a zero count
+Rajasthan,ACCESS-CM2,district,unsupported_units_retained_as_nan,True,0 unsupported units
+Rajasthan,ACCESS-CM2,district,weighted_mean_within_cell_range,True,0 of 49 units outside their cell range
+Rajasthan,ACCESS-CM2,block,unique_admin_keys,True,0 duplicate keys
+Rajasthan,ACCESS-CM2,block,threshold_ordering,True,0 rows violate days_ge_32 <= days_ge_30 <= days_ge_28
+Rajasthan,ACCESS-CM2,block,counts_within_0_365,True,"0 rows outside [0, 365]"
+Rajasthan,ACCESS-CM2,block,missing_never_becomes_zero,True,0 NaN-value rows carry a zero count
+Rajasthan,ACCESS-CM2,block,unsupported_units_retained_as_nan,True,0 unsupported units
+Rajasthan,ACCESS-CM2,block,weighted_mean_within_cell_range,True,0 of 348 units outside their cell range
+Himachal Pradesh,ACCESS-CM2,district,unique_admin_keys,True,0 duplicate keys
+Himachal Pradesh,ACCESS-CM2,district,threshold_ordering,True,0 rows violate days_ge_32 <= days_ge_30 <= days_ge_28
+Himachal Pradesh,ACCESS-CM2,district,counts_within_0_365,True,"0 rows outside [0, 365]"
+Himachal Pradesh,ACCESS-CM2,district,missing_never_becomes_zero,True,0 NaN-value rows carry a zero count
+Himachal Pradesh,ACCESS-CM2,district,unsupported_units_retained_as_nan,True,0 unsupported units
+Himachal Pradesh,ACCESS-CM2,district,weighted_mean_within_cell_range,True,0 of 12 units outside their cell range
+Himachal Pradesh,ACCESS-CM2,block,unique_admin_keys,True,0 duplicate keys
+Himachal Pradesh,ACCESS-CM2,block,threshold_ordering,True,0 rows violate days_ge_32 <= days_ge_30 <= days_ge_28
+Himachal Pradesh,ACCESS-CM2,block,counts_within_0_365,True,"0 rows outside [0, 365]"
+Himachal Pradesh,ACCESS-CM2,block,missing_never_becomes_zero,True,0 NaN-value rows carry a zero count
+Himachal Pradesh,ACCESS-CM2,block,unsupported_units_retained_as_nan,True,0 unsupported units
+Himachal Pradesh,ACCESS-CM2,block,weighted_mean_within_cell_range,True,0 of 81 units outside their cell range

@@ -1,0 +1,6 @@
+{"stage": "geometry", "started_utc": "2026-10-03T07:30:18Z", "seconds": 165.2, "peak_rss_mb": 214.5, "ledger_total_bytes": 190178657}
+{"stage": "plan", "started_utc": "2026-10-03T07:33:44Z", "planned_new_bytes": 424601268, "ledger_bytes": 190192347, "seconds": 9.4, "peak_rss_mb": 127.0, "ledger_total_bytes": 190192347}
+{"stage": "fetch", "started_utc": "2026-10-03T07:34:02Z", "published_historical_missing": [], "published_ssp245-2030_missing": [], "published_ssp245-2050_missing": [], "cells": 3416, "null_elevation_rows": 2, "uhe_missing": [], "ledger_bytes": 614795325, "seconds": 95.3, "peak_rss_mb": 514.8, "ledger_total_bytes": 614795325}
+{"stage": "drivers", "started_utc": "2026-10-03T07:35:48Z", "seconds": 187.2, "peak_rss_mb": 733.8, "ledger_total_bytes": 614795325}
+{"stage": "fetch", "started_utc": "2026-10-03T07:43:54Z", "published_historical_missing": [], "published_ssp245-2030_missing": [], "published_ssp245-2050_missing": [], "cells": 3416, "null_elevation_rows": 2, "uhe_missing": [], "ledger_bytes": 614795325, "seconds": 8.4, "peak_rss_mb": 493.9, "ledger_total_bytes": 614795325}
+{"stage": "crosswalk", "started_utc": "2026-10-03T07:52:41Z", "seconds": 164.7, "peak_rss_mb": 244.2, "ledger_total_bytes": 614795325}

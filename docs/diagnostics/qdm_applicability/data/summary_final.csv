@@ -1,0 +1,51 @@
+metric,family,floor,ref,err_raw,err_qdm,raw_2050,qdm_2050,shift_2050,chg_raw,chg_qdm,verdict,scope,verdict_6sites
+csdi_cold_spell_days,count,5.0,3.75,3.35,3.22,2.76,2.47,0.64,-4.61,-4.77,NO EFFECT,5 sites (no Shimla),NO EFFECT
+hwa_heatwave_amplitude,degC,0.5,38.32,1.5,1.86,42.05,41.61,0.88,3.29,3.4,WORSE,5 sites (no Shimla),MARGINAL
+hwfi_events_tmean_90p,events,0.5,2.15,0.82,0.8,6.65,6.34,0.55,4.72,4.46,NO EFFECT,5 sites (no Shimla),NO EFFECT
+hwfi_tmean_90p,count,5.0,20.02,5.62,5.52,110.72,103.56,15.79,96.67,89.6,NO EFFECT,5 sites (no Shimla),NO EFFECT
+swbgt_empirical_annual_mean,degC,0.5,28.21,0.6,0.18,29.02,29.37,0.59,1.43,1.43,MARGINAL,5 sites (no Shimla),MATERIAL
+swbgt_empirical_days_ge_28,count,5.0,231.08,20.58,4.78,229.2,246.48,17.37,22.87,20.71,MATERIAL,5 sites (no Shimla),MATERIAL
+swbgt_empirical_days_ge_30,count,5.0,177.68,20.19,8.06,196.72,211.44,16.0,32.03,45.26,MATERIAL,5 sites (no Shimla),MATERIAL
+swbgt_empirical_days_ge_32,count,5.0,95.18,18.65,8.98,148.21,141.47,27.25,52.67,52.44,MATERIAL,5 sites (no Shimla),MATERIAL
+tas_annual_mean,degC,0.5,26.58,0.54,0.28,27.87,27.5,0.62,1.16,1.16,MARGINAL,5 sites (no Shimla),MATERIAL
+tas_summer_mean,degC,0.5,29.84,0.87,0.58,30.81,30.82,0.71,1.31,1.31,MARGINAL,5 sites (no Shimla),MARGINAL
+tas_winter_mean,degC,0.5,20.85,0.46,0.42,22.13,21.87,0.56,1.27,1.27,FUTURE-ONLY (unverifiable),5 sites (no Shimla),MARGINAL
+tasmax_summer_mean,degC,0.5,36.01,0.56,0.71,37.16,36.81,0.45,1.16,1.16,NO EFFECT,5 sites (no Shimla),NO EFFECT
+tasmin_tropical_nights_gt25,count,5.0,126.1,26.09,6.52,159.36,166.18,31.51,50.53,46.95,MATERIAL,5 sites (no Shimla),MATERIAL
+tasmin_tropical_nights_gt28,count,5.0,31.75,11.65,4.3,43.41,61.07,21.29,23.82,31.88,MATERIAL,5 sites (no Shimla),MATERIAL
+tasmin_winter_mean,degC,0.5,15.42,1.26,0.47,15.53,16.49,1.11,1.38,1.38,MATERIAL,5 sites (no Shimla),MATERIAL
+tasmin_winter_min,degC,0.5,10.01,1.27,0.77,10.6,11.31,1.28,1.56,1.56,MARGINAL,5 sites (no Shimla),MATERIAL
+tn10p_cool_nights_pct,pct,1.0,7.05,1.83,1.81,3.16,2.94,0.46,-7.15,-7.25,NO EFFECT,5 sites (no Shimla),NO EFFECT
+tn90p_warm_nights_pct,pct,1.0,13.56,1.92,1.93,42.5,41.25,4.44,32.22,31.12,NO EFFECT,5 sites (no Shimla),NO EFFECT
+tnle10_cold_nights,count,5.0,16.52,10.69,2.74,18.59,9.69,9.06,-9.06,-7.46,MATERIAL,5 sites (no Shimla),MATERIAL
+tnle10_consecutive_cold_nights,spell,1.0,6.18,3.9,1.48,7.42,4.11,3.43,-3.04,-2.11,MATERIAL,5 sites (no Shimla),MATERIAL
+tnle5_severe_cold_nights,count,5.0,0.92,3.32,0.53,1.85,0.28,1.57,-2.56,-0.39,MARGINAL,5 sites (no Shimla),MATERIAL
+tnn_annual_min,degC,0.5,10.0,1.25,0.77,10.56,11.29,1.28,1.57,1.56,MARGINAL,5 sites (no Shimla),MATERIAL
+tnx_annual_max,degC,0.5,30.31,1.01,0.47,31.43,31.72,0.97,1.48,1.48,MATERIAL,5 sites (no Shimla),MATERIAL
+twb_annual_max,degC,0.5,27.56,1.27,0.34,29.92,28.77,1.17,1.31,1.38,MATERIAL,5 sites (no Shimla),MATERIAL
+twb_annual_mean,degC,0.5,21.65,0.83,0.15,21.93,22.67,0.82,1.25,1.24,MATERIAL,5 sites (no Shimla),MATERIAL
+twb_days_ge_28,count,5.0,3.98,31.2,2.04,52.38,24.92,27.56,20.26,22.58,MATERIAL,5 sites (no Shimla),MATERIAL
+twb_days_ge_30,count,5.0,0.02,0.96,0.06,8.64,1.84,6.81,7.97,1.82,FUTURE-ONLY (unverifiable),5 sites (no Shimla),FUTURE-ONLY (unverifiable)
+twb_summer_mean,degC,0.5,22.44,2.1,0.32,21.5,23.39,2.02,1.25,1.25,MATERIAL,5 sites (no Shimla),MATERIAL
+tx10p_cool_days_pct,pct,1.0,8.7,1.75,1.71,5.78,6.28,0.84,-4.59,-4.05,NO EFFECT,5 sites (no Shimla),NO EFFECT
+tx90p_hot_days_pct,pct,1.0,12.48,2.28,2.28,27.71,26.39,2.22,17.35,16.12,NO EFFECT,5 sites (no Shimla),NO EFFECT
+txge30_hot_days,count,5.0,248.7,19.9,17.3,288.32,260.65,27.67,22.38,23.07,MARGINAL,5 sites (no Shimla),MARGINAL
+txge35_extreme_heat_days,count,5.0,95.85,8.86,13.08,113.31,108.22,13.13,20.4,20.08,WORSE,5 sites (no Shimla),WORSE
+txle15_cold_days,count,5.0,0.28,0.25,0.25,0.05,0.1,0.05,-0.03,-0.1,NO EFFECT,5 sites (no Shimla),NO EFFECT
+txx_annual_max,degC,0.5,42.01,0.9,0.5,43.38,43.04,0.87,1.1,1.19,MARGINAL,5 sites (no Shimla),MATERIAL
+wsdi_warm_spell_days,count,5.0,12.38,4.44,4.6,62.03,56.86,7.65,50.81,45.82,FUTURE-ONLY (unverifiable),5 sites (no Shimla),NO EFFECT
+cwd_consecutive_wet_days,spell,1.0,23.47,7.44,4.16,16.43,21.38,5.19,0.72,0.4,MARGINAL,Telangana grid (ERA5 pr - UNFIT),
+pr_consecutive_dry_days_lt1mm,spell,1.0,64.05,37.64,9.03,102.35,55.76,46.58,0.68,2.87,MATERIAL,Telangana grid (ERA5 pr - UNFIT),
+pr_max_1day_precip,mm_rel,8.5,85.04,37.66,22.05,52.42,106.85,54.5,6.01,33.28,MARGINAL,Telangana grid (ERA5 pr - UNFIT),
+pr_max_5day_precip,mm_rel,17.78,177.79,43.47,35.86,150.2,226.81,77.91,13.15,63.22,NO EFFECT,Telangana grid (ERA5 pr - UNFIT),
+r20mm_very_heavy_precip_days,count,5.0,12.24,5.59,2.99,18.47,16.75,4.02,2.49,6.04,MARGINAL,Telangana grid (ERA5 pr - UNFIT),
+r95p_very_wet_precip,mm_rel,32.14,321.4,152.58,71.52,209.02,520.56,311.71,55.03,250.64,MATERIAL,Telangana grid (ERA5 pr - UNFIT),
+r95ptot_contribution_pct,pct,1.0,27.79,11.18,3.86,19.0,32.66,13.68,3.4,7.63,MATERIAL,Telangana grid (ERA5 pr - UNFIT),
+r99p_extreme_wet_precip,mm_rel,12.19,121.89,72.94,52.77,73.55,258.2,184.67,30.81,161.41,MARGINAL,Telangana grid (ERA5 pr - UNFIT),
+spi12_count_events_lt_minus1,events,0.5,0.25,0.2,0.18,0.27,0.14,0.14,-0.18,-0.31,NO EFFECT,Telangana grid (ERA5 pr - UNFIT),
+spi12_max_spell_lt_minus1,spell,1.0,0.77,0.65,0.62,0.81,0.38,0.43,-0.8,-1.2,NO EFFECT,Telangana grid (ERA5 pr - UNFIT),
+spi3_count_events_lt_minus1,events,0.5,0.88,0.36,0.34,0.88,0.72,0.21,-0.09,-0.21,NO EFFECT,Telangana grid (ERA5 pr - UNFIT),
+spi3_count_months_lt_minus1,count,5.0,1.17,0.52,0.48,1.31,1.04,0.34,-0.26,-0.49,NO EFFECT,Telangana grid (ERA5 pr - UNFIT),
+spi3_max_spell_lt_minus1,spell,1.0,0.91,0.44,0.39,1.06,0.86,0.26,-0.21,-0.36,NO EFFECT,Telangana grid (ERA5 pr - UNFIT),
+spi6_count_events_lt_minus1,events,0.5,0.56,0.32,0.27,0.69,0.45,0.25,-0.16,-0.31,NO EFFECT,Telangana grid (ERA5 pr - UNFIT),
+spi6_max_spell_lt_minus1,spell,1.0,0.75,0.53,0.41,1.13,0.68,0.45,-0.39,-0.67,NO EFFECT,Telangana grid (ERA5 pr - UNFIT),

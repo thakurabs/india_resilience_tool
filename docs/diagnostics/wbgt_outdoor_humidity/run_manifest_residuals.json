@@ -1,0 +1,116 @@
+{
+  "tool": "tools/diagnostics/wbgt_outdoor_humidity.py",
+  "spec": "docs/diagnostics/wbgt_outdoor_humidity/SPEC.md",
+  "milestone_1_spec": "docs/diagnostics/wbgt_outdoor_feasibility/SPEC.md",
+  "milestone_2_spec": "docs/diagnostics/wbgt_outdoor_selection/SPEC.md",
+  "generated_utc": "2026-09-29T12:42:53.803769+00:00",
+  "git_branch": "add_flood_depth",
+  "git_sha": "99e478a",
+  "git_dirty": true,
+  "command": "D:\\projects\\india_resilience_tool\\tools\\diagnostics\\wbgt_outdoor_humidity.py --stage residuals",
+  "python": "3.10.20",
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "thermofeel": "2.3.0",
+  "inputs": {
+    "era5_hourly_cache": "scratch\\wbgt_deployed_vs_reference_cache",
+    "nex_sample_cache": "(milestone 2 work dir)",
+    "milestone2_daily_series": "docs\\diagnostics\\wbgt_outdoor_selection\\daily_series.parquet"
+  },
+  "candidates": {
+    "A": {
+      "name": "A existing humidity (constant daily e) + C1 constant daily-mean wind [milestone 2 C1]",
+      "humidity": "vapour_pressure",
+      "wind": "C1",
+      "signature": "outdoor-humidity-v1:A:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-constant-daily-mean:pressure-isa-from-site-elevation:liljegren-thermofeel2.3.0:day-ist-complete24h-feb29dropped"
+    },
+    "B": {
+      "name": "B existing humidity (constant daily e) + W1 DTR-dependent wind [milestone 2 W1]",
+      "humidity": "vapour_pressure",
+      "wind": "W1",
+      "signature": "outdoor-humidity-v1:B:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-dtr-slope0.03-amp0.1-0.8:pressure-isa-from-site-elevation:liljegren-thermofeel2.3.0:day-ist-complete24h-feb29dropped"
+    },
+    "C": {
+      "name": "C input-consistent daily RH + C1 constant daily-mean wind [new]",
+      "humidity": "input_consistent_daily_rh",
+      "wind": "C1",
+      "signature": "outdoor-humidity-v1:C:parton-logan-a1.86-b2.2:humidity-input_consistent_daily_rh-tol1e-06pp-iter200:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-constant-daily-mean:pressure-isa-from-site-elevation:liljegren-thermofeel2.3.0:day-ist-complete24h-feb29dropped"
+    },
+    "D": {
+      "name": "D input-consistent daily RH + W1 DTR-dependent wind [new]",
+      "humidity": "input_consistent_daily_rh",
+      "wind": "W1",
+      "signature": "outdoor-humidity-v1:D:parton-logan-a1.86-b2.2:humidity-input_consistent_daily_rh-tol1e-06pp-iter200:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-dtr-slope0.03-amp0.1-0.8:pressure-isa-from-site-elevation:liljegren-thermofeel2.3.0:day-ist-complete24h-feb29dropped"
+    }
+  },
+  "humidity_solver": {
+    "residual_tolerance_pp": 1e-06,
+    "iteration_limit": 200,
+    "bracket": "[0, max_h es(T_h)]",
+    "analytic_branch": "e = (hurs/100) / mean_h[1/es(T_h)] where no hour saturates"
+  },
+  "signatures": {
+    "schema": "wbgt-outdoor-humidity-cache-v1",
+    "candidates": {
+      "A": "outdoor-humidity-v1:A:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-constant-daily-mean:pressure-isa-from-site-elevation:liljegren-thermofeel2.3.0:day-ist-complete24h-feb29dropped",
+      "B": "outdoor-humidity-v1:B:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-dtr-slope0.03-amp0.1-0.8:pressure-isa-from-site-elevation:liljegren-thermofeel2.3.0:day-ist-complete24h-feb29dropped",
+      "C": "outdoor-humidity-v1:C:parton-logan-a1.86-b2.2:humidity-input_consistent_daily_rh-tol1e-06pp-iter200:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-constant-daily-mean:pressure-isa-from-site-elevation:liljegren-thermofeel2.3.0:day-ist-complete24h-feb29dropped",
+      "D": "outdoor-humidity-v1:D:parton-logan-a1.86-b2.2:humidity-input_consistent_daily_rh-tol1e-06pp-iter200:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-dtr-slope0.03-amp0.1-0.8:pressure-isa-from-site-elevation:liljegren-thermofeel2.3.0:day-ist-complete24h-feb29dropped"
+    },
+    "references": {
+      "ref_audited": "liljegren-audited-v1:cossza-at-radiation-interval-midpoint",
+      "ref_R3_midpoint": "liljegren-midpoint-v1:all-drivers-interpolated-to-radiation-interval-midpoint"
+    },
+    "gates": {
+      "median_abs_error_c": 1.0,
+      "rmse_c": 1.5,
+      "count_min_ref_per_year": 5.0,
+      "count_rel_tol": 0.2,
+      "count_abs_floor_per_year": 2.0
+    },
+    "thresholds_c": [
+      28.0,
+      30.0,
+      32.0
+    ],
+    "day_convention": "ist"
+  },
+  "w1_inherited": {
+    "slope_per_c": 0.03,
+    "amplitude_bounds": [
+      0.1,
+      0.8
+    ],
+    "status": "inherited unchanged from milestone 2; a declared assumption, not a published wind reconstruction"
+  },
+  "gates": {
+    "source": "imported from wbgt_outdoor_feasibility, unchanged and not widened",
+    "median_abs_error_c": 1.0,
+    "rmse_c": 1.5,
+    "count_min_ref_per_year": 5.0,
+    "count_rel_tol": 0.2,
+    "count_abs_floor_per_year": 2.0
+  },
+  "shade": "UNTOUCHED: no production shade computation, method signature, cache, stage or release configuration was read for writing or modified",
+  "stages_run": [
+    "residuals"
+  ],
+  "daily_rh_residual": {
+    "input_consistent_daily_rh": {
+      "mean_abs_residual_pp": 5.1724653275494005e-08,
+      "max_abs_residual_pp": 9.807775001036134e-07,
+      "worst_site_window": {
+        "site": "Hyderabad",
+        "window": "1990-2004"
+      }
+    },
+    "vapour_pressure": {
+      "mean_abs_residual_pp": 1.5936993616664819,
+      "max_abs_residual_pp": 10.950132505112236,
+      "worst_site_window": {
+        "site": "Kochi",
+        "window": "2005-2014"
+      }
+    }
+  }
+}

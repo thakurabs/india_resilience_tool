@@ -1,0 +1,22 @@
+{
+  "seconds": 3536.9,
+  "peak_rss_mb": 461.3,
+  "runs": [
+    "Himachal_Pradesh__ACCESS-CM2__area",
+    "Himachal_Pradesh__ACCESS-CM2__population",
+    "Himachal_Pradesh__CMCC-CM2-SR5__area",
+    "Himachal_Pradesh__CMCC-CM2-SR5__population",
+    "Kerala__ACCESS-CM2__area",
+    "Kerala__ACCESS-CM2__population",
+    "Kerala__CMCC-CM2-SR5__area",
+    "Kerala__CMCC-CM2-SR5__population",
+    "Rajasthan__ACCESS-CM2__area",
+    "Rajasthan__ACCESS-CM2__population",
+    "Rajasthan__CMCC-CM2-SR5__area",
+    "Rajasthan__CMCC-CM2-SR5__population"
+  ],
+  "bootstrap": {
+    "B": 1000,
+    "seed": 20261003
+  }
+}

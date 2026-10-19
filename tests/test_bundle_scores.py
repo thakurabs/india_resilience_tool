@@ -135,5 +135,5 @@ def test_compute_bundle_score_frame_renormalizes_weights_for_available_metrics()
     )
 
     scores = dict(zip(out["district_name"], out["bundle_score"]))
-    assert scores["One"] == 20.0
+    assert scores["One"] == 10.0
     assert scores["Two"] == 100.0

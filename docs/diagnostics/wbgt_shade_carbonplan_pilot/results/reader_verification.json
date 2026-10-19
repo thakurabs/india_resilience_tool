@@ -1,0 +1,342 @@
+{
+  "refused_by_stock_guard": {
+    "annual_mean": true,
+    "days_ge_28": true,
+    "days_ge_30": true,
+    "days_ge_32": true
+  },
+  "roundtrip": {
+    "annual_mean|Kerala|district": {
+      "written": 1960,
+      "read": 1960,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 84
+    },
+    "annual_mean|Kerala|block": {
+      "written": 21280,
+      "read": 21280,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 912
+    },
+    "annual_mean|Rajasthan|district": {
+      "written": 6860,
+      "read": 6860,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 294
+    },
+    "annual_mean|Rajasthan|block": {
+      "written": 48720,
+      "read": 48720,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 2088
+    },
+    "annual_mean|Himachal Pradesh|district": {
+      "written": 1680,
+      "read": 1680,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 72
+    },
+    "annual_mean|Himachal Pradesh|block": {
+      "written": 11340,
+      "read": 11340,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 486
+    },
+    "days_ge_28|Kerala|district": {
+      "written": 1960,
+      "read": 1960,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 84
+    },
+    "days_ge_28|Kerala|block": {
+      "written": 21280,
+      "read": 21280,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 912
+    },
+    "days_ge_28|Rajasthan|district": {
+      "written": 6860,
+      "read": 6860,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 294
+    },
+    "days_ge_28|Rajasthan|block": {
+      "written": 48720,
+      "read": 48720,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 2088
+    },
+    "days_ge_28|Himachal Pradesh|district": {
+      "written": 1680,
+      "read": 1680,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 72
+    },
+    "days_ge_28|Himachal Pradesh|block": {
+      "written": 11340,
+      "read": 11340,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 486
+    },
+    "days_ge_30|Kerala|district": {
+      "written": 1960,
+      "read": 1960,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 84
+    },
+    "days_ge_30|Kerala|block": {
+      "written": 21280,
+      "read": 21280,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 912
+    },
+    "days_ge_30|Rajasthan|district": {
+      "written": 6860,
+      "read": 6860,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 294
+    },
+    "days_ge_30|Rajasthan|block": {
+      "written": 48720,
+      "read": 48720,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 2088
+    },
+    "days_ge_30|Himachal Pradesh|district": {
+      "written": 1680,
+      "read": 1680,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 72
+    },
+    "days_ge_30|Himachal Pradesh|block": {
+      "written": 11340,
+      "read": 11340,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 486
+    },
+    "days_ge_32|Kerala|district": {
+      "written": 1960,
+      "read": 1960,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 84
+    },
+    "days_ge_32|Kerala|block": {
+      "written": 21280,
+      "read": 21280,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 912
+    },
+    "days_ge_32|Rajasthan|district": {
+      "written": 6860,
+      "read": 6860,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 294
+    },
+    "days_ge_32|Rajasthan|block": {
+      "written": 48720,
+      "read": 48720,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 2088
+    },
+    "days_ge_32|Himachal Pradesh|district": {
+      "written": 1680,
+      "read": 1680,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 72
+    },
+    "days_ge_32|Himachal Pradesh|block": {
+      "written": 11340,
+      "read": 11340,
+      "unmatched": 0,
+      "values_identical": true,
+      "period_rows": 486
+    }
+  },
+  "masters": {
+    "annual_mean|Kerala|district": {
+      "rows": 14,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "annual_mean|Kerala|block": {
+      "rows": 152,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "annual_mean|Rajasthan|district": {
+      "rows": 49,
+      "n_models_values": [
+        2
+      ]
+    },
+    "annual_mean|Rajasthan|block": {
+      "rows": 348,
+      "n_models_values": [
+        2
+      ]
+    },
+    "annual_mean|Himachal Pradesh|district": {
+      "rows": 12,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "annual_mean|Himachal Pradesh|block": {
+      "rows": 81,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_28|Kerala|district": {
+      "rows": 14,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_28|Kerala|block": {
+      "rows": 152,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_28|Rajasthan|district": {
+      "rows": 49,
+      "n_models_values": [
+        2
+      ]
+    },
+    "days_ge_28|Rajasthan|block": {
+      "rows": 348,
+      "n_models_values": [
+        2
+      ]
+    },
+    "days_ge_28|Himachal Pradesh|district": {
+      "rows": 12,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_28|Himachal Pradesh|block": {
+      "rows": 81,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_30|Kerala|district": {
+      "rows": 14,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_30|Kerala|block": {
+      "rows": 152,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_30|Rajasthan|district": {
+      "rows": 49,
+      "n_models_values": [
+        2
+      ]
+    },
+    "days_ge_30|Rajasthan|block": {
+      "rows": 348,
+      "n_models_values": [
+        2
+      ]
+    },
+    "days_ge_30|Himachal Pradesh|district": {
+      "rows": 12,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_30|Himachal Pradesh|block": {
+      "rows": 81,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_32|Kerala|district": {
+      "rows": 14,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_32|Kerala|block": {
+      "rows": 152,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_32|Rajasthan|district": {
+      "rows": 49,
+      "n_models_values": [
+        2
+      ]
+    },
+    "days_ge_32|Rajasthan|block": {
+      "rows": 348,
+      "n_models_values": [
+        2
+      ]
+    },
+    "days_ge_32|Himachal Pradesh|district": {
+      "rows": 12,
+      "n_models_values": [
+        0,
+        2
+      ]
+    },
+    "days_ge_32|Himachal Pradesh|block": {
+      "rows": 81,
+      "n_models_values": [
+        0,
+        2
+      ]
+    }
+  },
+  "all_refused": true,
+  "all_roundtrip": true
+}

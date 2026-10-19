@@ -1,0 +1,28 @@
+{
+  "site": "Kochi",
+  "window": "1990-2004",
+  "source": "docs\\diagnostics\\wbgt_outdoor_selection\\daily_series.parquet",
+  "expectation": "exact equality (identical code path and inputs)",
+  "comparisons": {
+    "A": {
+      "milestone2_column": "cand_C1",
+      "n_common_days": 5476,
+      "n_days_mine": 5476,
+      "n_days_milestone2": 5476,
+      "max_abs_difference_c": 0.0,
+      "n_days_differing": 0,
+      "exact": true
+    },
+    "B": {
+      "milestone2_column": "cand_W1",
+      "n_common_days": 5476,
+      "n_days_mine": 5476,
+      "n_days_milestone2": 5476,
+      "max_abs_difference_c": 0.0,
+      "n_days_differing": 0,
+      "exact": true
+    }
+  },
+  "worst_max_abs_difference_c": 0.0,
+  "status": "REPRODUCED EXACTLY"
+}

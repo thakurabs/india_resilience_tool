@@ -1,0 +1,90 @@
+{
+  "generated_utc": "2026-09-29T06:32:37.552618+00:00",
+  "git_branch": "add_flood_depth",
+  "git_sha": "9b38565",
+  "git_dirty_tracked": true,
+  "python": "3.10.20 | packaged by conda-forge | (main, Mar  5 2026, 16:36:49) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "Windows-10-10.0.26100-SP0",
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "xarray": "2025.6.1",
+    "thermofeel": "2.3.0",
+    "netCDF4": "NOT INSTALLED",
+    "pyarrow": "21.0.0"
+  },
+  "command": "C:\\Users\\22015611\\AppData\\Local\\miniconda3\\envs\\irt\\python.exe -m tools.diagnostics.wbgt_outdoor_feasibility --stage experiment --resume --no-uncertainty --quiet",
+  "argv": [
+    "--stage",
+    "experiment",
+    "--resume",
+    "--no-uncertainty",
+    "--quiet"
+  ],
+  "reference_signatures": {
+    "legacy": "liljegren-legacy-v1:cossza-at-label",
+    "audited": "liljegren-audited-v1:cossza-at-radiation-interval-midpoint"
+  },
+  "candidate_signatures": {
+    "C1": "recon-v1:parton-logan-a1.86-b2.2:vapour_pressure:toa-shape-erbs1982:wind-constant:pressure-isa-from-site-elevation",
+    "C2": "recon-v1:parton-logan-a1.86-b2.2:vapour_pressure:toa-shape-erbs1982:wind-diurnal-amp0.4:pressure-isa-from-site-elevation",
+    "C3": "recon-v1:parton-logan-a1.86-b2.2:relative_humidity:toa-shape-erbs1982:wind-constant:pressure-isa-from-site-elevation"
+  },
+  "gates": {
+    "median_abs_error_c": 1.0,
+    "rmse_c": 1.5,
+    "count_min_reference_per_year": 5.0,
+    "count_relative_tolerance": 0.2,
+    "count_absolute_floor_per_year": 2.0
+  },
+  "radiation_energy_rtol": 1e-09,
+  "spec": "docs/diagnostics/wbgt_outdoor_feasibility/SPEC.md",
+  "sites": [
+    "Kochi",
+    "Kolkata",
+    "Bikaner",
+    "Lucknow",
+    "Hyderabad",
+    "Shimla"
+  ],
+  "windows": [
+    "1990-2004",
+    "2005-2014"
+  ],
+  "candidates": [
+    "C1",
+    "C2",
+    "C3"
+  ],
+  "era5_cache": "scratch\\wbgt_deployed_vs_reference_cache",
+  "legacy_reproduction": "IDENTICAL",
+  "gate_verdicts": {
+    "C1": {
+      "daily_gate": "PASS",
+      "daily_pairs": 12,
+      "daily_pairs_passing": 12,
+      "count_gate": "FAIL",
+      "count_pairs_gated": 30,
+      "count_pairs_passing": 28,
+      "count_pairs_not_gated": 6
+    },
+    "C2": {
+      "daily_gate": "PASS",
+      "daily_pairs": 12,
+      "daily_pairs_passing": 12,
+      "count_gate": "FAIL",
+      "count_pairs_gated": 30,
+      "count_pairs_passing": 28,
+      "count_pairs_not_gated": 6
+    },
+    "C3": {
+      "daily_gate": "FAIL",
+      "daily_pairs": 12,
+      "daily_pairs_passing": 0,
+      "count_gate": "FAIL",
+      "count_pairs_gated": 30,
+      "count_pairs_passing": 6,
+      "count_pairs_not_gated": 6
+    }
+  }
+}

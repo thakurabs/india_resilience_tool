@@ -1,0 +1,109 @@
+model,state_name,level,path,metric,units,raw_median_absolute_error,median_absolute_error,fraction_improved,fraction_worsened
+ACCESS-CM2,Himachal Pradesh,block,grid_first,annual_mean_bias_c,81,0.7408060299788222,0.0759812687285688,0.9876543209876543,0.012345679012345678
+ACCESS-CM2,Himachal Pradesh,block,grid_first,monthly_climatology_mae_c,81,1.427904322761463,0.4152711345550218,1.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,grid_first,p99_bias_c,81,0.8778032854829902,0.2313450089790123,0.8765432098765432,0.12345679012345678
+ACCESS-CM2,Himachal Pradesh,block,grid_first,days_ge_28_bias,81,0.0,0.1333333333333257,0.35802469135802467,0.1728395061728395
+ACCESS-CM2,Himachal Pradesh,block,grid_first,days_ge_30_bias,81,0.0,0.0,0.2716049382716049,0.024691358024691357
+ACCESS-CM2,Himachal Pradesh,block,grid_first,days_ge_32_bias,81,0.0,0.0,0.024691358024691357,0.0
+ACCESS-CM2,Himachal Pradesh,block,raw,annual_mean_bias_c,81,0.7408060299788222,0.7408060299788222,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,raw,monthly_climatology_mae_c,81,1.427904322761463,1.427904322761463,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,raw,p99_bias_c,81,0.8778032854829902,0.8778032854829902,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,raw,days_ge_28_bias,81,0.0,0.0,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,raw,days_ge_30_bias,81,0.0,0.0,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,raw,days_ge_32_bias,81,0.0,0.0,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,region_first,annual_mean_bias_c,81,0.7408060299788222,0.0742734000913891,1.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,region_first,monthly_climatology_mae_c,81,1.427904322761463,0.4150828811771165,1.0,0.0
+ACCESS-CM2,Himachal Pradesh,block,region_first,p99_bias_c,81,0.8778032854829902,0.2185851770121871,0.9012345679012346,0.09876543209876543
+ACCESS-CM2,Himachal Pradesh,block,region_first,days_ge_28_bias,81,0.0,0.1333333333333333,0.37037037037037035,0.1728395061728395
+ACCESS-CM2,Himachal Pradesh,block,region_first,days_ge_30_bias,81,0.0,0.0,0.2716049382716049,0.024691358024691357
+ACCESS-CM2,Himachal Pradesh,block,region_first,days_ge_32_bias,81,0.0,0.0,0.024691358024691357,0.0
+ACCESS-CM2,Himachal Pradesh,district,grid_first,annual_mean_bias_c,12,0.7589787548561153,0.08605394891008886,1.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,grid_first,monthly_climatology_mae_c,12,1.3649385896207957,0.4235271363758898,1.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,grid_first,p99_bias_c,12,0.6925983748468756,0.3636852522829894,0.8333333333333334,0.16666666666666666
+ACCESS-CM2,Himachal Pradesh,district,grid_first,days_ge_28_bias,12,0.0,0.09999999999999995,0.25,0.3333333333333333
+ACCESS-CM2,Himachal Pradesh,district,grid_first,days_ge_30_bias,12,0.0,0.0,0.16666666666666666,0.0
+ACCESS-CM2,Himachal Pradesh,district,grid_first,days_ge_32_bias,12,0.0,0.0,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,raw,annual_mean_bias_c,12,0.7589787548561153,0.7589787548561153,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,raw,monthly_climatology_mae_c,12,1.3649385896207957,1.3649385896207957,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,raw,p99_bias_c,12,0.6925983748468756,0.6925983748468756,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,raw,days_ge_28_bias,12,0.0,0.0,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,raw,days_ge_30_bias,12,0.0,0.0,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,raw,days_ge_32_bias,12,0.0,0.0,0.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,region_first,annual_mean_bias_c,12,0.7589787548561153,0.08471343883358705,1.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,region_first,monthly_climatology_mae_c,12,1.3649385896207957,0.4215121031306579,1.0,0.0
+ACCESS-CM2,Himachal Pradesh,district,region_first,p99_bias_c,12,0.6925983748468756,0.2799209681622887,0.8333333333333334,0.16666666666666666
+ACCESS-CM2,Himachal Pradesh,district,region_first,days_ge_28_bias,12,0.0,0.09999999999999995,0.25,0.3333333333333333
+ACCESS-CM2,Himachal Pradesh,district,region_first,days_ge_30_bias,12,0.0,0.0,0.16666666666666666,0.0
+ACCESS-CM2,Himachal Pradesh,district,region_first,days_ge_32_bias,12,0.0,0.0,0.0,0.0
+ACCESS-CM2,Kerala,block,grid_first,annual_mean_bias_c,131,0.4755289662610664,0.0930381611954658,0.9083969465648855,0.0916030534351145
+ACCESS-CM2,Kerala,block,grid_first,monthly_climatology_mae_c,131,0.727984723666513,0.1516188909888146,1.0,0.0
+ACCESS-CM2,Kerala,block,grid_first,p99_bias_c,131,0.4452136580196359,0.1969861763289238,0.6870229007633588,0.31297709923664124
+ACCESS-CM2,Kerala,block,grid_first,days_ge_28_bias,131,32.0,5.133333333333333,0.9236641221374046,0.03816793893129771
+ACCESS-CM2,Kerala,block,grid_first,days_ge_30_bias,131,12.333333333333334,1.8666666666666665,0.8015267175572519,0.09923664122137404
+ACCESS-CM2,Kerala,block,grid_first,days_ge_32_bias,131,0.0,0.0666666666666666,0.08396946564885496,0.4351145038167939
+ACCESS-CM2,Kerala,block,raw,annual_mean_bias_c,131,0.4755289662610664,0.4755289662610664,0.0,0.0
+ACCESS-CM2,Kerala,block,raw,monthly_climatology_mae_c,131,0.727984723666513,0.727984723666513,0.0,0.0
+ACCESS-CM2,Kerala,block,raw,p99_bias_c,131,0.4452136580196359,0.4452136580196359,0.0,0.0
+ACCESS-CM2,Kerala,block,raw,days_ge_28_bias,131,32.0,32.0,0.0,0.0
+ACCESS-CM2,Kerala,block,raw,days_ge_30_bias,131,12.333333333333334,12.333333333333334,0.0,0.0
+ACCESS-CM2,Kerala,block,raw,days_ge_32_bias,131,0.0,0.0,0.0,0.0
+ACCESS-CM2,Kerala,block,region_first,annual_mean_bias_c,131,0.4755289662610664,0.0930381611954658,0.9083969465648855,0.0916030534351145
+ACCESS-CM2,Kerala,block,region_first,monthly_climatology_mae_c,131,0.727984723666513,0.1523196675610811,1.0,0.0
+ACCESS-CM2,Kerala,block,region_first,p99_bias_c,131,0.4452136580196359,0.1811875298594998,0.6870229007633588,0.31297709923664124
+ACCESS-CM2,Kerala,block,region_first,days_ge_28_bias,131,32.0,5.199999999999989,0.9236641221374046,0.03816793893129771
+ACCESS-CM2,Kerala,block,region_first,days_ge_30_bias,131,12.333333333333334,1.6666666666666643,0.8015267175572519,0.09923664122137404
+ACCESS-CM2,Kerala,block,region_first,days_ge_32_bias,131,0.0,0.0666666666666666,0.08396946564885496,0.4122137404580153
+ACCESS-CM2,Kerala,district,grid_first,annual_mean_bias_c,9,0.7417903967191712,0.0633873603859669,1.0,0.0
+ACCESS-CM2,Kerala,district,grid_first,monthly_climatology_mae_c,9,0.9288024356341672,0.1252467833674909,1.0,0.0
+ACCESS-CM2,Kerala,district,grid_first,p99_bias_c,9,0.4766436084877696,0.1907989156001761,1.0,0.0
+ACCESS-CM2,Kerala,district,grid_first,days_ge_28_bias,9,15.600000000000009,4.799999999999997,0.8888888888888888,0.0
+ACCESS-CM2,Kerala,district,grid_first,days_ge_30_bias,9,2.333333333333333,0.8666666666666667,0.6666666666666666,0.1111111111111111
+ACCESS-CM2,Kerala,district,grid_first,days_ge_32_bias,9,0.0,0.0,0.0,0.1111111111111111
+ACCESS-CM2,Kerala,district,raw,annual_mean_bias_c,9,0.7417903967191712,0.7417903967191712,0.0,0.0
+ACCESS-CM2,Kerala,district,raw,monthly_climatology_mae_c,9,0.9288024356341672,0.9288024356341672,0.0,0.0
+ACCESS-CM2,Kerala,district,raw,p99_bias_c,9,0.4766436084877696,0.4766436084877696,0.0,0.0
+ACCESS-CM2,Kerala,district,raw,days_ge_28_bias,9,15.600000000000009,15.600000000000009,0.0,0.0
+ACCESS-CM2,Kerala,district,raw,days_ge_30_bias,9,2.333333333333333,2.333333333333333,0.0,0.0
+ACCESS-CM2,Kerala,district,raw,days_ge_32_bias,9,0.0,0.0,0.0,0.0
+ACCESS-CM2,Kerala,district,region_first,annual_mean_bias_c,9,0.7417903967191712,0.0641754886526904,1.0,0.0
+ACCESS-CM2,Kerala,district,region_first,monthly_climatology_mae_c,9,0.9288024356341672,0.1270844089486062,1.0,0.0
+ACCESS-CM2,Kerala,district,region_first,p99_bias_c,9,0.4766436084877696,0.0855709716075772,1.0,0.0
+ACCESS-CM2,Kerala,district,region_first,days_ge_28_bias,9,15.600000000000009,5.0,0.8888888888888888,0.0
+ACCESS-CM2,Kerala,district,region_first,days_ge_30_bias,9,2.333333333333333,0.7333333333333334,0.6666666666666666,0.0
+ACCESS-CM2,Kerala,district,region_first,days_ge_32_bias,9,0.0,0.0,0.0,0.1111111111111111
+ACCESS-CM2,Rajasthan,block,grid_first,annual_mean_bias_c,348,1.7840212103978246,0.08319849799129204,1.0,0.0
+ACCESS-CM2,Rajasthan,block,grid_first,monthly_climatology_mae_c,348,2.0052983553119983,0.3489411283864853,1.0,0.0
+ACCESS-CM2,Rajasthan,block,grid_first,p99_bias_c,348,0.3493278784185172,0.4337986951383339,0.3764367816091954,0.6235632183908046
+ACCESS-CM2,Rajasthan,block,grid_first,days_ge_28_bias,348,32.933333333333344,4.29999999999999,1.0,0.0
+ACCESS-CM2,Rajasthan,block,grid_first,days_ge_30_bias,348,23.700000000000003,5.466666666666669,0.8017241379310345,0.19540229885057472
+ACCESS-CM2,Rajasthan,block,grid_first,days_ge_32_bias,348,1.1333333333333333,5.066666666666666,0.10632183908045977,0.8563218390804598
+ACCESS-CM2,Rajasthan,block,raw,annual_mean_bias_c,348,1.7840212103978246,1.7840212103978246,0.0,0.0
+ACCESS-CM2,Rajasthan,block,raw,monthly_climatology_mae_c,348,2.0052983553119983,2.0052983553119983,0.0,0.0
+ACCESS-CM2,Rajasthan,block,raw,p99_bias_c,348,0.3493278784185172,0.3493278784185172,0.0,0.0
+ACCESS-CM2,Rajasthan,block,raw,days_ge_28_bias,348,32.933333333333344,32.933333333333344,0.0,0.0
+ACCESS-CM2,Rajasthan,block,raw,days_ge_30_bias,348,23.700000000000003,23.700000000000003,0.0,0.0
+ACCESS-CM2,Rajasthan,block,raw,days_ge_32_bias,348,1.1333333333333333,1.1333333333333333,0.0,0.0
+ACCESS-CM2,Rajasthan,block,region_first,annual_mean_bias_c,348,1.7840212103978246,0.0839413371441999,1.0,0.0
+ACCESS-CM2,Rajasthan,block,region_first,monthly_climatology_mae_c,348,2.0052983553119983,0.3491655071135224,1.0,0.0
+ACCESS-CM2,Rajasthan,block,region_first,p99_bias_c,348,0.3493278784185172,0.4383000468964582,0.35919540229885055,0.6408045977011494
+ACCESS-CM2,Rajasthan,block,region_first,days_ge_28_bias,348,32.933333333333344,4.299999999999997,1.0,0.0
+ACCESS-CM2,Rajasthan,block,region_first,days_ge_30_bias,348,23.700000000000003,5.399999999999995,0.8074712643678161,0.1896551724137931
+ACCESS-CM2,Rajasthan,block,region_first,days_ge_32_bias,348,1.1333333333333333,5.033333333333333,0.10632183908045977,0.8563218390804598
+ACCESS-CM2,Rajasthan,district,grid_first,annual_mean_bias_c,49,1.7805730133869595,0.0779831540008828,1.0,0.0
+ACCESS-CM2,Rajasthan,district,grid_first,monthly_climatology_mae_c,49,2.0031556449241283,0.3506709029742385,1.0,0.0
+ACCESS-CM2,Rajasthan,district,grid_first,p99_bias_c,49,0.3214032300273572,0.4623621783020333,0.30612244897959184,0.6938775510204082
+ACCESS-CM2,Rajasthan,district,grid_first,days_ge_28_bias,49,32.46666666666667,3.4000000000000057,1.0,0.0
+ACCESS-CM2,Rajasthan,district,grid_first,days_ge_30_bias,49,24.200000000000003,5.466666666666669,0.8367346938775511,0.16326530612244897
+ACCESS-CM2,Rajasthan,district,grid_first,days_ge_32_bias,49,1.2666666666666662,5.466666666666667,0.061224489795918366,0.9183673469387755
+ACCESS-CM2,Rajasthan,district,raw,annual_mean_bias_c,49,1.7805730133869595,1.7805730133869595,0.0,0.0
+ACCESS-CM2,Rajasthan,district,raw,monthly_climatology_mae_c,49,2.0031556449241283,2.0031556449241283,0.0,0.0
+ACCESS-CM2,Rajasthan,district,raw,p99_bias_c,49,0.3214032300273572,0.3214032300273572,0.0,0.0
+ACCESS-CM2,Rajasthan,district,raw,days_ge_28_bias,49,32.46666666666667,32.46666666666667,0.0,0.0
+ACCESS-CM2,Rajasthan,district,raw,days_ge_30_bias,49,24.200000000000003,24.200000000000003,0.0,0.0
+ACCESS-CM2,Rajasthan,district,raw,days_ge_32_bias,49,1.2666666666666662,1.2666666666666662,0.0,0.0
+ACCESS-CM2,Rajasthan,district,region_first,annual_mean_bias_c,49,1.7805730133869595,0.0791447689493303,1.0,0.0
+ACCESS-CM2,Rajasthan,district,region_first,monthly_climatology_mae_c,49,2.0031556449241283,0.3537631776171777,1.0,0.0
+ACCESS-CM2,Rajasthan,district,region_first,p99_bias_c,49,0.3214032300273572,0.4496318836625406,0.2857142857142857,0.7142857142857143
+ACCESS-CM2,Rajasthan,district,region_first,days_ge_28_bias,49,32.46666666666667,3.73333333333332,1.0,0.0
+ACCESS-CM2,Rajasthan,district,region_first,days_ge_30_bias,49,24.200000000000003,5.400000000000006,0.8367346938775511,0.16326530612244897
+ACCESS-CM2,Rajasthan,district,region_first,days_ge_32_bias,49,1.2666666666666662,5.333333333333334,0.04081632653061224,0.9387755102040817

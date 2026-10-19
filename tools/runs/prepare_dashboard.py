@@ -9,7 +9,7 @@ full dashboard without memorizing internal commands.
 The runner is non-destructive by default:
 - existing outputs are not forcibly deleted unless `--overwrite` is supplied
 - climate runs default to `--level all`
-- climate runs resolve live metrics per requested level (`admin` vs `hydro`)
+- climate runs resolve live metrics per requested admin level (district/block)
 - climate compute uses validated completion markers and `--skip-existing` by
   default unless `--overwrite` is supplied
 - climate, Aqueduct, population, and groundwater flows can refresh
@@ -20,9 +20,9 @@ The runner is non-destructive by default:
 Examples:
     python -m tools.runs.prepare_dashboard --help
     python -m tools.runs.prepare_dashboard climate-hazards
-    python -m tools.runs.prepare_dashboard climate-hazards --level hydro
+    python -m tools.runs.prepare_dashboard climate-hazards --level district
     python -m tools.runs.prepare_dashboard climate-hazards --metrics tas_annual_mean
-    python -m tools.runs.prepare_dashboard climate-hazards --level hydro --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
+    python -m tools.runs.prepare_dashboard climate-hazards --level block --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
     python -m tools.runs.prepare_dashboard climate-hazards --plan-only
     python -m tools.runs.prepare_dashboard climate-hazards --audit-only
     python -m tools.runs.prepare_dashboard climate-hazards --overwrite
@@ -47,10 +47,12 @@ DEFAULT_VALIDATION_TESTS = [
     "tests/test_build_blocks_geojson.py",
     "tests/test_prepare_aqueduct_baseline.py",
     "tests/test_aqueduct_admin_transfer.py",
-    "tests/test_aqueduct_hydro_transfer.py",
     "tests/test_groundwater_district_masters.py",
     "tests/test_jrc_flood_depth_admin_masters.py",
     "tests/test_population_admin_masters.py",
+    "tests/test_built_up_area_admin_masters.py",
+    "tests/test_lulc_admin_masters.py",
+    "tests/test_rural_facilities_admin_masters.py",
     "tests/test_validate_aqueduct_workflow.py",
     "tests/test_metrics_registry.py",
     "tests/test_config.py",
@@ -61,34 +63,29 @@ DEFAULT_VALIDATION_TESTS = [
 CLIMATE_PILLAR = "Climate Hazards"
 AQUEDUCT_DOMAIN = "Aqueduct Water Risk"
 POPULATION_DOMAIN = "Population Exposure"
+RURAL_FACILITIES_DOMAIN = "Rural Facilities Exposure"
+BUILT_UP_AREA_DOMAIN = "Built-up Area Exposure"
+LULC_DOMAIN = "Agricultural LULC Exposure"
 GROUNDWATER_DOMAIN = "Groundwater Status & Availability"
-JRC_DOMAIN = "Flood Inundation Depth (JRC)"
+JRC_DOMAIN = "Riverine Flood"
+WATER_RISK_DOMAIN = "Water Risk"
 LEVEL_GROUPS = {
-    "all": ["district", "block", "basin", "sub_basin"],
+    "all": ["district", "block"],
     "admin": ["district", "block"],
-    "hydro": ["basin", "sub_basin"],
     "district": ["district"],
     "block": ["block"],
-    "basin": ["basin"],
-    "sub_basin": ["sub_basin"],
 }
 LEVEL_TO_FAMILY = {
     "district": "admin",
     "block": "admin",
-    "basin": "hydro",
-    "sub_basin": "hydro",
 }
 LEGACY_MASTER_FILENAMES = {
     "district": "master_metrics_by_district.csv",
     "block": "master_metrics_by_block.csv",
-    "basin": "master_metrics_by_basin.csv",
-    "sub_basin": "master_metrics_by_sub_basin.csv",
 }
 MASTER_REQUIRED_COLUMNS = {
     "district": {"state", "district", "district_key"},
     "block": {"state", "district", "block", "block_key"},
-    "basin": {"basin_id", "basin_name"},
-    "sub_basin": {"basin_id", "basin_name", "subbasin_id", "subbasin_name"},
 }
 
 
@@ -226,6 +223,19 @@ def _append_repeat(argv: list[str], flag: str, values: Sequence[str] | None) -> 
         argv.extend([flag, value])
 
 
+def _append_repeat_literal(argv: list[str], flag: str, values: Sequence[str] | None) -> None:
+    """Append ``flag VALUE`` per item WITHOUT comma-splitting.
+
+    For already-resolved names that may legitimately contain commas — e.g. the UT
+    ``Dadra, Nagar Haveli, Daman & Diu`` — unlike :func:`_append_repeat`, which re-splits
+    each value on ``,`` and would fracture such a name into phantom states.
+    """
+    if not values:
+        return
+    for value in _dedupe_keep_order([str(v).strip() for v in values if str(v).strip()]):
+        argv.extend([flag, value])
+
+
 def _resolve_levels(level: str) -> list[str]:
     try:
         return list(LEVEL_GROUPS[level])
@@ -254,9 +264,7 @@ def _metrics_for_domain(domain: str) -> list[str]:
 
 
 def _scope_names_for_level(level: str, admin_states: Sequence[str]) -> tuple[str, ...]:
-    if level in {"district", "block"}:
-        return tuple(admin_states)
-    return ("hydro",)
+    return tuple(admin_states)
 
 
 def _resolve_climate_metrics_for_level(
@@ -266,13 +274,21 @@ def _resolve_climate_metrics_for_level(
 ) -> tuple[list[str], list[str]]:
     from india_resilience_tool.config.metrics_registry import (
         get_domains_for_pillar,
+        get_metric_spec,
         get_metrics_for_domain,
+        is_climate_compute_metric,
     )
 
     family = LEVEL_TO_FAMILY[level]
     metrics: list[str] = []
     for domain in get_domains_for_pillar(CLIMATE_PILLAR, spatial_family=family, level=level):
         metrics.extend(get_metrics_for_domain(domain, spatial_family=family, level=level))
+    # Positive compute contract: the climate pipeline computes only pipeline-sourced,
+    # scenario/period metrics. Composites (derived) and externally sourced snapshots
+    # (JRC flood, groundwater, water scarcity, ...) surface under Climate Hazards for
+    # display but are built by their own steps, so they are excluded from climate
+    # compute planning and parity here.
+    metrics = [slug for slug in metrics if is_climate_compute_metric(get_metric_spec(slug))]
     live_metrics = _dedupe_keep_order(metrics)
 
     explicit = _split_csv_values(getattr(args, "metrics", None))
@@ -300,18 +316,32 @@ def _resolve_bundle_metrics(bundle: str, args: argparse.Namespace) -> list[str]:
         return explicit or _metrics_for_domain(AQUEDUCT_DOMAIN)
     if bundle == "population-exposure":
         return _metrics_for_domain(POPULATION_DOMAIN)
+    if bundle == "rural-facilities":
+        return _metrics_for_domain(RURAL_FACILITIES_DOMAIN)
+    if bundle == "built-up-area":
+        return _metrics_for_domain(BUILT_UP_AREA_DOMAIN)
+    if bundle == "lulc":
+        return _metrics_for_domain(LULC_DOMAIN)
     if bundle == "groundwater":
         return _metrics_for_domain(GROUNDWATER_DOMAIN)
     if bundle == "jrc-flood-depth":
         return _metrics_for_domain(JRC_DOMAIN)
+    if bundle == "water-availability":
+        return _metrics_for_domain(WATER_RISK_DOMAIN)
     if bundle == "dashboard-package":
         metrics: list[str] = []
         metrics.extend(_resolve_climate_bundle_metrics(args))
         metrics.extend(_split_csv_values(getattr(args, "metric_slug", None)) or _metrics_for_domain(AQUEDUCT_DOMAIN))
         metrics.extend(_metrics_for_domain(POPULATION_DOMAIN))
+        metrics.extend(_metrics_for_domain(BUILT_UP_AREA_DOMAIN))
+        metrics.extend(_metrics_for_domain(LULC_DOMAIN))
+        if bool(getattr(args, "include_rural_facilities", False)):
+            metrics.extend(_metrics_for_domain(RURAL_FACILITIES_DOMAIN))
         metrics.extend(_metrics_for_domain(GROUNDWATER_DOMAIN))
         if bool(getattr(args, "include_jrc_flood_depth", False)):
             metrics.extend(_metrics_for_domain(JRC_DOMAIN))
+        if bool(getattr(args, "include_water_risk", False)):
+            metrics.extend(_metrics_for_domain(WATER_RISK_DOMAIN))
         return _dedupe_keep_order(metrics)
     return []
 
@@ -329,9 +359,7 @@ def _legacy_master_path(*, slug: str, level: str, scope_name: str, data_dir: Pat
     from india_resilience_tool.config.paths import resolve_processed_root
 
     root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
-    if level in {"district", "block"}:
-        return root / scope_name / LEGACY_MASTER_FILENAMES[level]
-    return root / "hydro" / LEGACY_MASTER_FILENAMES[level]
+    return root / scope_name / LEGACY_MASTER_FILENAMES[level]
 
 
 def _legacy_master_ready(*, slug: str, level: str, scope_name: str, data_dir: Path) -> bool:
@@ -354,6 +382,12 @@ def _resolve_composite_metric_slugs() -> list[str]:
     return list(get_visible_glance_composite_slugs())
 
 
+def _resolve_sector_wise_bundle_slugs() -> list[str]:
+    from india_resilience_tool.config.dashboard_bundles import SECTOR_WISE_DASHBOARD_BUNDLES
+
+    return [spec.composite_slug for spec in SECTOR_WISE_DASHBOARD_BUNDLES]
+
+
 def _resolve_composite_runtime_scope(
     *,
     levels: Sequence[str],
@@ -361,14 +395,57 @@ def _resolve_composite_runtime_scope(
     data_dir: Path,
     overwrite: bool,
 ) -> BundleRuntimeScope:
+    from india_resilience_tool.config.dashboard_bundles import get_dashboard_bundle_spec_by_slug
+
     composite_levels = [level for level in levels if level in {"district", "block"}]
     selected_metrics = _resolve_composite_metric_slugs() if composite_levels else []
+
+    def _composite_levels_for_slug(slug: str) -> list[str]:
+        # Gate each composite by its own supported_levels so a district-only
+        # composite (e.g. composite_water_risk) never awaits/builds block masters.
+        spec = get_dashboard_bundle_spec_by_slug(slug)
+        supported = set(spec.supported_levels) if spec is not None else {"district", "block"}
+        return [level for level in composite_levels if level in supported]
+
     pending_metrics: list[str] = []
     if overwrite:
         pending_metrics = list(selected_metrics)
     else:
         for slug in selected_metrics:
-            for level in composite_levels:
+            for level in _composite_levels_for_slug(slug):
+                if not all(
+                    _legacy_master_ready(
+                        slug=slug,
+                        level=level,
+                        scope_name=state_name,
+                        data_dir=data_dir,
+                    )
+                    for state_name in admin_states
+                ):
+                    pending_metrics.append(slug)
+                    break
+    return BundleRuntimeScope(
+        selected_metrics=selected_metrics,
+        pending_metrics=_dedupe_keep_order(pending_metrics),
+        has_global_issues=False,
+    )
+
+
+def _resolve_proposal_runtime_scope(
+    *,
+    levels: Sequence[str],
+    admin_states: Sequence[str],
+    data_dir: Path,
+    overwrite: bool,
+) -> BundleRuntimeScope:
+    proposal_levels = [level for level in levels if level in {"district", "block"}]
+    selected_metrics = _resolve_sector_wise_bundle_slugs() if proposal_levels else []
+    pending_metrics: list[str] = []
+    if overwrite:
+        pending_metrics = list(selected_metrics)
+    else:
+        for slug in selected_metrics:
+            for level in proposal_levels:
                 if not all(
                     _legacy_master_ready(
                         slug=slug,
@@ -393,6 +470,48 @@ def _build_composite_master_steps(
     levels: Sequence[str],
     admin_states: Sequence[str],
     scope: BundleRuntimeScope,
+    metrics: Optional[Sequence[str]] = None,
+    force_overwrite: bool = False,
+) -> list[PlannedCommand]:
+    """Build composite-master steps for the requested levels.
+
+    By default the metric list is derived from ``scope`` (pending-aware). Callers may
+    pass an explicit ``metrics`` override to force-build a specific set regardless of
+    the scope's pending state (e.g. the JRC plan must rebuild the Riverine Flood
+    composite from its just-built component masters even when the pre-build audit
+    reported nothing pending). ``force_overwrite`` always emits ``--overwrite`` for
+    that set; otherwise it follows ``args.overwrite``.
+    """
+    plan: list[PlannedCommand] = []
+    if metrics is None and not scope.selected_metrics:
+        return plan
+    resolved = (
+        list(metrics)
+        if metrics is not None
+        else (_select_metrics_for_execution(scope) or scope.selected_metrics)
+    )
+    if not resolved:
+        return plan
+    for level in levels:
+        if level not in {"district", "block"}:
+            continue
+        argv = _py_module_cmd("tools.pipeline.build_composite_metrics")
+        argv.extend(["--level", level])
+        _append_repeat_literal(argv, "--state", admin_states)
+        _append_repeat(argv, "--metric", resolved)
+        _append_flag(argv, "--overwrite", force_overwrite or bool(getattr(args, "overwrite", False)))
+        if not bool(getattr(args, "verbose", False)):
+            argv.append("--quiet")
+        plan.append(PlannedCommand(label=f"composite-masters:{level}", argv=argv))
+    return plan
+
+
+def _build_proposal_bundle_steps(
+    args: argparse.Namespace,
+    *,
+    levels: Sequence[str],
+    admin_states: Sequence[str],
+    scope: BundleRuntimeScope,
 ) -> list[PlannedCommand]:
     plan: list[PlannedCommand] = []
     if not scope.selected_metrics:
@@ -401,14 +520,14 @@ def _build_composite_master_steps(
     for level in levels:
         if level not in {"district", "block"}:
             continue
-        argv = _py_module_cmd("tools.pipeline.build_composite_metrics")
+        argv = _py_module_cmd("tools.pipeline.build_proposal_bundles")
         argv.extend(["--level", level])
         _append_repeat(argv, "--state", admin_states)
-        _append_repeat(argv, "--metric", metrics)
+        _append_repeat(argv, "--bundle", metrics)
         _append_flag(argv, "--overwrite", bool(getattr(args, "overwrite", False)))
         if not bool(getattr(args, "verbose", False)):
             argv.append("--quiet")
-        plan.append(PlannedCommand(label=f"composite-masters:{level}", argv=argv))
+        plan.append(PlannedCommand(label=f"proposal-bundles:{level}", argv=argv))
     return plan
 
 
@@ -446,7 +565,15 @@ def _resolve_climate_runtime_scope(
         write_report=False,
     )
     parity_issues = list(parity.get("issues", []))
-    global_issues = tuple(issue for issue in parity_issues if not str(issue.get("slug") or "").strip())
+    # Only error-severity issues block readiness; warnings (e.g. an optional,
+    # live-fallback-backed precomputed artifact being absent) must not force a
+    # rebuild or mark metrics pending.
+    blocking_issues = [
+        issue
+        for issue in parity_issues
+        if str(issue.get("severity") or "error").strip().lower() != "warning"
+    ]
+    global_issues = tuple(issue for issue in blocking_issues if not str(issue.get("slug") or "").strip())
 
     by_level: dict[str, ClimateLevelReadiness] = {}
     for level in levels:
@@ -507,7 +634,7 @@ def _resolve_climate_runtime_scope(
 
         parity_metric_issues = {
             str(issue.get("slug")).strip()
-            for issue in parity_issues
+            for issue in blocking_issues
             if str(issue.get("slug") or "").strip() and str(issue.get("level") or "").strip() == level
         }
 
@@ -787,6 +914,7 @@ def _resolve_runtime_scope(
         issue
         for issue in report.get("issues", [])
         if _issue_relevant_to_levels(issue, levels)
+        and str(issue.get("severity") or "error").strip().lower() != "warning"
     ]
     pending_metrics = _dedupe_keep_order(
         [str(issue.get("slug") or "").strip() for issue in relevant_issues if str(issue.get("slug") or "").strip()]
@@ -823,6 +951,24 @@ def _build_optimised_step(
     return PlannedCommand(label=label, argv=argv)
 
 
+def _build_state_values_step(
+    args: argparse.Namespace,
+    metrics: Sequence[str] | None,
+    *,
+    label: str = "processed-optimised-state-values",
+) -> PlannedCommand:
+    """Precompute area-weighted state headline values over the fresh bundle.
+
+    Admin-only by construction (the tool defaults to district+block and skips
+    levels without master shards), so no ``--level`` is forwarded. Runs without
+    ``--strict`` so coverage-cliff/join warnings never block publish; the parity
+    audit's presence check (non-fatal) flags a missing artifact.
+    """
+    argv = _py_module_cmd("tools.optimized.build_state_values")
+    _append_repeat(argv, "--metric", metrics)
+    return PlannedCommand(label=label, argv=argv)
+
+
 def _build_audit_step(
     args: argparse.Namespace,
     metrics: Sequence[str] | None,
@@ -848,13 +994,17 @@ def _build_runtime_plan(
 
     plan: list[PlannedCommand] = []
     if allow_optimised and not bool(getattr(args, "skip_optimised", False)) and scope.runtime_needed:
+        execution_metrics = _select_metrics_for_execution(scope)
         plan.append(
             _build_optimised_step(
                 args,
-                _select_metrics_for_execution(scope),
+                execution_metrics,
                 overwrite=overwrite_optimised,
             )
         )
+        # Precompute state headline values over the freshly built bundle, before
+        # the parity audit reports on them.
+        plan.append(_build_state_values_step(args, execution_metrics))
     if not bool(getattr(args, "skip_audit", False)):
         plan.append(_build_audit_step(args, scope.selected_metrics))
     return plan
@@ -881,18 +1031,26 @@ def _build_aqueduct_metric_args(args: argparse.Namespace) -> list[str]:
 
 def _add_jrc_flags(parser: argparse.ArgumentParser, *, prefixed: bool = False) -> None:
     if prefixed:
-        parser.add_argument("--include-jrc-flood-depth", action="store_true", help="Include the Telangana JRC flood-depth pilot bundle.")
+        parser.add_argument("--include-jrc-flood-depth", action="store_true", help="Include the JRC flood-depth bundle.")
+        parser.add_argument("--jrc-state", default=None, help="Admin state for JRC flood-depth masters (default: Telangana).")
+        parser.add_argument("--jrc-source-manifest", default=None, help="Strict RP-100 source_manifest.json from prepare_jrc_rp100_source.")
+        parser.add_argument("--jrc-rp100-only", action="store_true", help="Build only strict RP-100 JRC outputs from --jrc-source-manifest.")
         parser.add_argument("--jrc-source-dir", default=None, help="Directory containing the required JRC flood-depth rasters.")
         parser.add_argument("--jrc-assume-units", default=None, help="Attested JRC flood-depth units; must be 'm' when provided.")
         parser.add_argument("--jrc-districts-path", default=None, help="Optional override path to canonical district boundaries.")
         parser.add_argument("--jrc-blocks-path", default=None, help="Optional override path to canonical block boundaries.")
         parser.add_argument("--jrc-qa-dir", default=None, help="Optional override directory for JRC QA outputs.")
+        parser.add_argument("--jrc-overlay-dir", default=None, help="Optional override directory for the shared RP-100 overlay.")
         return
+    parser.add_argument("--state", default="Telangana", help="Admin state for JRC flood-depth masters (default: Telangana).")
+    parser.add_argument("--source-manifest", default=None, help="Strict RP-100 source_manifest.json from prepare_jrc_rp100_source.")
+    parser.add_argument("--rp100-only", action="store_true", help="Build only strict RP-100 JRC outputs from --source-manifest.")
     parser.add_argument("--source-dir", default=None, help="Directory containing the required JRC flood-depth rasters.")
     parser.add_argument("--assume-units", default=None, help="Attested JRC flood-depth units; must be 'm'.")
     parser.add_argument("--districts-path", default=None, help="Optional override path to canonical district boundaries.")
     parser.add_argument("--blocks-path", default=None, help="Optional override path to canonical block boundaries.")
     parser.add_argument("--qa-dir", default=None, help="Optional override directory for JRC QA outputs.")
+    parser.add_argument("--overlay-dir", default=None, help="Optional override directory for the shared RP-100 overlay.")
 
 
 def _validate_jrc_inputs(
@@ -902,10 +1060,23 @@ def _validate_jrc_inputs(
     require_source: bool,
 ) -> None:
     source_dir_attr = "jrc_source_dir" if prefixed else "source_dir"
+    source_manifest_attr = "jrc_source_manifest" if prefixed else "source_manifest"
+    rp100_only_attr = "jrc_rp100_only" if prefixed else "rp100_only"
     assume_units_attr = "jrc_assume_units" if prefixed else "assume_units"
     source_dir = getattr(args, source_dir_attr, None)
+    source_manifest = getattr(args, source_manifest_attr, None)
     assume_units = getattr(args, assume_units_attr, None)
     if not require_source:
+        return
+    if source_manifest:
+        if source_dir:
+            prefix = "--jrc-" if prefixed else "--"
+            raise SystemExit(
+                f"JRC flood-depth planning accepts either {prefix}source-manifest or {prefix}source-dir, not both."
+            )
+        if not bool(getattr(args, rp100_only_attr, False)):
+            prefix = "--jrc-" if prefixed else "--"
+            raise SystemExit(f"JRC flood-depth planning requires {prefix}rp100-only with {prefix}source-manifest.")
         return
     if not source_dir or not assume_units:
         prefix = "--jrc-" if prefixed else "--"
@@ -923,13 +1094,24 @@ def _build_jrc_builder_args(
     prefixed: bool = False,
 ) -> list[str]:
     argv: list[str] = []
+    state_attr = "jrc_state" if prefixed else "state"
     source_dir_attr = "jrc_source_dir" if prefixed else "source_dir"
+    source_manifest_attr = "jrc_source_manifest" if prefixed else "source_manifest"
+    rp100_only_attr = "jrc_rp100_only" if prefixed else "rp100_only"
     assume_units_attr = "jrc_assume_units" if prefixed else "assume_units"
     districts_attr = "jrc_districts_path" if prefixed else "districts_path"
     blocks_attr = "jrc_blocks_path" if prefixed else "blocks_path"
     qa_attr = "jrc_qa_dir" if prefixed else "qa_dir"
+    overlay_attr = "jrc_overlay_dir" if prefixed else "overlay_dir"
+    if getattr(args, state_attr, None):
+        argv.extend(["--state", str(getattr(args, state_attr))])
+    if getattr(args, source_manifest_attr, None):
+        argv.extend(["--source-manifest", str(getattr(args, source_manifest_attr))])
+    if bool(getattr(args, rp100_only_attr, False)):
+        argv.append("--rp100-only")
     if getattr(args, source_dir_attr, None):
         argv.extend(["--source-dir", str(getattr(args, source_dir_attr))])
+        argv.append("--allow-unversioned-source")
     if getattr(args, assume_units_attr, None):
         argv.extend(["--assume-units", str(getattr(args, assume_units_attr))])
     if getattr(args, districts_attr, None):
@@ -938,6 +1120,8 @@ def _build_jrc_builder_args(
         argv.extend(["--blocks-path", str(getattr(args, blocks_attr))])
     if getattr(args, qa_attr, None):
         argv.extend(["--qa-dir", str(getattr(args, qa_attr))])
+    if getattr(args, overlay_attr, None):
+        argv.extend(["--overlay-dir", str(getattr(args, overlay_attr))])
     return argv
 
 
@@ -969,7 +1153,6 @@ def build_aqueduct_plan(
         for label, module in [
             ("aqueduct-admin-crosswalk", "tools.geodata.build_aqueduct_admin_crosswalk"),
             ("aqueduct-block-crosswalk", "tools.geodata.build_aqueduct_block_crosswalk"),
-            ("aqueduct-hydro-crosswalk", "tools.geodata.build_aqueduct_hydro_crosswalk"),
         ]:
             argv = _py_module_cmd(module)
             _append_flag(argv, "--overwrite", bool(args.overwrite))
@@ -979,11 +1162,6 @@ def build_aqueduct_plan(
         _append_flag(admin_argv, "--overwrite", bool(args.overwrite))
         admin_argv.extend(_build_aqueduct_metric_args(args))
         plan.append(PlannedCommand(label="aqueduct-admin-masters", argv=admin_argv))
-
-        hydro_argv = _py_module_cmd("tools.geodata.build_aqueduct_hydro_masters")
-        _append_flag(hydro_argv, "--overwrite", bool(args.overwrite))
-        hydro_argv.extend(_build_aqueduct_metric_args(args))
-        plan.append(PlannedCommand(label="aqueduct-hydro-masters", argv=hydro_argv))
 
         if not bool(getattr(args, "skip_validation", False)):
             validate_argv = _py_module_cmd("tools.geodata.validate_aqueduct_workflow")
@@ -1021,6 +1199,134 @@ def build_population_plan(
     return plan
 
 
+def build_rural_facilities_plan(
+    args: argparse.Namespace,
+    *,
+    include_blocks_geojson: bool = True,
+    include_runtime: bool = True,
+    runtime_scope: Optional[BundleRuntimeScope] = None,
+) -> list[PlannedCommand]:
+    """Build the rural facilities exposure prep plan."""
+    scope = runtime_scope or _resolve_runtime_scope("rural-facilities", args)
+    plan: list[PlannedCommand] = []
+    if not bool(getattr(args, "audit_only", False)) and (
+        bool(args.overwrite) or scope.runtime_needed or not include_runtime
+    ):
+        if include_blocks_geojson:
+            plan.extend(build_blocks_geojson_plan(args))
+        argv = _py_module_cmd("tools.geodata.build_rural_facilities_admin_masters")
+        _append_flag(argv, "--overwrite", bool(args.overwrite))
+        if getattr(args, "rural_facilities_source_dir", None):
+            argv.extend(["--source-dir", str(args.rural_facilities_source_dir)])
+        if getattr(args, "rural_facilities_qa_dir", None):
+            argv.extend(["--qa-dir", str(args.rural_facilities_qa_dir)])
+        if getattr(args, "rural_facilities_overlay_dir", None):
+            argv.extend(["--overlay-dir", str(args.rural_facilities_overlay_dir)])
+        plan.append(PlannedCommand(label="rural-facilities-admin-masters", argv=argv))
+        summary_argv = _py_module_cmd("tools.pipeline.build_admin_exposure_summary")
+        from india_resilience_tool.config.paths import get_paths_config
+
+        summary_argv.extend(["--data-dir", str(get_paths_config().data_dir)])
+        plan.append(PlannedCommand(label="admin-exposure-summary", argv=summary_argv))
+    if include_runtime:
+        plan.extend(_build_runtime_plan(args, scope=scope))
+    return plan
+
+
+def build_built_up_area_plan(
+    args: argparse.Namespace,
+    *,
+    include_blocks_geojson: bool = True,
+    include_runtime: bool = True,
+    runtime_scope: Optional[BundleRuntimeScope] = None,
+) -> list[PlannedCommand]:
+    """Build the built-up area exposure prep plan."""
+    scope = runtime_scope or _resolve_runtime_scope("built-up-area", args)
+    plan: list[PlannedCommand] = []
+    if bool(getattr(args, "audit_only", False)):
+        return [] if bool(getattr(args, "skip_audit", False)) else [_build_audit_step(args, scope.selected_metrics)]
+
+    explicit_builder_input = any(
+        getattr(args, attr, None)
+        for attr in ("built_up_raster", "built_up_qa_dir", "built_up_overlay_dir")
+    )
+    if not bool(getattr(args, "audit_only", False)) and (
+        bool(args.overwrite) or scope.runtime_needed or explicit_builder_input or not include_runtime
+    ):
+        if include_blocks_geojson:
+            plan.extend(build_blocks_geojson_plan(args))
+        argv = _py_module_cmd("tools.geodata.build_built_up_area_admin_masters")
+        _append_flag(argv, "--overwrite", bool(args.overwrite))
+        if getattr(args, "built_up_raster", None):
+            argv.extend(["--raster", str(args.built_up_raster)])
+        if getattr(args, "built_up_qa_dir", None):
+            argv.extend(["--qa-dir", str(args.built_up_qa_dir)])
+        if getattr(args, "built_up_overlay_dir", None):
+            argv.extend(["--overlay-dir", str(args.built_up_overlay_dir)])
+        plan.append(PlannedCommand(label="built-up-area-admin-masters", argv=argv))
+        if include_runtime and not bool(getattr(args, "skip_optimised", False)):
+            plan.append(_build_optimised_step(args, _select_metrics_for_execution(scope)))
+        summary_argv = _py_module_cmd("tools.pipeline.build_admin_exposure_summary")
+        from india_resilience_tool.config.paths import get_paths_config
+
+        summary_argv.extend(["--data-dir", str(get_paths_config().data_dir)])
+        plan.append(PlannedCommand(label="admin-exposure-summary", argv=summary_argv))
+        if include_runtime and not bool(getattr(args, "skip_audit", False)):
+            plan.append(_build_audit_step(args, scope.selected_metrics))
+    elif include_runtime:
+        plan.extend(_build_runtime_plan(args, scope=scope))
+    return plan
+
+
+def build_lulc_plan(
+    args: argparse.Namespace,
+    *,
+    include_blocks_geojson: bool = True,
+    include_runtime: bool = True,
+    runtime_scope: Optional[BundleRuntimeScope] = None,
+) -> list[PlannedCommand]:
+    """Build the agricultural LULC exposure prep plan."""
+    scope = runtime_scope or _resolve_runtime_scope("lulc", args)
+    plan: list[PlannedCommand] = []
+    if bool(getattr(args, "audit_only", False)):
+        return [] if bool(getattr(args, "skip_audit", False)) else [_build_audit_step(args, scope.selected_metrics)]
+
+    explicit_builder_input = any(
+        getattr(args, attr, None)
+        for attr in ("lulc_raster", "lulc_qa_dir", "lulc_overlay_dir")
+    ) or any(
+        bool(getattr(args, attr, False))
+        for attr in ("lulc_allow_total_outlier", "lulc_allow_unexpected_values", "lulc_allow_share_outlier")
+    )
+    if bool(args.overwrite) or scope.runtime_needed or explicit_builder_input or not include_runtime:
+        if include_blocks_geojson:
+            plan.extend(build_blocks_geojson_plan(args))
+        argv = _py_module_cmd("tools.geodata.build_lulc_admin_masters")
+        _append_flag(argv, "--overwrite", bool(args.overwrite))
+        if getattr(args, "lulc_raster", None):
+            argv.extend(["--raster", str(args.lulc_raster)])
+        if getattr(args, "lulc_qa_dir", None):
+            argv.extend(["--qa-dir", str(args.lulc_qa_dir)])
+        if getattr(args, "lulc_overlay_dir", None):
+            argv.extend(["--overlay-dir", str(args.lulc_overlay_dir)])
+        _append_flag(argv, "--allow-total-outlier", bool(getattr(args, "lulc_allow_total_outlier", False)))
+        _append_flag(argv, "--allow-unexpected-values", bool(getattr(args, "lulc_allow_unexpected_values", False)))
+        _append_flag(argv, "--allow-share-outlier", bool(getattr(args, "lulc_allow_share_outlier", False)))
+        plan.append(PlannedCommand(label="lulc-admin-masters", argv=argv))
+        if include_runtime and not bool(getattr(args, "skip_optimised", False)):
+            plan.append(_build_optimised_step(args, _select_metrics_for_execution(scope)))
+        summary_argv = _py_module_cmd("tools.pipeline.build_admin_exposure_summary")
+        from india_resilience_tool.config.paths import get_paths_config
+
+        summary_argv.extend(["--data-dir", str(get_paths_config().data_dir)])
+        plan.append(PlannedCommand(label="admin-exposure-summary", argv=summary_argv))
+        if include_runtime and not bool(getattr(args, "skip_audit", False)):
+            plan.append(_build_audit_step(args, scope.selected_metrics))
+    elif include_runtime:
+        plan.extend(_build_runtime_plan(args, scope=scope))
+    return plan
+
+
 def build_groundwater_plan(
     args: argparse.Namespace,
     *,
@@ -1052,21 +1358,131 @@ def build_jrc_flood_depth_plan(
     include_runtime: bool = True,
     runtime_scope: Optional[BundleRuntimeScope] = None,
 ) -> list[PlannedCommand]:
-    """Build the Telangana JRC flood-depth admin prep plan."""
+    """Build the JRC flood-depth admin prep plan for the selected state."""
     require_source = not bool(getattr(args, "audit_only", False))
     _validate_jrc_inputs(args, require_source=require_source)
     scope = runtime_scope or _resolve_runtime_scope("jrc-flood-depth", args, levels=("district", "block"))
     plan: list[PlannedCommand] = []
-    if not bool(getattr(args, "audit_only", False)) and (
-        bool(args.overwrite) or scope.runtime_needed or not include_runtime
-    ):
-        if include_blocks_geojson:
+    if bool(getattr(args, "audit_only", False)):
+        return [] if bool(getattr(args, "skip_audit", False)) else [_build_audit_step(args, scope.selected_metrics)]
+
+    # A non-default --state, an explicit source/QA/overlay/boundary override, or
+    # --overwrite means the operator is requesting a (re)build for a specific
+    # state. In that case the parity audit (computed pre-build, often against the
+    # Telangana pilot) may report nothing pending, so we must force both the
+    # builder *and* a same-run optimized publish + audit over the full JRC metric
+    # set -- otherwise new state masters would be built but never published.
+    explicit_builder_input = any(
+        getattr(args, attr, None)
+        for attr in ("source_dir", "qa_dir", "overlay_dir", "districts_path", "blocks_path")
+    ) or (str(getattr(args, "state", "") or "").strip().casefold() not in ("", "telangana"))
+
+    if bool(args.overwrite) or scope.runtime_needed or explicit_builder_input or not include_runtime:
+        # CHG-0065 / CHG-0093: the JRC builder only *reads* the canonical blocks
+        # GeoJSON. Rebuilding it here regenerates the shared, pipeline-wide block
+        # boundary via the superseded build_blocks_geojson (legacy GHS-WUP source,
+        # pre-LGD spellings) and would clobber the LGD-aligned boundary as a side
+        # effect of a JRC --overwrite. Schedule blocks-geojson only when the
+        # canonical file is genuinely missing; never force it from --overwrite.
+        from india_resilience_tool.config.paths import get_paths_config
+        blocks_for_build = getattr(args, "blocks_path", None) or str(get_paths_config().blocks_path)
+        if include_blocks_geojson and not Path(blocks_for_build).exists():
             plan.extend(build_blocks_geojson_plan(args))
         argv = _py_module_cmd("tools.geodata.build_jrc_flood_depth_admin_masters")
         argv.extend(_build_jrc_builder_args(args))
         _append_flag(argv, "--overwrite", bool(args.overwrite))
         plan.append(PlannedCommand(label="jrc-flood-depth-admin-masters", argv=argv))
-    if include_runtime:
+        # Build the Riverine Flood composite master(s) from the JRC metric masters built
+        # immediately above, BEFORE the optimized publish + audit. The composite has no
+        # compute stage of its own; without this the optimized build packages and the audit
+        # checks a stale/empty composite_flood_jrc_depth master and the run fails. Emitted
+        # within this build branch independent of include_runtime so the merged
+        # dashboard-package runtime pass also consumes a valid composite master. Forced
+        # overwrite: derived data must always track its just-built component masters.
+        from india_resilience_tool.config.composite_metrics import is_composite_metric
+
+        composite_slugs = [m for m in scope.selected_metrics if is_composite_metric(m)]
+        if composite_slugs:
+            # The JRC subcommand's --state is a single canonical name that may itself
+            # contain commas (the UT "Dadra, Nagar Haveli, Daman & Diu"). Pass it whole;
+            # _append_repeat_literal emits it without the CSV comma-splitting that would
+            # otherwise fracture it into phantom states with no source masters (failing
+            # the parity audit). (… or "").strip() or DEFAULT_ADMIN_STATE reproduces the
+            # old empty->[DEFAULT_ADMIN_STATE] fallback.
+            jrc_state = (getattr(args, "state", None) or "").strip() or DEFAULT_ADMIN_STATE
+            plan.extend(
+                _build_composite_master_steps(
+                    args,
+                    levels=("district", "block"),
+                    admin_states=[jrc_state],
+                    scope=scope,
+                    metrics=composite_slugs,
+                    force_overwrite=True,
+                )
+            )
+        # Publish the full JRC metric set (not the pre-build pending subset), so a
+        # newly built state is always reflected in the optimized runtime + audit.
+        publish_metrics = scope.selected_metrics
+        if include_runtime and not bool(getattr(args, "skip_optimised", False)):
+            plan.append(_build_optimised_step(args, publish_metrics, overwrite=False))
+        if include_runtime and not bool(getattr(args, "skip_audit", False)):
+            plan.append(_build_audit_step(args, publish_metrics))
+    elif include_runtime:
+        plan.extend(_build_runtime_plan(args, scope=scope, overwrite_optimised=False))
+    return plan
+
+
+def build_water_availability_plan(
+    args: argparse.Namespace,
+    *,
+    include_runtime: bool = True,
+    runtime_scope: Optional[BundleRuntimeScope] = None,
+) -> list[PlannedCommand]:
+    """Build the water-availability district prep plan (district-only).
+
+    Mirrors the JRC flood-depth plan: build the source class masters, build the
+    Water Risk composite (targeted to ``composite_water_risk`` only) from those
+    masters, then publish the optimized bundle, precompute state values, and audit.
+    District-only: the composite never awaits or builds block masters.
+    """
+    scope = runtime_scope or _resolve_runtime_scope("water-availability", args, levels=("district",))
+    if bool(getattr(args, "audit_only", False)):
+        return [] if bool(getattr(args, "skip_audit", False)) else [_build_audit_step(args, scope.selected_metrics)]
+
+    plan: list[PlannedCommand] = []
+    if bool(args.overwrite) or scope.runtime_needed or not include_runtime:
+        argv = _py_module_cmd("tools.geodata.build_water_availability_district_masters")
+        _append_flag(argv, "--overwrite", bool(args.overwrite))
+        if getattr(args, "water_workbook", None):
+            argv.extend(["--workbook", str(args.water_workbook)])
+        plan.append(PlannedCommand(label="water-availability-district-masters", argv=argv))
+
+        # Build the Water Risk composite master from the just-built source masters,
+        # BEFORE the optimized publish + audit. Targeted to composite_water_risk only
+        # (via is_composite_metric over this bundle's scope), not all visible composites.
+        from india_resilience_tool.config.composite_metrics import is_composite_metric
+
+        composite_slugs = [m for m in scope.selected_metrics if is_composite_metric(m)]
+        if composite_slugs:
+            water_states = _resolve_admin_states(getattr(args, "state", None))
+            plan.extend(
+                _build_composite_master_steps(
+                    args,
+                    levels=("district",),
+                    admin_states=water_states,
+                    scope=scope,
+                    metrics=composite_slugs,
+                    force_overwrite=True,
+                )
+            )
+        publish_metrics = scope.selected_metrics
+        if include_runtime and not bool(getattr(args, "skip_optimised", False)):
+            plan.append(_build_optimised_step(args, publish_metrics, levels=("district",), overwrite=False))
+            # Precompute state headline values over the freshly built bundle, before audit.
+            plan.append(_build_state_values_step(args, publish_metrics))
+        if include_runtime and not bool(getattr(args, "skip_audit", False)):
+            plan.append(_build_audit_step(args, publish_metrics, levels=("district",)))
+    elif include_runtime:
         plan.extend(_build_runtime_plan(args, scope=scope, overwrite_optimised=False))
     return plan
 
@@ -1095,7 +1511,6 @@ def _build_climate_compute_steps(
             if getattr(args, "workers", None) is not None:
                 argv.extend(["--workers", str(args.workers)])
             _append_flag(argv, "--verbose", bool(getattr(args, "verbose", False)))
-            _append_flag(argv, "--spi-legacy", bool(getattr(args, "spi_legacy", False)))
             if getattr(args, "spi_distribution", None):
                 argv.extend(["--spi-distribution", str(args.spi_distribution)])
             _append_flag(argv, "--overwrite", bool(getattr(args, "overwrite", False)))
@@ -1307,38 +1722,69 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
         args,
         levels=climate_levels,
     )
+    composite_scope = _resolve_composite_runtime_scope(
+        levels=climate_levels,
+        admin_states=_resolve_admin_states(getattr(args, "state", None)),
+        data_dir=get_paths_config().data_dir,
+        overwrite=bool(getattr(args, "overwrite", False)),
+    )
+    proposal_scope = _resolve_proposal_runtime_scope(
+        levels=climate_levels,
+        admin_states=_resolve_admin_states(getattr(args, "state", None)),
+        data_dir=get_paths_config().data_dir,
+        overwrite=bool(getattr(args, "overwrite", False)),
+    )
     aqueduct_scope = _resolve_runtime_scope("aqueduct", args)
     population_scope = _resolve_runtime_scope("population-exposure", args)
+    built_up_scope = _resolve_runtime_scope("built-up-area", args)
+    lulc_scope = _resolve_runtime_scope("lulc", args)
+    rural_facilities_scope = (
+        _resolve_runtime_scope("rural-facilities", args)
+        if bool(getattr(args, "include_rural_facilities", False))
+        else BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False)
+    )
     groundwater_scope = _resolve_runtime_scope("groundwater", args)
     jrc_scope = (
         _resolve_runtime_scope("jrc-flood-depth", args, levels=("district", "block"))
         if bool(getattr(args, "include_jrc_flood_depth", False))
         else BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False)
     )
+    water_scope = (
+        _resolve_runtime_scope("water-availability", args, levels=("district",))
+        if bool(getattr(args, "include_water_risk", False))
+        else BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False)
+    )
 
     package_scope = BundleRuntimeScope(
         selected_metrics=_dedupe_keep_order(
-            _resolve_bundle_metrics("dashboard-package", args) + _resolve_composite_metric_slugs()
+            _resolve_bundle_metrics("dashboard-package", args)
+            + composite_scope.selected_metrics
+            + proposal_scope.selected_metrics
         ),
         pending_metrics=_dedupe_keep_order(
             climate_scope.pending_metrics
+            + composite_scope.pending_metrics
+            + proposal_scope.pending_metrics
             + aqueduct_scope.pending_metrics
             + population_scope.pending_metrics
+            + built_up_scope.pending_metrics
+            + lulc_scope.pending_metrics
+            + rural_facilities_scope.pending_metrics
             + groundwater_scope.pending_metrics
             + jrc_scope.pending_metrics
-            + _resolve_composite_runtime_scope(
-                levels=climate_levels,
-                admin_states=_resolve_admin_states(getattr(args, "state", None)),
-                data_dir=get_paths_config().data_dir,
-                overwrite=bool(getattr(args, "overwrite", False)),
-            ).pending_metrics
+            + water_scope.pending_metrics
         ),
         has_global_issues=(
             climate_scope.has_global_issues
+            or proposal_scope.has_global_issues
             or aqueduct_scope.has_global_issues
             or population_scope.has_global_issues
+            or built_up_scope.has_global_issues
+            or lulc_scope.has_global_issues
+            or rural_facilities_scope.has_global_issues
             or groundwater_scope.has_global_issues
             or jrc_scope.has_global_issues
+            or water_scope.has_global_issues
         ),
     )
 
@@ -1346,19 +1792,42 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
         return _build_runtime_plan(args, scope=package_scope)
 
     climate_plan = build_climate_hazards_plan(args, include_runtime=False, runtime_scope=climate_scope)
+    proposal_plan = _build_proposal_bundle_steps(
+        args,
+        levels=climate_levels,
+        admin_states=_resolve_admin_states(getattr(args, "state", None)),
+        scope=proposal_scope,
+    )
     aqueduct_plan = build_aqueduct_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=aqueduct_scope)
     population_plan = build_population_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=population_scope)
+    built_up_plan = build_built_up_area_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=built_up_scope)
+    lulc_plan = build_lulc_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=lulc_scope)
+    rural_facilities_plan = (
+        build_rural_facilities_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=rural_facilities_scope)
+        if bool(getattr(args, "include_rural_facilities", False))
+        else []
+    )
     groundwater_plan = build_groundwater_plan(args, include_runtime=False, runtime_scope=groundwater_scope)
+    # vars(args) already carries `state` (the climate admin state, possibly a
+    # comma-list), so the JRC overrides must be applied via dict-update to avoid a
+    # duplicate-keyword TypeError. JRC takes a single state; fall back to Telangana
+    # (the historical pilot) when --jrc-state is not given, rather than reusing the
+    # climate --state.
+    jrc_ns_kwargs = dict(vars(args))
+    jrc_ns_kwargs.update(
+        state=getattr(args, "jrc_state", None) or "Telangana",
+        source_manifest=getattr(args, "jrc_source_manifest", None),
+        rp100_only=bool(getattr(args, "jrc_rp100_only", False)),
+        source_dir=getattr(args, "jrc_source_dir", None),
+        assume_units=getattr(args, "jrc_assume_units", None),
+        districts_path=getattr(args, "jrc_districts_path", None),
+        blocks_path=getattr(args, "jrc_blocks_path", None),
+        qa_dir=getattr(args, "jrc_qa_dir", None),
+        overlay_dir=getattr(args, "jrc_overlay_dir", None),
+    )
     jrc_plan = (
         build_jrc_flood_depth_plan(
-            argparse.Namespace(
-                **vars(args),
-                source_dir=getattr(args, "jrc_source_dir", None),
-                assume_units=getattr(args, "jrc_assume_units", None),
-                districts_path=getattr(args, "jrc_districts_path", None),
-                blocks_path=getattr(args, "jrc_blocks_path", None),
-                qa_dir=getattr(args, "jrc_qa_dir", None),
-            ),
+            argparse.Namespace(**jrc_ns_kwargs),
             include_blocks_geojson=False,
             include_runtime=False,
             runtime_scope=jrc_scope,
@@ -1366,15 +1835,25 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
         if bool(getattr(args, "include_jrc_flood_depth", False))
         else []
     )
+    water_plan = (
+        build_water_availability_plan(args, include_runtime=False, runtime_scope=water_scope)
+        if bool(getattr(args, "include_water_risk", False))
+        else []
+    )
 
     plan: list[PlannedCommand] = []
-    if aqueduct_plan or population_plan or jrc_plan:
+    if aqueduct_plan or population_plan or built_up_plan or lulc_plan or rural_facilities_plan or jrc_plan:
         plan.extend(build_blocks_geojson_plan(args))
     plan.extend(climate_plan)
+    plan.extend(proposal_plan)
     plan.extend(aqueduct_plan)
     plan.extend(population_plan)
+    plan.extend(built_up_plan)
+    plan.extend(lulc_plan)
+    plan.extend(rural_facilities_plan)
     plan.extend(groundwater_plan)
     plan.extend(jrc_plan)
+    plan.extend(water_plan)
     plan.extend(_build_runtime_plan(args, scope=package_scope))
 
     if bool(getattr(args, "include_pytest", False)) and not bool(getattr(args, "audit_only", False)):
@@ -1397,12 +1876,14 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         "aqueduct-admin-crosswalk": "tools.geodata.build_aqueduct_admin_crosswalk",
         "aqueduct-block-crosswalk": "tools.geodata.build_aqueduct_block_crosswalk",
         "aqueduct-admin-masters": "tools.geodata.build_aqueduct_admin_masters",
-        "aqueduct-hydro-crosswalk": "tools.geodata.build_aqueduct_hydro_crosswalk",
-        "aqueduct-hydro-masters": "tools.geodata.build_aqueduct_hydro_masters",
         "aqueduct-validate": "tools.geodata.validate_aqueduct_workflow",
         "population-admin-masters": "tools.geodata.build_population_admin_masters",
+        "rural-facilities-admin-masters": "tools.geodata.build_rural_facilities_admin_masters",
+        "built-up-area-admin-masters": "tools.geodata.build_built_up_area_admin_masters",
+        "lulc-admin-masters": "tools.geodata.build_lulc_admin_masters",
         "groundwater-district-masters": "tools.geodata.build_groundwater_district_masters",
         "jrc-flood-depth-admin-masters": "tools.geodata.build_jrc_flood_depth_admin_masters",
+        "water-availability-district-masters": "tools.geodata.build_water_availability_district_masters",
     }
     if step in module_map:
         argv = _py_module_cmd(module_map[step])
@@ -1411,11 +1892,38 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
             argv.extend(_build_aqueduct_metric_args(args))
         if step == "population-admin-masters" and getattr(args, "population_raster", None):
             argv.extend(["--raster", str(args.population_raster)])
+        if step == "rural-facilities-admin-masters":
+            if getattr(args, "rural_facilities_source_dir", None):
+                argv.extend(["--source-dir", str(args.rural_facilities_source_dir)])
+            if getattr(args, "rural_facilities_qa_dir", None):
+                argv.extend(["--qa-dir", str(args.rural_facilities_qa_dir)])
+            if getattr(args, "rural_facilities_overlay_dir", None):
+                argv.extend(["--overlay-dir", str(args.rural_facilities_overlay_dir)])
+        if step == "built-up-area-admin-masters":
+            if getattr(args, "built_up_raster", None):
+                argv.extend(["--raster", str(args.built_up_raster)])
+            if getattr(args, "built_up_qa_dir", None):
+                argv.extend(["--qa-dir", str(args.built_up_qa_dir)])
+            if getattr(args, "built_up_overlay_dir", None):
+                argv.extend(["--overlay-dir", str(args.built_up_overlay_dir)])
+        if step == "lulc-admin-masters":
+            if getattr(args, "lulc_raster", None):
+                argv.extend(["--raster", str(args.lulc_raster)])
+            if getattr(args, "lulc_qa_dir", None):
+                argv.extend(["--qa-dir", str(args.lulc_qa_dir)])
+            if getattr(args, "lulc_overlay_dir", None):
+                argv.extend(["--overlay-dir", str(args.lulc_overlay_dir)])
+            _append_flag(argv, "--allow-total-outlier", bool(getattr(args, "lulc_allow_total_outlier", False)))
+            _append_flag(argv, "--allow-unexpected-values", bool(getattr(args, "lulc_allow_unexpected_values", False)))
+            _append_flag(argv, "--allow-share-outlier", bool(getattr(args, "lulc_allow_share_outlier", False)))
         if step == "groundwater-district-masters":
             if getattr(args, "groundwater_workbook", None):
                 argv.extend(["--workbook", str(args.groundwater_workbook)])
             if getattr(args, "groundwater_alias_csv", None):
                 argv.extend(["--district-alias-csv", str(args.groundwater_alias_csv)])
+        if step == "water-availability-district-masters":
+            if getattr(args, "water_workbook", None):
+                argv.extend(["--workbook", str(args.water_workbook)])
         if step == "jrc-flood-depth-admin-masters":
             _validate_jrc_inputs(args, require_source=True)
             argv.extend(_build_jrc_builder_args(args))
@@ -1490,10 +1998,18 @@ def build_command_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         return build_climate_hazards_plan(args, include_runtime=True)
     if command == "population-exposure":
         return build_population_plan(args, include_blocks_geojson=True, include_runtime=True)
+    if command == "rural-facilities":
+        return build_rural_facilities_plan(args, include_blocks_geojson=True, include_runtime=True)
+    if command == "built-up-area":
+        return build_built_up_area_plan(args, include_blocks_geojson=True, include_runtime=True)
+    if command == "lulc":
+        return build_lulc_plan(args, include_blocks_geojson=True, include_runtime=True)
     if command == "groundwater":
         return build_groundwater_plan(args, include_runtime=True)
     if command == "jrc-flood-depth":
         return build_jrc_flood_depth_plan(args, include_runtime=True)
+    if command == "water-availability":
+        return build_water_availability_plan(args, include_runtime=True)
     if command == "dashboard-package":
         return build_dashboard_package_plan(args)
     if command == "validate":
@@ -1506,8 +2022,12 @@ def _print_available_commands() -> None:
     print("  aqueduct")
     print("  climate-hazards")
     print("  population-exposure")
+    print("  rural-facilities")
+    print("  built-up-area")
+    print("  lulc")
     print("  groundwater")
     print("  jrc-flood-depth")
+    print("  water-availability")
     print("  dashboard-package")
     print("  validate")
     print("")
@@ -1518,12 +2038,14 @@ def _print_available_commands() -> None:
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
         "aqueduct-admin-masters",
-        "aqueduct-hydro-crosswalk",
-        "aqueduct-hydro-masters",
         "aqueduct-validate",
         "population-admin-masters",
+        "rural-facilities-admin-masters",
+        "built-up-area-admin-masters",
+        "lulc-admin-masters",
         "groundwater-district-masters",
         "jrc-flood-depth-admin-masters",
+        "water-availability-district-masters",
         "climate-compute",
         "climate-masters",
         "pytest-validation",
@@ -1588,6 +2110,75 @@ def _add_population_flags(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_rural_facilities_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--rural-facilities-source-dir",
+        default=None,
+        help="Optional override path to the rural facilities shapefile directory.",
+    )
+    parser.add_argument(
+        "--rural-facilities-qa-dir",
+        default=None,
+        help="Optional override directory for rural facilities QA outputs.",
+    )
+    parser.add_argument(
+        "--rural-facilities-overlay-dir",
+        default=None,
+        help="Optional override directory for rural facilities overlay artifacts.",
+    )
+
+
+def _add_built_up_area_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--built-up-raster",
+        default=None,
+        help="Optional override path to Cleaned_India_Built_Surface_WGS84.tif.",
+    )
+    parser.add_argument(
+        "--built-up-qa-dir",
+        default=None,
+        help="Optional override directory for built-up area QA outputs.",
+    )
+    parser.add_argument(
+        "--built-up-overlay-dir",
+        default=None,
+        help="Optional override directory for built-up area overlay artifacts.",
+    )
+
+
+def _add_lulc_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--lulc-raster",
+        default=None,
+        help="Optional override path to LULC_2_Agri.tif.",
+    )
+    parser.add_argument(
+        "--lulc-qa-dir",
+        default=None,
+        help="Optional override directory for agricultural LULC QA outputs.",
+    )
+    parser.add_argument(
+        "--lulc-overlay-dir",
+        default=None,
+        help="Optional override directory for agricultural LULC overlay artifacts.",
+    )
+    parser.add_argument(
+        "--lulc-allow-total-outlier",
+        action="store_true",
+        help="Allow agricultural LULC national total outside the default guardrail range.",
+    )
+    parser.add_argument(
+        "--lulc-allow-unexpected-values",
+        action="store_true",
+        help="Allow LULC raster values outside {0, 1}.",
+    )
+    parser.add_argument(
+        "--lulc-allow-share-outlier",
+        action="store_true",
+        help="Allow district/block agricultural LULC shares above 100.01%%.",
+    )
+
+
 def _add_groundwater_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--groundwater-workbook",
@@ -1599,6 +2190,27 @@ def _add_groundwater_flags(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Optional override path to the groundwater district alias CSV.",
     )
+
+
+def _add_water_flags(parser: argparse.ArgumentParser, *, bundle: bool = False) -> None:
+    parser.add_argument(
+        "--water-workbook",
+        default=None,
+        help="Optional override path to the NITI per-capita water-availability workbook.",
+    )
+    if bundle:
+        parser.add_argument(
+            "--include-water-risk",
+            action="store_true",
+            help="Include the Water Risk (per-capita scarcity) district bundle.",
+        )
+    else:
+        parser.add_argument(
+            "--state",
+            action="append",
+            default=None,
+            help="Admin state(s) whose Water Risk composite to build (default: Telangana).",
+        )
 
 
 def _add_climate_flags(parser: argparse.ArgumentParser) -> None:
@@ -1622,7 +2234,11 @@ def _add_climate_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--scenarios", nargs="+", default=None, help="Restrict climate compute to scenarios.")
     parser.add_argument("--workers", type=int, default=None, help="Worker count to pass through to compute/master steps.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose compute output.")
-    parser.add_argument("--spi-legacy", action="store_true", help="Pass through the legacy SPI flag to climate compute.")
+    parser.add_argument(
+        "--spi-legacy",
+        action="store_true",
+        help="Accepted for compatibility but rejected because legacy SPI is non-conformant.",
+    )
     parser.add_argument(
         "--spi-distribution",
         choices=["gamma", "pearson"],
@@ -1654,21 +2270,53 @@ def build_cli() -> argparse.ArgumentParser:
     _add_common_runner_flags(p_population, include_runtime_controls=True)
     _add_population_flags(p_population)
 
+    p_rural = subparsers.add_parser("rural-facilities", help="Prepare the rural facilities exposure dashboard bundle.")
+    _add_common_runner_flags(p_rural, include_runtime_controls=True)
+    _add_rural_facilities_flags(p_rural)
+
+    p_built = subparsers.add_parser("built-up-area", help="Prepare the built-up area exposure dashboard bundle.")
+    _add_common_runner_flags(p_built, include_runtime_controls=True)
+    _add_built_up_area_flags(p_built)
+
+    p_lulc = subparsers.add_parser("lulc", help="Prepare the agricultural LULC exposure dashboard bundle.")
+    _add_common_runner_flags(p_lulc, include_runtime_controls=True)
+    _add_lulc_flags(p_lulc)
+
     p_groundwater = subparsers.add_parser("groundwater", help="Prepare the groundwater dashboard bundle.")
     _add_common_runner_flags(p_groundwater, include_runtime_controls=True)
     _add_groundwater_flags(p_groundwater)
 
-    p_jrc = subparsers.add_parser("jrc-flood-depth", help="Prepare the Telangana JRC flood-depth dashboard bundle.")
+    p_jrc = subparsers.add_parser(
+        "jrc-flood-depth",
+        help=(
+            "Prepare the JRC flood-depth dashboard bundle for --state (default Telangana). "
+            "Note: blocks-geojson is rebuilt only when the canonical blocks file is missing "
+            "or --overwrite is passed; with --overwrite it regenerates the pipeline-wide "
+            "canonical blocks GeoJSON as a side-effect (see tools/README.md)."
+        ),
+    )
     _add_common_runner_flags(p_jrc, include_runtime_controls=True)
     _add_jrc_flags(p_jrc, prefixed=False)
+
+    p_water = subparsers.add_parser(
+        "water-availability",
+        help="Prepare the Water Risk (per-capita scarcity) district bundle for --state (default Telangana).",
+    )
+    _add_common_runner_flags(p_water, include_runtime_controls=True)
+    _add_water_flags(p_water, bundle=False)
 
     p_pkg = subparsers.add_parser("dashboard-package", help="Prepare all dashboard bundles end to end.")
     _add_common_runner_flags(p_pkg, include_runtime_controls=True)
     _add_climate_flags(p_pkg)
     _add_aqueduct_flags(p_pkg, bundle=True)
     _add_population_flags(p_pkg)
+    _add_built_up_area_flags(p_pkg)
+    _add_lulc_flags(p_pkg)
+    _add_rural_facilities_flags(p_pkg)
     _add_groundwater_flags(p_pkg)
     _add_jrc_flags(p_pkg, prefixed=True)
+    _add_water_flags(p_pkg, bundle=True)
+    p_pkg.add_argument("--include-rural-facilities", action="store_true", help="Include the rural facilities exposure bundle.")
     p_pkg.add_argument("--include-pytest", action="store_true", help="Run the default validation pytest set at the end.")
 
     p_validate = subparsers.add_parser("validate", help="Run Aqueduct validation and optional targeted pytest checks.")
@@ -1682,21 +2330,31 @@ def build_cli() -> argparse.ArgumentParser:
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
         "aqueduct-admin-masters",
-        "aqueduct-hydro-crosswalk",
-        "aqueduct-hydro-masters",
         "aqueduct-validate",
         "population-admin-masters",
+        "rural-facilities-admin-masters",
+        "built-up-area-admin-masters",
+        "lulc-admin-masters",
         "groundwater-district-masters",
         "jrc-flood-depth-admin-masters",
+        "water-availability-district-masters",
     ]:
         sub = subparsers.add_parser(name, help=f"Run the `{name}` step only.")
         _add_common_runner_flags(sub)
         if name == "population-admin-masters":
             _add_population_flags(sub)
+        elif name == "rural-facilities-admin-masters":
+            _add_rural_facilities_flags(sub)
+        elif name == "built-up-area-admin-masters":
+            _add_built_up_area_flags(sub)
+        elif name == "lulc-admin-masters":
+            _add_lulc_flags(sub)
         elif name == "groundwater-district-masters":
             _add_groundwater_flags(sub)
         elif name == "jrc-flood-depth-admin-masters":
             _add_jrc_flags(sub, prefixed=False)
+        elif name == "water-availability-district-masters":
+            _add_water_flags(sub, bundle=False)
         elif name != "blocks-geojson":
             _add_aqueduct_flags(sub, bundle=(name == "aqueduct-baseline"))
 
@@ -1717,6 +2375,12 @@ def build_cli() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_cli()
     args = parser.parse_args(argv)
+    if bool(getattr(args, "spi_legacy", False)):
+        print(
+            "Legacy SPI z-score is non-conformant with WMO SPI methodology; rerun without --spi-legacy.",
+            file=sys.stderr,
+        )
+        return 2
     if str(args.command) == "list":
         _print_available_commands()
         return 0

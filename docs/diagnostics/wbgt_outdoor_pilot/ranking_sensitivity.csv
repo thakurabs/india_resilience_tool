@@ -1,0 +1,9 @@
+level,comparison,kind,field,n_units,excluded_units,spearman,mean_abs_rank_shift,max_abs_rank_shift,n_units_shift_gt_5,largest_change_unit,largest_change_shift,largest_change_values,near_tie_pairs_within_0.01,insufficient
+district,W1 vs C1 (all pilot states),method,wbgt_annual_mean_c,75,0,0.998605974395448,0.64,5.0,0,Idukki,5.0,27.525 -> 27.799,2,False
+district,W1 vs C1 (all pilot states),method,days_ge_28,75,0,0.9807109631715956,2.3733333333333335,21.0,11,Wayanad,21.0,174.898 -> 201.810,0,False
+district,W1 vs C1 (all pilot states),method,days_ge_30,75,0,0.9920624759953911,1.6,13.0,4,Kasaragod,13.0,154.367 -> 177.470,0,False
+district,W1 vs C1 (all pilot states),method,days_ge_32,75,0,0.9965855740503627,1.04,8.0,2,Thrissur,8.0,84.639 -> 111.750,2,False
+block,W1 vs C1 (all pilot states),method,wbgt_annual_mean_c,581,0,0.9994864022486698,2.774526678141136,51.0,66,Idukki||Azhutha,51.0,27.555 -> 27.798,5,False
+block,W1 vs C1 (all pilot states),method,days_ge_28,581,0,0.9885585091878714,14.674698795180722,226.0,329,Wayanad||Mananthavady,226.0,193.149 -> 221.007,25,False
+block,W1 vs C1 (all pilot states),method,days_ge_30,581,0,0.993261788414799,11.562822719449226,130.0,290,Kasaragod||Karadka,130.0,165.195 -> 192.438,18,False
+block,W1 vs C1 (all pilot states),method,days_ge_32,581,0,0.9936613208085047,12.777969018932874,74.0,362,Thrissur||Kodakara,74.0,91.643 -> 125.538,32,False

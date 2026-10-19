@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "additive_qdm_max_abs_c": 7.105427357601002e-15,
+  "noleap_additive_qdm_max_abs_c": 7.105427357601002e-15,
+  "raw_formula_max_abs_c": 0.0,
+  "radiation": [
+    {
+      "support": 0,
+      "valid_days": 365,
+      "invalid_days": 0,
+      "conservation_max_wm2": 8.526512829121202e-14,
+      "radiation_clip_fraction": 0.0,
+      "wind_clip_fraction": 0.0
+    }
+  ],
+  "source_commit": "f662b37200fe219db912ebd09ceb52fdac979861"
+}

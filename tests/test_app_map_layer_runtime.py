@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from india_resilience_tool.app.overlays import OverlayRenderLayer, POPULATION_EXPOSURE_OVERLAY_ID
 from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
 from india_resilience_tool.utils.naming import alias
 
@@ -34,7 +35,7 @@ def _district_feature(*, district_name: str = "Adilabad", state_name: str = "Tel
         "properties": {
             "district_name": district_name,
             "state_name": state_name,
-            "__key": alias(district_name),
+            "__key": f"{alias(state_name)}|{alias(district_name)}",
         },
         "geometry": {"type": "Polygon", "coordinates": (((0, 0), (1, 0), (1, 1), (0, 0)),)},
     }
@@ -59,10 +60,49 @@ def _common_kwargs(tmp_path: Path) -> dict:
         "alias_fn": alias,
         "normalize_state_fn": alias,
         "crosswalk_overlay": None,
-        "show_river_network": False,
-        "resolved_river_basin_name": None,
+        "overlay_layers": (),
         "hover_enabled": False,
     }
+
+
+def test_image_overlay_pane_passes_through_and_population_z_order(tmp_path: Path) -> None:
+    import folium
+    import india_resilience_tool.app.views.map_view as map_view
+
+    image_path = tmp_path / "population.png"
+    image_path.write_bytes(b"png")
+    layer = OverlayRenderLayer(
+        overlay_id=POPULATION_EXPOSURE_OVERLAY_ID,
+        kind="image",
+        name="Population Exposure 2025 Raster",
+        opacity=0.5,
+        opacity_pct=50,
+        image_path=image_path,
+        bounds_latlon=[[0.0, 0.0], [1.0, 1.0]],
+        pane=map_view.PANE_POPULATION_RASTER,
+        legend_html="<div>Population legend</div>",
+    )
+    m = folium.Map(location=[0.0, 0.0], zoom_start=5)
+    map_view.add_overlay_render_layers(m, overlay_layers=(layer,))
+    html = m.get_root().render()
+    assert map_view.PANE_BASE_POLYGONS in html
+    assert map_view.PANE_POPULATION_RASTER in html
+    assert map_view.PANE_BUILT_UP_AREA_RASTER in html
+    assert map_view.PANE_RURAL_FACILITIES_RASTER in html
+    assert map_view.PANE_RURAL_FACILITIES_AGRO_RASTER in html
+    assert map_view.PANE_RURAL_FACILITIES_EDUCATION_RASTER in html
+    assert map_view.PANE_RURAL_FACILITIES_HEALTH_RASTER in html
+    assert map_view.PANE_RURAL_FACILITIES_SERVICE_RASTER in html
+    assert map_view.PANE_FLOOD_RASTER in html
+    assert ".style.zIndex = 400" in html
+    assert ".style.zIndex = 405" in html
+    assert ".style.zIndex = 406" in html
+    assert ".style.zIndex = 407" in html
+    assert ".style.zIndex = 408" in html
+    assert ".style.zIndex = 409" in html
+    assert ".style.zIndex = 410" in html
+    assert ".style.zIndex = 411" in html
+    assert map_view.PANE_POPULATION_RASTER in html
 
 
 def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
@@ -91,7 +131,7 @@ def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
     monkeypatch.setattr(geo_cache, "build_adm3_geojson_by_state", _state_builder)
     monkeypatch.setattr(map_view, "build_base_choropleth_map_with_geojson_layer", lambda **kwargs: kwargs["fc"])
     monkeypatch.setattr(map_view, "add_reference_overlay_layer", lambda m, **kwargs: m)
-    monkeypatch.setattr(map_view, "add_river_overlay_layer", lambda m, **kwargs: m)
+    monkeypatch.setattr(map_view, "add_overlay_render_layers", lambda m, **kwargs: m)
 
     merged = pd.DataFrame(
         {
@@ -105,14 +145,11 @@ def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
 
     out = build_folium_map_for_selection(
         level="block",
+        master_df=merged,
         merged=merged,
         display_gdf=merged,
-        session_state={},
-        render_signature=("block", "render"),
         selected_state="Telangana",
         selected_district="Adilabad",
-        selected_basin="All",
-        selected_subbasin="All",
         metric_col="tas_annual_mean",
         map_value_col="tas_annual_mean",
         **_common_kwargs(tmp_path),
@@ -120,11 +157,11 @@ def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
 
     assert calls["district"] == 1
     assert calls["state"] == 0
-    assert len(out["features"]) == 1
-    assert out["features"][0]["properties"]["block_name"] == "Adilabad Rural"
+    assert len(out.folium_map["features"]) == 1
+    assert out.folium_map["features"][0]["properties"]["block_name"] == "Adilabad Rural"
 
 
-def test_build_folium_map_for_selection_reuses_patched_featurecollection_cache(
+def test_build_folium_map_for_selection_rebuilds_every_call(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -149,7 +186,7 @@ def test_build_folium_map_for_selection_reuses_patched_featurecollection_cache(
 
     monkeypatch.setattr(map_view, "build_base_choropleth_map_with_geojson_layer", _base_builder)
     monkeypatch.setattr(map_view, "add_reference_overlay_layer", lambda m, **kwargs: m)
-    monkeypatch.setattr(map_view, "add_river_overlay_layer", lambda m, **kwargs: m)
+    monkeypatch.setattr(map_view, "add_overlay_render_layers", lambda m, **kwargs: m)
 
     patch_calls = {"count": 0}
     original_patch = fc_helpers.patch_fc_properties
@@ -168,17 +205,13 @@ def test_build_folium_map_for_selection_reuses_patched_featurecollection_cache(
             "fillColor": ["#ff0000"],
         }
     )
-    session_state: dict = {}
     kwargs = dict(
         level="district",
+        master_df=merged,
         merged=merged,
         display_gdf=merged,
-        session_state=session_state,
-        render_signature=("district", "render"),
         selected_state="Telangana",
         selected_district="All",
-        selected_basin="All",
-        selected_subbasin="All",
         metric_col="tas_annual_mean",
         map_value_col="tas_annual_mean",
         **_common_kwargs(tmp_path),
@@ -187,10 +220,14 @@ def test_build_folium_map_for_selection_reuses_patched_featurecollection_cache(
     first = build_folium_map_for_selection(**kwargs)
     second = build_folium_map_for_selection(**kwargs)
 
-    assert patch_calls["count"] == 1
-    assert base_map_calls["count"] == 1
-    assert first["features"][0]["properties"]["fillColor"] == "#ff0000"
-    assert second["features"][0]["properties"]["fillColor"] == "#ff0000"
+    # Caches were removed: every call patches the FC and rebuilds the base map
+    # from scratch. Output must still be identical to the cached-path contract.
+    assert patch_calls["count"] == 2
+    assert base_map_calls["count"] == 2
+    assert first.folium_map["features"][0]["properties"]["fillColor"] == "#ff0000"
+    assert second.folium_map["features"][0]["properties"]["fillColor"] == "#ff0000"
+    assert first.coverage_diagnostics is not None
+    assert first.coverage_diagnostics.matched_feature_keys == 1
 
 
 def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
@@ -234,7 +271,7 @@ def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
     )
     monkeypatch.setattr(map_view, "build_base_choropleth_map_with_geojson_layer", lambda **kwargs: {"type": "base"})
     monkeypatch.setattr(map_view, "add_reference_overlay_layer", lambda m, **kwargs: kwargs["reference_fc"])
-    monkeypatch.setattr(map_view, "add_river_overlay_layer", lambda m, **kwargs: m)
+    monkeypatch.setattr(map_view, "add_overlay_render_layers", lambda m, **kwargs: m)
 
     merged = pd.DataFrame(
         {
@@ -255,14 +292,11 @@ def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
 
     out = build_folium_map_for_selection(
         level="district",
+        master_df=merged,
         merged=merged,
         display_gdf=merged,
-        session_state={},
-        render_signature=("district", "render"),
         selected_state="Telangana",
         selected_district="All",
-        selected_basin="All",
-        selected_subbasin="All",
         metric_col="tas_annual_mean",
         map_value_col="tas_annual_mean",
         **common_kwargs,
@@ -270,11 +304,11 @@ def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
 
     assert calls["scoped"] == 1
     assert calls["all"] == 0
-    assert len(out["features"]) == 1
-    assert out["features"][0]["properties"]["subbasin_name"] == "Pranhita"
+    assert len(out.folium_map["features"]) == 1
+    assert out.folium_map["features"][0]["properties"]["subbasin_name"] == "Pranhita"
 
 
-def test_build_folium_map_for_selection_reuses_base_map_on_overlay_only_reruns(
+def test_build_folium_map_for_selection_composes_overlay_on_each_rerun(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -322,7 +356,7 @@ def test_build_folium_map_for_selection_reuses_base_map_on_overlay_only_reruns(
 
     monkeypatch.setattr(map_view, "build_base_choropleth_map_with_geojson_layer", _base_builder)
     monkeypatch.setattr(map_view, "add_reference_overlay_layer", _overlay_builder)
-    monkeypatch.setattr(map_view, "add_river_overlay_layer", lambda m, **kwargs: m)
+    monkeypatch.setattr(map_view, "add_overlay_render_layers", lambda m, **kwargs: m)
 
     merged = pd.DataFrame(
         {
@@ -332,18 +366,14 @@ def test_build_folium_map_for_selection_reuses_base_map_on_overlay_only_reruns(
             "fillColor": ["#ff0000"],
         }
     )
-    session_state: dict = {}
     common_kwargs = _common_kwargs(tmp_path)
     kwargs = dict(
         level="district",
+        master_df=merged,
         merged=merged,
         display_gdf=merged,
-        session_state=session_state,
-        render_signature=("district", "render"),
         selected_state="Telangana",
         selected_district="All",
-        selected_basin="All",
-        selected_subbasin="All",
         metric_col="tas_annual_mean",
         map_value_col="tas_annual_mean",
         **common_kwargs,
@@ -362,7 +392,9 @@ def test_build_folium_map_for_selection_reuses_base_map_on_overlay_only_reruns(
         }
     )
 
-    assert base_map_calls["count"] == 1
+    # Caches were removed: each call rebuilds the base map. The first call
+    # has no overlay; the second composes an overlay on top of a freshly built map.
+    assert base_map_calls["count"] == 2
     assert overlay_calls["count"] == 1
-    assert first["overlays"] == []
-    assert len(second["overlays"]) == 1
+    assert first.folium_map["overlays"] == []
+    assert len(second.folium_map["overlays"]) == 1

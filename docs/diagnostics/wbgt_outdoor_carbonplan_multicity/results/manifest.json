@@ -1,0 +1,843 @@
+{
+  "elevation_tile_sha256": {
+    "scratch\\wbgt_outdoor_pilot_qc\\elevation\\10S060E_20101117_gmted_mea300.tif": "551b1ed96222480086985521b95bba6b2e5595a3c28e93f99b8ed9c44482d4dd",
+    "scratch\\wbgt_outdoor_pilot_qc\\elevation\\10N060E_20101117_gmted_mea300.tif": "0a2645d027e5e160097b67d977f77a129c05fc9d9022423da68860a4bf826df4",
+    "scratch\\wbgt_outdoor_pilot_qc\\elevation\\30N060E_20101117_gmted_mea300.tif": "0f3746176740c52a462e623d849f9ab057a07e4cd966091f0278e5d4e72f03f6"
+  },
+  "git_snapshot": "c3617fd",
+  "model": "ACCESS-CM2",
+  "scenario": "historical",
+  "years": [
+    2005,
+    2007,
+    2009
+  ],
+  "cities": [
+    "Kochi",
+    "Bikaner",
+    "Shimla",
+    "Hyderabad",
+    "Kolkata"
+  ],
+  "thresholds_c": [
+    28,
+    30,
+    32
+  ],
+  "carbonplan": {
+    "zarr_url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/historical-WBGT-sun.zarr/",
+    "geography_url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/all_regions_and_cities.json",
+    "model": "ACCESS-CM2",
+    "model_index": 0,
+    "processing_ids": {
+      "Kochi": 7886,
+      "Bikaner": 6558,
+      "Shimla": 6822,
+      "Hyderabad": 8004,
+      "Kolkata": 9690
+    },
+    "processing_axis_positions": {
+      "Kochi": 7883,
+      "Bikaner": 6556,
+      "Shimla": 6820,
+      "Hyderabad": 8001,
+      "Kolkata": 9687
+    },
+    "chunk_payloads": {
+      "9": {
+        "bytes": 61604645,
+        "sha256": "01e5c8d1f3756e74ac105b676bd2030b2aab9fef947232d8f1ee34b3abce0666"
+      },
+      "7": {
+        "bytes": 62998530,
+        "sha256": "55a6548f623f7102363460fa3e506ef6aec08dd37b0789b234b4e5ffc8684a60"
+      },
+      "8": {
+        "bytes": 61815181,
+        "sha256": "7722bfb8cea07d3ee581e5ef450516edde3508534ab83f5c1a0446cf8a3ad15e"
+      },
+      "11": {
+        "bytes": 62138656,
+        "sha256": "584ef0ffbcf04dbe946882a8512f4a1da81c23c42a3bba1762b163e6ff78d087"
+      }
+    },
+    "zmetadata_sha256": "efaedd7af4c274c90d95fa43517630afaa61ab75d48f12abc1b568c3ee5020db",
+    "coordinate_chunk_sha256": {
+      "gcm": "318bc9cc24736d1ed7fa2ebfbdf07c5adab43586c923ca5ac462a6e484741870",
+      "processing_id": "3c178cb993a80c1419e1a81c37175161da7b97024d62f338ec5903ae263bbbff",
+      "time": "7646bf4acfbd86844dd0aa6ab2ecb336f3a967f2422ff641563370ce722d0b74"
+    },
+    "source_units": "degC",
+    "bias_adjustment": "QuantileDeltaMapping(group=Grouper(name='time.dayofyear', window=31), kind='+').adjust(sim, )",
+    "time_units": "days since 1985-01-01T12:00:00",
+    "chunk_size": 850
+  },
+  "geography_sha256": "6bd605cc8b5d53b77cfaacbc581c2cdfbd26f9044a202f773f7c8d9ad6f96bbf",
+  "w1_source_roots": {
+    "nex": "D:/projects/irt_data/r1i1p1f1",
+    "radiation_wind": "D:/projects/irt_data/nex_gddp_cmip6_v2_wbgt/r1i1p1f1"
+  },
+  "w1_method_signature": "outdoor-pilot-v2:W1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-w1-dtr-slope0.03-amp0.1-0.8:rh-clip100-rhpolicy-v1:pressure-isa-elev-gmted2010-mea300-cellmean-7dcdaeb7a588c910:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped",
+  "elevation_convention": "elev-gmted2010-mea300-cellmean-7dcdaeb7a588c910",
+  "w1_method": "Frozen outdoor W1 pilot; daily cell max then area weighted city series",
+  "w1_rh_policy": "clip hurs values above 100%; retain and report clip flags; other invalid inputs remain missing",
+  "w1_elevation": "GMTED2010 30 arc-second mean, cos-latitude-weighted climate-cell mean; m above EGM96",
+  "w1_spatial_weights": "EPSG:6933 intersection area within published CarbonPlan city polygons",
+  "carbonplan_spatial_weights": "CarbonPlan population-informed city weights",
+  "carbonplan_bias_adjustment": "QuantileDeltaMapping(group=Grouper(name='time.dayofyear', window=31), kind='+').adjust(sim, )",
+  "interpretation": "Published-model-product disagreement, not observational accuracy; grids, member lineage and spatial weights differ.",
+  "valid_day_policy": "Annual means/counts require complete years; monthly counts require complete months; paired differences and disagreements use jointly finite dates. No filling.",
+  "coverage": [
+    {
+      "city": "Kochi",
+      "year": 2005,
+      "cell_count": 5,
+      "city_area_km2": 721.4323618218889,
+      "cell_overlap_area_km2": 721.432361821889,
+      "cell_area_coverage_fraction": 1.0000000000000002,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "5bbd6bcf16975446ecf4a648000681c9b320029ae1975e4dfdd8bcb50302891f",
+        "tasmin": "e6cbf13ccf0036e358a34151d8a44fc02e3726900654d676d1e7ab9c6998b3b6",
+        "tasmax": "64298e76657748c0f60176fa3059b88960722b2434ea7ecb861daa2a45141b56",
+        "hurs": "86f89124fd9ea099a9647166793c9c676783841d9177628542fe83a34fd04466",
+        "rsds": "4a384da18fb9a86474f5633c79dd87c64240edf573c79a632ac47612e8095b75",
+        "sfcWind": "34551ef33976c9e86bd395c24fb6226bf28f6707ae404814a16781f433fc68a2"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 2202
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 92.77813720703125
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 5400,
+        "pixels_nodata": 0,
+        "cells_total": 6,
+        "cells_finite": 6,
+        "cells_missing": 0,
+        "elevation_min_m": 0.10108185959908969,
+        "elevation_median_m": 15.683317043361825,
+        "elevation_max_m": 101.84377586496309,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Kochi",
+      "year": 2007,
+      "cell_count": 5,
+      "city_area_km2": 721.4323618218889,
+      "cell_overlap_area_km2": 721.432361821889,
+      "cell_area_coverage_fraction": 1.0000000000000002,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "945995deaf56a53ebee9e014a3694ea78cb8fa8c5499c26e43e7d143682d1af6",
+        "tasmin": "13b94c668f5ca80731a6bef881bc0e0f67f26aef32c2fd99f5ad5dd315e92ec1",
+        "tasmax": "d05a23152e4cc49919f82983f1f82e7a612ab241818433da05023359fa7e4caf",
+        "hurs": "30f4f477e0f8fc6a5dc4e37af89e78e86792d3c64d207c29386e8ce3fe7a7632",
+        "rsds": "7e5df1f7445b135b51bc2a37517f242ad8829ac02390a6fd7130994531d73691",
+        "sfcWind": "af735815f440eae28e29210ca90415c70fab7cd754cc9d4fc17568f48bfd7be9"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 2202
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 94.70774841308594
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 5400,
+        "pixels_nodata": 0,
+        "cells_total": 6,
+        "cells_finite": 6,
+        "cells_missing": 0,
+        "elevation_min_m": 0.10108185959908969,
+        "elevation_median_m": 15.683317043361825,
+        "elevation_max_m": 101.84377586496309,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Kochi",
+      "year": 2009,
+      "cell_count": 5,
+      "city_area_km2": 721.4323618218889,
+      "cell_overlap_area_km2": 721.432361821889,
+      "cell_area_coverage_fraction": 1.0000000000000002,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "3fa6acbe8ee29991ee413b924591bf4aedced8e847ed2d54a067b93377e24d0b",
+        "tasmin": "314f503abeb010d30a0414f4411c8fcf53a01540542f1f63582364b3934e5e60",
+        "tasmax": "eb9b94bdc61265f47c24fecbcf1098bf1c3a82aa801e1d064a8de9c3da4dbb73",
+        "hurs": "72075b14b9975fa20f2775914b13a3b56dd2a2fb5e1113525862e020dd29900e",
+        "rsds": "d93ea00df6ff0d4983a1d41dcc57143ba1de90ef02686c1e711b93e27ccef255",
+        "sfcWind": "1590136ce0b8bef80d3b08140c9f0d812706041cc87a4d7064aad39a044ffc32"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 2202
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 92.58893585205078
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 5400,
+        "pixels_nodata": 0,
+        "cells_total": 6,
+        "cells_finite": 6,
+        "cells_missing": 0,
+        "elevation_min_m": 0.10108185959908969,
+        "elevation_median_m": 15.683317043361825,
+        "elevation_max_m": 101.84377586496309,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Bikaner",
+      "year": 2005,
+      "cell_count": 2,
+      "city_area_km2": 86.6746010961979,
+      "cell_overlap_area_km2": 86.6746010961976,
+      "cell_area_coverage_fraction": 0.9999999999999966,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "9465aa65ef10e48c7d195f304fa2a5480880b05b882e3d0ed5ff1e6166c4b3a4",
+        "tasmin": "7f2cfe9201a430f9d86c0d359dee1adc4dfb9bcae0b92f2fd5b6d18f7bfa4c2a",
+        "tasmax": "0e55f819bdc3324da0ba24990733e2138f6479ff6215bbb295a749895342c098",
+        "hurs": "ea7f551e2b91da1c19bb521f4bd59206844fd1031636d2056472e4af9ac4e95a",
+        "rsds": "4e0f39c1e940638d5f9829a0fcef5744d7a4d455eee5c7fb2124c484715e5867",
+        "sfcWind": "05a344247297ce97e2c0b59b10b360b88f14a86e1b1d38cb939e091adeaad86d"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 734
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 91.4066162109375
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 1800,
+        "pixels_nodata": 0,
+        "cells_total": 2,
+        "cells_finite": 2,
+        "cells_missing": 0,
+        "elevation_min_m": 210.12847426018624,
+        "elevation_median_m": 230.76075100935387,
+        "elevation_max_m": 251.3930277585215,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Bikaner",
+      "year": 2007,
+      "cell_count": 2,
+      "city_area_km2": 86.6746010961979,
+      "cell_overlap_area_km2": 86.6746010961976,
+      "cell_area_coverage_fraction": 0.9999999999999966,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "80d7f651069481b8cd775d477c35058b7a592033502b231ecf999d6b35adc649",
+        "tasmin": "fecaebda9a08b5f16927cce2d732cd248d907ab808797be15e67d8380a126725",
+        "tasmax": "2e29da560301c0ce38c93d9161d87d7036c78e1565b700eed3e91133e8caefc4",
+        "hurs": "91c7032f04e8ada1dedb1f3a9633385e99aca76977590e05a07a11a35f45b7a1",
+        "rsds": "fc0d8791f93aa2ecb2af21ae358aa87e1a7baa0fbd77f6a714a5891e8edb14bb",
+        "sfcWind": "f1db24cfd25b86886851c765f09028c762c6dc3f873c37676e6ca42dcd34b9d7"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 734
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 90.81355285644531
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 1800,
+        "pixels_nodata": 0,
+        "cells_total": 2,
+        "cells_finite": 2,
+        "cells_missing": 0,
+        "elevation_min_m": 210.12847426018624,
+        "elevation_median_m": 230.76075100935387,
+        "elevation_max_m": 251.3930277585215,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Bikaner",
+      "year": 2009,
+      "cell_count": 2,
+      "city_area_km2": 86.6746010961979,
+      "cell_overlap_area_km2": 86.6746010961976,
+      "cell_area_coverage_fraction": 0.9999999999999966,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "86ab2d51f5c29b9494d02ae53dc7d78ca40873cf7e90f37bfdd72790b87336a5",
+        "tasmin": "bafac38e63a86738a918dbd1ae94b81f61f1a5a920835434ba594be14eb3f10c",
+        "tasmax": "8d262f8981d6763aeec390981d84a93dca39a63395f626005938fa614ef853cc",
+        "hurs": "2d9c792a64359efab68e152f24509fc570d40db79e18a92fdb82d21c227e8818",
+        "rsds": "11d286166c79e6d37acf4b34d8a56c699b9c773a4ad94daa2f947d23405aad5c",
+        "sfcWind": "cab061f868169e8f0ebbaf8733df8c2810363ccb1382ab4777771b6ed35d71cf"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 734
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 92.65695190429688
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 1800,
+        "pixels_nodata": 0,
+        "cells_total": 2,
+        "cells_finite": 2,
+        "cells_missing": 0,
+        "elevation_min_m": 210.12847426018624,
+        "elevation_median_m": 230.76075100935387,
+        "elevation_max_m": 251.3930277585215,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Shimla",
+      "year": 2005,
+      "cell_count": 1,
+      "city_area_km2": 12.959616256716913,
+      "cell_overlap_area_km2": 12.959616256716913,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "03d438ab8c04d3c4a3e4e54255636fffe66bf4a009a7a2c90673fa1a0c751775",
+        "tasmin": "d104241b3c68213560fc5895c4abd05e9bc54b4f8f6d7a028e930b6abdcab7ba",
+        "tasmax": "17baf8368ee7b04a5319ba9cb4a93f200d141bb5b82de8dc6a1bb1643cc467bb",
+        "hurs": "935c6a42d84b1ecac852ad043ab1016d2ad119a34c30bf9613f6623454c39760",
+        "rsds": "d3052b523fd4649b482257d1bba3a7552f4fb35b9716944ca5e5c0b3d5b8172f",
+        "sfcWind": "18e55f5808b9795fee285ec361828675366ead7c39a62fa162a3e3feb209f3c5"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 367
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 96.32144927978516
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 900,
+        "pixels_nodata": 0,
+        "cells_total": 1,
+        "cells_finite": 1,
+        "cells_missing": 0,
+        "elevation_min_m": 1481.2017259424958,
+        "elevation_median_m": 1481.2017259424958,
+        "elevation_max_m": 1481.2017259424958,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Shimla",
+      "year": 2007,
+      "cell_count": 1,
+      "city_area_km2": 12.959616256716913,
+      "cell_overlap_area_km2": 12.959616256716913,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "b8692aa6cb31854988efd5f53e5d4c0b027ad4b20f47a114d6f3f669052f8c34",
+        "tasmin": "b73312c2708eae421a97bab4e54c939719142266701944dbcf08a4b2518cd8ce",
+        "tasmax": "d630188da148738613b658bddf1eefbf6dcbb07028780cea735bf7cf1876434b",
+        "hurs": "12cadd5fee0b3953ba50feb5d0490ceaa1f0f0e103de7742e40d476a4bb55563",
+        "rsds": "81ef1d4e9234a949fce48cb80dcf81bf37a1993dd13aacd095a96a7c5e8d9133",
+        "sfcWind": "e80d9f939cbb30cb2357ef6a04dde50e4a21bbc0ebdd05b4955f8d899d538805"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 367
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 97.27790069580078
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 900,
+        "pixels_nodata": 0,
+        "cells_total": 1,
+        "cells_finite": 1,
+        "cells_missing": 0,
+        "elevation_min_m": 1481.2017259424958,
+        "elevation_median_m": 1481.2017259424958,
+        "elevation_max_m": 1481.2017259424958,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Shimla",
+      "year": 2009,
+      "cell_count": 1,
+      "city_area_km2": 12.959616256716913,
+      "cell_overlap_area_km2": 12.959616256716913,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "ce80ff13a96a89c214a90067741199c18a69980ef65d2d113aab023c7bfd4de1",
+        "tasmin": "3daf285b9a1a4bd1a4072051428ccfd79eb74bb5992c209d9b6a5c5e2692743c",
+        "tasmax": "5835ced4c5cf465bda42f652af982096e3c12f97b4b54b7b9d9b5b250831297a",
+        "hurs": "933b0187419a04691c4de2986456e8a306879f885166d62308fec2f55d7a9be9",
+        "rsds": "794f0537ec13949648cc538a4017d56a01e572ec285a8002da69f0a75c6c7d09",
+        "sfcWind": "3e0b36fe521e666cd87054112aa7cb728926aa6b0830665c69ca6f6eeec397b0"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 367
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 99.50499725341797
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 900,
+        "pixels_nodata": 0,
+        "cells_total": 1,
+        "cells_finite": 1,
+        "cells_missing": 0,
+        "elevation_min_m": 1481.2017259424958,
+        "elevation_median_m": 1481.2017259424958,
+        "elevation_max_m": 1481.2017259424958,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Hyderabad",
+      "year": 2005,
+      "cell_count": 5,
+      "city_area_km2": 869.1978176331462,
+      "cell_overlap_area_km2": 869.1978176331462,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "a988f45d6816f16640f17d255281c26171b5b5e4f84cfb3da7fdc01de4392f71",
+        "tasmin": "c20ec321d2451bdc7a87a79a57bcf842d6cc83c5126e9220b14329c2261cf30d",
+        "tasmax": "e7c68b89fc77cb7f1345f2e680a90a465920ba7f9bc3903e7e9c9934d68e84b7",
+        "hurs": "87099cf3335e3dea31aec5a3eac791445687a28fd5ee82bb8545fbd37a80d13f",
+        "rsds": "c793795159fcccd4bdb1b462aacae8f43ff6eef59274a9aa27b238b2ad803e8e",
+        "sfcWind": "bd5725939371ce56eed71646866f4ed1a2ccd5f70274553b14e0d1408423f2e1"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 2202
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 92.30992126464844
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 5400,
+        "pixels_nodata": 0,
+        "cells_total": 6,
+        "cells_finite": 6,
+        "cells_missing": 0,
+        "elevation_min_m": 499.9599517175921,
+        "elevation_median_m": 562.7222467007441,
+        "elevation_max_m": 606.8997049506095,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Hyderabad",
+      "year": 2007,
+      "cell_count": 5,
+      "city_area_km2": 869.1978176331462,
+      "cell_overlap_area_km2": 869.1978176331462,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "f4e64ccd3f2d7ed71821f6be7f88f7d1fff3462ed803d9d4110422e0253358ba",
+        "tasmin": "4cef1359ad7fa18e658a4e0d77c02405b42152f29a6d5c3529601bfebb6de501",
+        "tasmax": "42653d8a724101aae8cb363f1b218edb063a6b43f781f65cdc08d52007d8616c",
+        "hurs": "3b4240b624ef548959dd0e0e5e2c0586943dc73a53f9364e9432274e87bc9a98",
+        "rsds": "bb8b7b9f42abcc0f6ed4e4e6d1f229d90f31e44367d49649a9bc66802ebd8171",
+        "sfcWind": "56727e528b02ad4d1a86f141878234e841b7150f35c09b3f7bdab6feb980ece8"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 2202
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 96.78874969482422
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 5400,
+        "pixels_nodata": 0,
+        "cells_total": 6,
+        "cells_finite": 6,
+        "cells_missing": 0,
+        "elevation_min_m": 499.9599517175921,
+        "elevation_median_m": 562.7222467007441,
+        "elevation_max_m": 606.8997049506095,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Hyderabad",
+      "year": 2009,
+      "cell_count": 5,
+      "city_area_km2": 869.1978176331462,
+      "cell_overlap_area_km2": 869.1978176331462,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "8b5261c9e4a6c2da3386a21dccc9a61deae746846a9a01fbd56855c01e2b7920",
+        "tasmin": "9ccceff7c9217381065170c9dc59cc30c3ab91301e77cd976be167f012178a31",
+        "tasmax": "255be01e9f047ff01de19d9902ef4e29fe8f33df31e2d4ba4b67adc623c6929c",
+        "hurs": "3b1782ba08776df3f2ad476c7718f4291b91e39213b99684c24729e0b5708909",
+        "rsds": "08a70eac2cbe1c26fff13fa1200ce8e61754dfa9eafd94ab1947b638f37ae031",
+        "sfcWind": "76e5c9e6d702e328ad11698420124fe31828bd81a40c80a56ce60c6380d4307a"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 2202
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 93.13780975341797
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 5400,
+        "pixels_nodata": 0,
+        "cells_total": 6,
+        "cells_finite": 6,
+        "cells_missing": 0,
+        "elevation_min_m": 499.9599517175921,
+        "elevation_median_m": 562.7222467007441,
+        "elevation_max_m": 606.8997049506095,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Kolkata",
+      "year": 2005,
+      "cell_count": 15,
+      "city_area_km2": 2803.6463760062106,
+      "cell_overlap_area_km2": 2803.6463760062106,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "526c93ced7449cb59c8bbacbd279dcfde61e4910d47749d92bdb4aafdd7f79a4",
+        "tasmin": "cc5e89e58d75501d22d4e2e7c0a47af8bf0f82a9295c34e6c8c589389c90be0f",
+        "tasmax": "911842c0cca8243bcea1e89626fb852b9adc18d5c30781e78402b33b43d5f4ff",
+        "hurs": "edbc21387c7a766dcf3e5994c1d94465c98c66110f09c8af82a1ec0418ba5369",
+        "rsds": "1f104cba1acc1e2bed3002233014a8b5319af7b4684d044fd54cbd00070123d4",
+        "sfcWind": "ebc11c4ca4a0a35299c07bd3bfe24fd00d2b74537f9bbf48f535cbb52f1877b9"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 7340
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 97.24281311035156
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 18000,
+        "pixels_nodata": 0,
+        "cells_total": 20,
+        "cells_finite": 20,
+        "cells_missing": 0,
+        "elevation_min_m": 3.7123372509238957,
+        "elevation_median_m": 7.046785723700245,
+        "elevation_max_m": 29.204252742321398,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Kolkata",
+      "year": 2007,
+      "cell_count": 15,
+      "city_area_km2": 2803.6463760062106,
+      "cell_overlap_area_km2": 2803.6463760062106,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 0,
+      "input_slice_sha256": {
+        "tas": "374c44c62ff4865c4447c443cebd3f90f2d200f1a59d690003d074ce6be3bda9",
+        "tasmin": "f89cbbe3a9e9d385f06ca175468f02516f63f8060715b741f44407bf5bfed92b",
+        "tasmax": "30f86eea048d36f524ae6dcd189c81eba04b982ba7f57cd16028bfb066f79b97",
+        "hurs": "5b93b44f63af4842b9fb7697ad781d5c216390dc2e43685007c49747649e9c6b",
+        "rsds": "7140ee95011579568a0fec3b86ae82c04319cd77de159be9efb573a0a81b40d7",
+        "sfcWind": "386cf1b08a499a133967d11545bdbb1965d4bd7197168a3961d765639091806e"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 7340
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 0,
+        "rh_max_correction_pct": 0.0,
+        "rh_above_100_cell_days": 0,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 97.88441467285156
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 18000,
+        "pixels_nodata": 0,
+        "cells_total": 20,
+        "cells_finite": 20,
+        "cells_missing": 0,
+        "elevation_min_m": 3.7123372509238957,
+        "elevation_median_m": 7.046785723700245,
+        "elevation_max_m": 29.204252742321398,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    },
+    {
+      "city": "Kolkata",
+      "year": 2009,
+      "cell_count": 15,
+      "city_area_km2": 2803.6463760062106,
+      "cell_overlap_area_km2": 2803.6463760062106,
+      "cell_area_coverage_fraction": 1.0,
+      "w1_valid_city_days": 365,
+      "w1_invalid_city_days": 0,
+      "w1_clipped_rh_cell_days": 2,
+      "input_slice_sha256": {
+        "tas": "352a41250c52f046e98cdd6e80611f05e7916eeaa1aba36fbbfc482b459b2ba4",
+        "tasmin": "52f9fb9d3bdf8e62d817fcd6e357bb3b1ddcd6a23f62d4065bd88cca5081e473",
+        "tasmax": "17d8ed5c3710eb3bfa124a1f8b621aa211f52a4f552a3eb0dd4e11d218b3e049",
+        "hurs": "1dddbe4f63afda03313fe798bc89ab265468ba8b604f4cabdb85effbd195ac22",
+        "rsds": "9b678fdd42369f0c14a950eb745ea1fccb91d67d08d8c37d71b52cf49ca2b206",
+        "sfcWind": "a878c3fe61ab95faec189c39b4d575930cd40812ec7a2453f62f1493573182ea"
+      },
+      "validity_diagnostics": {
+        "non_finite_cell_days": 0,
+        "out_of_range_cell_days": 0,
+        "tasmin_gt_tasmax_cell_days": 0,
+        "invalid_cell_days": 0,
+        "total_cell_days": 7340
+      },
+      "clip_diagnostics": {
+        "rh_policy": "clip100",
+        "rh_policy_version": "rhpolicy-v1",
+        "rh_clipped_cell_days": 4,
+        "rh_max_correction_pct": 0.25038909912109375,
+        "rh_above_100_cell_days": 4,
+        "rh_above_102_cell_days": 0,
+        "rh_observed_max_pct": 100.2503890991211
+      },
+      "elevation_diagnostics": {
+        "pixels_used": 18000,
+        "pixels_nodata": 0,
+        "cells_total": 20,
+        "cells_finite": 20,
+        "cells_missing": 0,
+        "elevation_min_m": 3.7123372509238957,
+        "elevation_median_m": 7.046785723700245,
+        "elevation_max_m": 29.204252742321398,
+        "cells_negative": 0,
+        "units": "m",
+        "vertical_reference": "metres above the EGM96 geoid",
+        "horizontal_reference": "WGS84 geographic, decimal degrees",
+        "sampling": "cos-latitude-weighted mean of GMTED pixel centres inside the 0.25 deg cell box"
+      }
+    }
+  ],
+  "carbonplan_data_license": "CC BY 4.0"
+}

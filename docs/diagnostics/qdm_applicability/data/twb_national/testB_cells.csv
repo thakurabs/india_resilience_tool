@@ -1,0 +1,4626 @@
+lat,lon,state
+8.375,77.125,Kerala
+8.375,77.375,Tamil Nadu
+8.375,77.625,Tamil Nadu
+8.625,76.875,Kerala
+8.625,77.125,Kerala
+8.625,77.375,Tamil Nadu
+8.625,77.625,Tamil Nadu
+8.625,77.875,Tamil Nadu
+8.875,76.625,Kerala
+8.875,76.875,Kerala
+8.875,77.125,Kerala
+8.875,77.375,Tamil Nadu
+8.875,77.625,Tamil Nadu
+8.875,77.875,Tamil Nadu
+9.125,76.625,Kerala
+9.125,76.875,Kerala
+9.125,77.125,Kerala
+9.125,77.375,Tamil Nadu
+9.125,77.625,Tamil Nadu
+9.125,77.875,Tamil Nadu
+9.375,76.375,Kerala
+9.375,76.625,Kerala
+9.375,76.875,Kerala
+9.375,77.125,Kerala
+9.375,77.375,Tamil Nadu
+9.375,77.625,Tamil Nadu
+9.375,77.875,Tamil Nadu
+9.375,78.125,Tamil Nadu
+9.375,78.375,Tamil Nadu
+9.375,78.625,Tamil Nadu
+9.625,76.375,Kerala
+9.625,76.625,Kerala
+9.625,76.875,Kerala
+9.625,77.125,Kerala
+9.625,77.375,Tamil Nadu
+9.625,77.625,Tamil Nadu
+9.625,77.875,Tamil Nadu
+9.625,78.125,Tamil Nadu
+9.625,78.375,Tamil Nadu
+9.625,78.625,Tamil Nadu
+9.875,76.375,Kerala
+9.875,76.625,Kerala
+9.875,76.875,Kerala
+9.875,77.125,Kerala
+9.875,77.375,Tamil Nadu
+9.875,77.625,Tamil Nadu
+9.875,77.875,Tamil Nadu
+9.875,78.125,Tamil Nadu
+9.875,78.375,Tamil Nadu
+9.875,78.625,Tamil Nadu
+10.125,76.125,Kerala
+10.125,76.375,Kerala
+10.125,76.625,Kerala
+10.125,76.875,Kerala
+10.125,77.125,Kerala
+10.125,77.375,Tamil Nadu
+10.125,77.625,Tamil Nadu
+10.125,77.875,Tamil Nadu
+10.125,78.125,Tamil Nadu
+10.125,78.375,Tamil Nadu
+10.125,78.625,Tamil Nadu
+10.125,78.875,Tamil Nadu
+10.375,76.125,Kerala
+10.375,76.375,Kerala
+10.375,76.625,Kerala
+10.375,76.875,Tamil Nadu
+10.375,77.125,Tamil Nadu
+10.375,77.375,Tamil Nadu
+10.375,77.625,Tamil Nadu
+10.375,77.875,Tamil Nadu
+10.375,78.125,Tamil Nadu
+10.375,78.375,Tamil Nadu
+10.375,78.625,Tamil Nadu
+10.375,78.875,Tamil Nadu
+10.375,79.125,Tamil Nadu
+10.625,76.125,Kerala
+10.625,76.375,Kerala
+10.625,76.625,Kerala
+10.625,76.875,Tamil Nadu
+10.625,77.125,Tamil Nadu
+10.625,77.375,Tamil Nadu
+10.625,77.625,Tamil Nadu
+10.625,77.875,Tamil Nadu
+10.625,78.125,Tamil Nadu
+10.625,78.375,Tamil Nadu
+10.625,78.625,Tamil Nadu
+10.625,78.875,Tamil Nadu
+10.625,79.125,Tamil Nadu
+10.625,79.375,Tamil Nadu
+10.625,79.625,Tamil Nadu
+10.875,75.875,Kerala
+10.875,76.125,Kerala
+10.875,76.375,Kerala
+10.875,76.625,Kerala
+10.875,76.875,Tamil Nadu
+10.875,77.125,Tamil Nadu
+10.875,77.375,Tamil Nadu
+10.875,77.625,Tamil Nadu
+10.875,77.875,Tamil Nadu
+10.875,78.125,Tamil Nadu
+10.875,78.375,Tamil Nadu
+10.875,78.625,Tamil Nadu
+10.875,78.875,Tamil Nadu
+10.875,79.125,Tamil Nadu
+10.875,79.375,Tamil Nadu
+10.875,79.625,Tamil Nadu
+11.125,75.875,Kerala
+11.125,76.125,Kerala
+11.125,76.375,Kerala
+11.125,76.625,Kerala
+11.125,76.875,Tamil Nadu
+11.125,77.125,Tamil Nadu
+11.125,77.375,Tamil Nadu
+11.125,77.625,Tamil Nadu
+11.125,77.875,Tamil Nadu
+11.125,78.125,Tamil Nadu
+11.125,78.375,Tamil Nadu
+11.125,78.625,Tamil Nadu
+11.125,78.875,Tamil Nadu
+11.125,79.125,Tamil Nadu
+11.125,79.375,Tamil Nadu
+11.125,79.625,Tamil Nadu
+11.375,75.875,Kerala
+11.375,76.125,Kerala
+11.375,76.375,Kerala
+11.375,76.625,Tamil Nadu
+11.375,76.875,Tamil Nadu
+11.375,77.125,Tamil Nadu
+11.375,77.375,Tamil Nadu
+11.375,77.625,Tamil Nadu
+11.375,77.875,Tamil Nadu
+11.375,78.125,Tamil Nadu
+11.375,78.375,Tamil Nadu
+11.375,78.625,Tamil Nadu
+11.375,78.875,Tamil Nadu
+11.375,79.125,Tamil Nadu
+11.375,79.375,Tamil Nadu
+11.375,79.625,Tamil Nadu
+11.625,75.625,Kerala
+11.625,75.875,Kerala
+11.625,76.125,Kerala
+11.625,76.375,Kerala
+11.625,76.625,Karnataka
+11.625,76.875,Tamil Nadu
+11.625,77.125,Tamil Nadu
+11.625,77.375,Tamil Nadu
+11.625,77.625,Tamil Nadu
+11.625,77.875,Tamil Nadu
+11.625,78.125,Tamil Nadu
+11.625,78.375,Tamil Nadu
+11.625,78.625,Tamil Nadu
+11.625,78.875,Tamil Nadu
+11.625,79.125,Tamil Nadu
+11.625,79.375,Tamil Nadu
+11.625,79.625,Tamil Nadu
+11.875,75.375,Kerala
+11.875,75.625,Kerala
+11.875,75.875,Kerala
+11.875,76.125,Karnataka
+11.875,76.375,Karnataka
+11.875,76.625,Karnataka
+11.875,76.875,Karnataka
+11.875,77.125,Karnataka
+11.875,77.375,Karnataka
+11.875,77.625,Tamil Nadu
+11.875,77.875,Tamil Nadu
+11.875,78.125,Tamil Nadu
+11.875,78.375,Tamil Nadu
+11.875,78.625,Tamil Nadu
+11.875,78.875,Tamil Nadu
+11.875,79.125,Tamil Nadu
+11.875,79.375,Tamil Nadu
+11.875,79.625,Puducherry
+12.125,75.125,Kerala
+12.125,75.375,Kerala
+12.125,75.625,Kerala
+12.125,75.875,Karnataka
+12.125,76.125,Karnataka
+12.125,76.375,Karnataka
+12.125,76.625,Karnataka
+12.125,76.875,Karnataka
+12.125,77.125,Karnataka
+12.125,77.375,Karnataka
+12.125,77.625,Karnataka
+12.125,77.875,Tamil Nadu
+12.125,78.125,Tamil Nadu
+12.125,78.375,Tamil Nadu
+12.125,78.625,Tamil Nadu
+12.125,78.875,Tamil Nadu
+12.125,79.125,Tamil Nadu
+12.125,79.375,Tamil Nadu
+12.125,79.625,Tamil Nadu
+12.375,75.125,Kerala
+12.375,75.375,Kerala
+12.375,75.625,Karnataka
+12.375,75.875,Karnataka
+12.375,76.125,Karnataka
+12.375,76.375,Karnataka
+12.375,76.625,Karnataka
+12.375,76.875,Karnataka
+12.375,77.125,Karnataka
+12.375,77.375,Karnataka
+12.375,77.625,Tamil Nadu
+12.375,77.875,Tamil Nadu
+12.375,78.125,Tamil Nadu
+12.375,78.375,Tamil Nadu
+12.375,78.625,Tamil Nadu
+12.375,78.875,Tamil Nadu
+12.375,79.125,Tamil Nadu
+12.375,79.375,Tamil Nadu
+12.375,79.625,Tamil Nadu
+12.625,75.125,Kerala
+12.625,75.375,Karnataka
+12.625,75.625,Karnataka
+12.625,75.875,Karnataka
+12.625,76.125,Karnataka
+12.625,76.375,Karnataka
+12.625,76.625,Karnataka
+12.625,76.875,Karnataka
+12.625,77.125,Karnataka
+12.625,77.375,Karnataka
+12.625,77.625,Tamil Nadu
+12.625,77.875,Tamil Nadu
+12.625,78.125,Tamil Nadu
+12.625,78.375,Tamil Nadu
+12.625,78.625,Tamil Nadu
+12.625,78.875,Tamil Nadu
+12.625,79.125,Tamil Nadu
+12.625,79.375,Tamil Nadu
+12.625,79.625,Tamil Nadu
+12.625,79.875,Tamil Nadu
+12.875,74.875,Karnataka
+12.875,75.125,Karnataka
+12.875,75.375,Karnataka
+12.875,75.625,Karnataka
+12.875,75.875,Karnataka
+12.875,76.125,Karnataka
+12.875,76.375,Karnataka
+12.875,76.625,Karnataka
+12.875,76.875,Karnataka
+12.875,77.125,Karnataka
+12.875,77.375,Karnataka
+12.875,77.625,Karnataka
+12.875,77.875,Karnataka
+12.875,78.125,Karnataka
+12.875,78.375,Andhra Pradesh
+12.875,78.625,Tamil Nadu
+12.875,78.875,Tamil Nadu
+12.875,79.125,Tamil Nadu
+12.875,79.375,Tamil Nadu
+12.875,79.625,Tamil Nadu
+12.875,79.875,Tamil Nadu
+13.125,74.875,Karnataka
+13.125,75.125,Karnataka
+13.125,75.375,Karnataka
+13.125,75.625,Karnataka
+13.125,75.875,Karnataka
+13.125,76.125,Karnataka
+13.125,76.375,Karnataka
+13.125,76.625,Karnataka
+13.125,76.875,Karnataka
+13.125,77.125,Karnataka
+13.125,77.375,Karnataka
+13.125,77.625,Karnataka
+13.125,77.875,Karnataka
+13.125,78.125,Karnataka
+13.125,78.375,Karnataka
+13.125,78.625,Andhra Pradesh
+13.125,78.875,Andhra Pradesh
+13.125,79.125,Andhra Pradesh
+13.125,79.375,Tamil Nadu
+13.125,79.625,Tamil Nadu
+13.125,79.875,Tamil Nadu
+13.375,74.625,Karnataka
+13.375,74.875,Karnataka
+13.375,75.125,Karnataka
+13.375,75.375,Karnataka
+13.375,75.625,Karnataka
+13.375,75.875,Karnataka
+13.375,76.125,Karnataka
+13.375,76.375,Karnataka
+13.375,76.625,Karnataka
+13.375,76.875,Karnataka
+13.375,77.125,Karnataka
+13.375,77.375,Karnataka
+13.375,77.625,Karnataka
+13.375,77.875,Karnataka
+13.375,78.125,Karnataka
+13.375,78.375,Andhra Pradesh
+13.375,78.625,Andhra Pradesh
+13.375,78.875,Andhra Pradesh
+13.375,79.125,Andhra Pradesh
+13.375,79.375,Andhra Pradesh
+13.375,79.625,Andhra Pradesh
+13.375,79.875,Andhra Pradesh
+13.375,80.125,Tamil Nadu
+13.625,74.625,Karnataka
+13.625,74.875,Karnataka
+13.625,75.125,Karnataka
+13.625,75.375,Karnataka
+13.625,75.625,Karnataka
+13.625,75.875,Karnataka
+13.625,76.125,Karnataka
+13.625,76.375,Karnataka
+13.625,76.625,Karnataka
+13.625,76.875,Karnataka
+13.625,77.125,Karnataka
+13.625,77.375,Karnataka
+13.625,77.625,Karnataka
+13.625,77.875,Karnataka
+13.625,78.125,Karnataka
+13.625,78.375,Andhra Pradesh
+13.625,78.625,Andhra Pradesh
+13.625,78.875,Andhra Pradesh
+13.625,79.125,Andhra Pradesh
+13.625,79.375,Andhra Pradesh
+13.625,79.625,Andhra Pradesh
+13.625,79.875,Andhra Pradesh
+13.625,80.125,Andhra Pradesh
+13.875,74.625,Karnataka
+13.875,74.875,Karnataka
+13.875,75.125,Karnataka
+13.875,75.375,Karnataka
+13.875,75.625,Karnataka
+13.875,75.875,Karnataka
+13.875,76.125,Karnataka
+13.875,76.375,Karnataka
+13.875,76.625,Karnataka
+13.875,76.875,Karnataka
+13.875,77.125,Andhra Pradesh
+13.875,77.375,Andhra Pradesh
+13.875,77.625,Andhra Pradesh
+13.875,77.875,Karnataka
+13.875,78.125,Andhra Pradesh
+13.875,78.375,Andhra Pradesh
+13.875,78.625,Andhra Pradesh
+13.875,78.875,Andhra Pradesh
+13.875,79.125,Andhra Pradesh
+13.875,79.375,Andhra Pradesh
+13.875,79.625,Andhra Pradesh
+13.875,79.875,Andhra Pradesh
+14.125,74.625,Karnataka
+14.125,74.875,Karnataka
+14.125,75.125,Karnataka
+14.125,75.375,Karnataka
+14.125,75.625,Karnataka
+14.125,75.875,Karnataka
+14.125,76.125,Karnataka
+14.125,76.375,Karnataka
+14.125,76.625,Karnataka
+14.125,76.875,Karnataka
+14.125,77.125,Karnataka
+14.125,77.375,Andhra Pradesh
+14.125,77.625,Andhra Pradesh
+14.125,77.875,Andhra Pradesh
+14.125,78.125,Andhra Pradesh
+14.125,78.375,Andhra Pradesh
+14.125,78.625,Andhra Pradesh
+14.125,78.875,Andhra Pradesh
+14.125,79.125,Andhra Pradesh
+14.125,79.375,Andhra Pradesh
+14.125,79.625,Andhra Pradesh
+14.125,79.875,Andhra Pradesh
+14.375,74.375,Karnataka
+14.375,74.625,Karnataka
+14.375,74.875,Karnataka
+14.375,75.125,Karnataka
+14.375,75.375,Karnataka
+14.375,75.625,Karnataka
+14.375,75.875,Karnataka
+14.375,76.125,Karnataka
+14.375,76.375,Karnataka
+14.375,76.625,Karnataka
+14.375,76.875,Karnataka
+14.375,77.125,Andhra Pradesh
+14.375,77.375,Andhra Pradesh
+14.375,77.625,Andhra Pradesh
+14.375,77.875,Andhra Pradesh
+14.375,78.125,Andhra Pradesh
+14.375,78.375,Andhra Pradesh
+14.375,78.625,Andhra Pradesh
+14.375,78.875,Andhra Pradesh
+14.375,79.125,Andhra Pradesh
+14.375,79.375,Andhra Pradesh
+14.375,79.625,Andhra Pradesh
+14.375,79.875,Andhra Pradesh
+14.625,74.375,Karnataka
+14.625,74.625,Karnataka
+14.625,74.875,Karnataka
+14.625,75.125,Karnataka
+14.625,75.375,Karnataka
+14.625,75.625,Karnataka
+14.625,75.875,Karnataka
+14.625,76.125,Karnataka
+14.625,76.375,Karnataka
+14.625,76.625,Karnataka
+14.625,76.875,Andhra Pradesh
+14.625,77.125,Andhra Pradesh
+14.625,77.375,Andhra Pradesh
+14.625,77.625,Andhra Pradesh
+14.625,77.875,Andhra Pradesh
+14.625,78.125,Andhra Pradesh
+14.625,78.375,Andhra Pradesh
+14.625,78.625,Andhra Pradesh
+14.625,78.875,Andhra Pradesh
+14.625,79.125,Andhra Pradesh
+14.625,79.375,Andhra Pradesh
+14.625,79.625,Andhra Pradesh
+14.625,79.875,Andhra Pradesh
+14.875,74.375,Karnataka
+14.875,74.625,Karnataka
+14.875,74.875,Karnataka
+14.875,75.125,Karnataka
+14.875,75.375,Karnataka
+14.875,75.625,Karnataka
+14.875,75.875,Karnataka
+14.875,76.125,Karnataka
+14.875,76.375,Karnataka
+14.875,76.625,Karnataka
+14.875,76.875,Andhra Pradesh
+14.875,77.125,Andhra Pradesh
+14.875,77.375,Andhra Pradesh
+14.875,77.625,Andhra Pradesh
+14.875,77.875,Andhra Pradesh
+14.875,78.125,Andhra Pradesh
+14.875,78.375,Andhra Pradesh
+14.875,78.625,Andhra Pradesh
+14.875,78.875,Andhra Pradesh
+14.875,79.125,Andhra Pradesh
+14.875,79.375,Andhra Pradesh
+14.875,79.625,Andhra Pradesh
+14.875,79.875,Andhra Pradesh
+15.125,74.125,Goa
+15.125,74.375,Karnataka
+15.125,74.625,Karnataka
+15.125,74.875,Karnataka
+15.125,75.125,Karnataka
+15.125,75.375,Karnataka
+15.125,75.625,Karnataka
+15.125,75.875,Karnataka
+15.125,76.125,Karnataka
+15.125,76.375,Karnataka
+15.125,76.625,Karnataka
+15.125,76.875,Karnataka
+15.125,77.125,Karnataka
+15.125,77.375,Andhra Pradesh
+15.125,77.625,Andhra Pradesh
+15.125,77.875,Andhra Pradesh
+15.125,78.125,Andhra Pradesh
+15.125,78.375,Andhra Pradesh
+15.125,78.625,Andhra Pradesh
+15.125,78.875,Andhra Pradesh
+15.125,79.125,Andhra Pradesh
+15.125,79.375,Andhra Pradesh
+15.125,79.625,Andhra Pradesh
+15.125,79.875,Andhra Pradesh
+15.375,73.875,Goa
+15.375,74.125,Goa
+15.375,74.375,Karnataka
+15.375,74.625,Karnataka
+15.375,74.875,Karnataka
+15.375,75.125,Karnataka
+15.375,75.375,Karnataka
+15.375,75.625,Karnataka
+15.375,75.875,Karnataka
+15.375,76.125,Karnataka
+15.375,76.375,Karnataka
+15.375,76.625,Karnataka
+15.375,76.875,Karnataka
+15.375,77.125,Andhra Pradesh
+15.375,77.375,Andhra Pradesh
+15.375,77.625,Andhra Pradesh
+15.375,77.875,Andhra Pradesh
+15.375,78.125,Andhra Pradesh
+15.375,78.375,Andhra Pradesh
+15.375,78.625,Andhra Pradesh
+15.375,78.875,Andhra Pradesh
+15.375,79.125,Andhra Pradesh
+15.375,79.375,Andhra Pradesh
+15.375,79.625,Andhra Pradesh
+15.375,79.875,Andhra Pradesh
+15.625,73.875,Goa
+15.625,74.125,Goa
+15.625,74.375,Karnataka
+15.625,74.625,Karnataka
+15.625,74.875,Karnataka
+15.625,75.125,Karnataka
+15.625,75.375,Karnataka
+15.625,75.625,Karnataka
+15.625,75.875,Karnataka
+15.625,76.125,Karnataka
+15.625,76.375,Karnataka
+15.625,76.625,Karnataka
+15.625,76.875,Karnataka
+15.625,77.125,Andhra Pradesh
+15.625,77.375,Andhra Pradesh
+15.625,77.625,Andhra Pradesh
+15.625,77.875,Andhra Pradesh
+15.625,78.125,Andhra Pradesh
+15.625,78.375,Andhra Pradesh
+15.625,78.625,Andhra Pradesh
+15.625,78.875,Andhra Pradesh
+15.625,79.125,Andhra Pradesh
+15.625,79.375,Andhra Pradesh
+15.625,79.625,Andhra Pradesh
+15.625,79.875,Andhra Pradesh
+15.875,73.625,Maharashtra
+15.875,73.875,Maharashtra
+15.875,74.125,Maharashtra
+15.875,74.375,Karnataka
+15.875,74.625,Karnataka
+15.875,74.875,Karnataka
+15.875,75.125,Karnataka
+15.875,75.375,Karnataka
+15.875,75.625,Karnataka
+15.875,75.875,Karnataka
+15.875,76.125,Karnataka
+15.875,76.375,Karnataka
+15.875,76.625,Karnataka
+15.875,76.875,Karnataka
+15.875,77.125,Andhra Pradesh
+15.875,77.375,Andhra Pradesh
+15.875,77.625,Andhra Pradesh
+15.875,77.875,Andhra Pradesh
+15.875,78.125,Telangana
+15.875,78.375,Andhra Pradesh
+15.875,78.625,Andhra Pradesh
+15.875,78.875,Andhra Pradesh
+15.875,79.125,Andhra Pradesh
+15.875,79.375,Andhra Pradesh
+15.875,79.625,Andhra Pradesh
+15.875,79.875,Andhra Pradesh
+15.875,80.125,Andhra Pradesh
+16.125,73.625,Maharashtra
+16.125,73.875,Maharashtra
+16.125,74.125,Maharashtra
+16.125,74.375,Maharashtra
+16.125,74.625,Karnataka
+16.125,74.875,Karnataka
+16.125,75.125,Karnataka
+16.125,75.375,Karnataka
+16.125,75.625,Karnataka
+16.125,75.875,Karnataka
+16.125,76.125,Karnataka
+16.125,76.375,Karnataka
+16.125,76.625,Karnataka
+16.125,76.875,Karnataka
+16.125,77.125,Karnataka
+16.125,77.375,Karnataka
+16.125,77.625,Telangana
+16.125,77.875,Telangana
+16.125,78.125,Telangana
+16.125,78.375,Telangana
+16.125,78.625,Telangana
+16.125,78.875,Andhra Pradesh
+16.125,79.125,Andhra Pradesh
+16.125,79.375,Andhra Pradesh
+16.125,79.625,Andhra Pradesh
+16.125,79.875,Andhra Pradesh
+16.125,80.125,Andhra Pradesh
+16.125,80.375,Andhra Pradesh
+16.125,80.625,Andhra Pradesh
+16.125,80.875,Andhra Pradesh
+16.375,73.375,Maharashtra
+16.375,73.625,Maharashtra
+16.375,73.875,Maharashtra
+16.375,74.125,Maharashtra
+16.375,74.375,Karnataka
+16.375,74.625,Karnataka
+16.375,74.875,Karnataka
+16.375,75.125,Karnataka
+16.375,75.375,Karnataka
+16.375,75.625,Karnataka
+16.375,75.875,Karnataka
+16.375,76.125,Karnataka
+16.375,76.375,Karnataka
+16.375,76.625,Karnataka
+16.375,76.875,Karnataka
+16.375,77.125,Karnataka
+16.375,77.375,Karnataka
+16.375,77.625,Telangana
+16.375,77.875,Telangana
+16.375,78.125,Telangana
+16.375,78.375,Telangana
+16.375,78.625,Telangana
+16.375,78.875,Telangana
+16.375,79.125,Telangana
+16.375,79.375,Andhra Pradesh
+16.375,79.625,Andhra Pradesh
+16.375,79.875,Andhra Pradesh
+16.375,80.125,Andhra Pradesh
+16.375,80.375,Andhra Pradesh
+16.375,80.625,Andhra Pradesh
+16.375,80.875,Andhra Pradesh
+16.625,73.375,Maharashtra
+16.625,73.625,Maharashtra
+16.625,73.875,Maharashtra
+16.625,74.125,Maharashtra
+16.625,74.375,Maharashtra
+16.625,74.625,Maharashtra
+16.625,74.875,Karnataka
+16.625,75.125,Karnataka
+16.625,75.375,Karnataka
+16.625,75.625,Karnataka
+16.625,75.875,Karnataka
+16.625,76.125,Karnataka
+16.625,76.375,Karnataka
+16.625,76.625,Karnataka
+16.625,76.875,Karnataka
+16.625,77.125,Karnataka
+16.625,77.375,Karnataka
+16.625,77.625,Telangana
+16.625,77.875,Telangana
+16.625,78.125,Telangana
+16.625,78.375,Telangana
+16.625,78.625,Telangana
+16.625,78.875,Telangana
+16.625,79.125,Telangana
+16.625,79.375,Telangana
+16.625,79.625,Andhra Pradesh
+16.625,79.875,Andhra Pradesh
+16.625,80.125,Andhra Pradesh
+16.625,80.375,Andhra Pradesh
+16.625,80.625,Andhra Pradesh
+16.625,80.875,Andhra Pradesh
+16.625,81.125,Andhra Pradesh
+16.625,81.375,Andhra Pradesh
+16.625,81.625,Andhra Pradesh
+16.625,81.875,Andhra Pradesh
+16.875,73.375,Maharashtra
+16.875,73.625,Maharashtra
+16.875,73.875,Maharashtra
+16.875,74.125,Maharashtra
+16.875,74.375,Maharashtra
+16.875,74.625,Maharashtra
+16.875,74.875,Maharashtra
+16.875,75.125,Karnataka
+16.875,75.375,Karnataka
+16.875,75.625,Karnataka
+16.875,75.875,Karnataka
+16.875,76.125,Karnataka
+16.875,76.375,Karnataka
+16.875,76.625,Karnataka
+16.875,76.875,Karnataka
+16.875,77.125,Karnataka
+16.875,77.375,Karnataka
+16.875,77.625,Telangana
+16.875,77.875,Telangana
+16.875,78.125,Telangana
+16.875,78.375,Telangana
+16.875,78.625,Telangana
+16.875,78.875,Telangana
+16.875,79.125,Telangana
+16.875,79.375,Telangana
+16.875,79.625,Telangana
+16.875,79.875,Telangana
+16.875,80.125,Andhra Pradesh
+16.875,80.375,Telangana
+16.875,80.625,Andhra Pradesh
+16.875,80.875,Andhra Pradesh
+16.875,81.125,Andhra Pradesh
+16.875,81.375,Andhra Pradesh
+16.875,81.625,Andhra Pradesh
+16.875,81.875,Andhra Pradesh
+16.875,82.125,Andhra Pradesh
+17.125,73.375,Maharashtra
+17.125,73.625,Maharashtra
+17.125,73.875,Maharashtra
+17.125,74.125,Maharashtra
+17.125,74.375,Maharashtra
+17.125,74.625,Maharashtra
+17.125,74.875,Maharashtra
+17.125,75.125,Maharashtra
+17.125,75.375,Maharashtra
+17.125,75.625,Maharashtra
+17.125,75.875,Karnataka
+17.125,76.125,Karnataka
+17.125,76.375,Karnataka
+17.125,76.625,Karnataka
+17.125,76.875,Karnataka
+17.125,77.125,Karnataka
+17.125,77.375,Karnataka
+17.125,77.625,Telangana
+17.125,77.875,Telangana
+17.125,78.125,Telangana
+17.125,78.375,Telangana
+17.125,78.625,Telangana
+17.125,78.875,Telangana
+17.125,79.125,Telangana
+17.125,79.375,Telangana
+17.125,79.625,Telangana
+17.125,79.875,Telangana
+17.125,80.125,Telangana
+17.125,80.375,Telangana
+17.125,80.625,Andhra Pradesh
+17.125,80.875,Andhra Pradesh
+17.125,81.125,Andhra Pradesh
+17.125,81.375,Andhra Pradesh
+17.125,81.625,Andhra Pradesh
+17.125,81.875,Andhra Pradesh
+17.125,82.125,Andhra Pradesh
+17.375,73.375,Maharashtra
+17.375,73.625,Maharashtra
+17.375,73.875,Maharashtra
+17.375,74.125,Maharashtra
+17.375,74.375,Maharashtra
+17.375,74.625,Maharashtra
+17.375,74.875,Maharashtra
+17.375,75.125,Maharashtra
+17.375,75.375,Maharashtra
+17.375,75.625,Karnataka
+17.375,75.875,Karnataka
+17.375,76.125,Maharashtra
+17.375,76.375,Maharashtra
+17.375,76.625,Karnataka
+17.375,76.875,Karnataka
+17.375,77.125,Karnataka
+17.375,77.375,Karnataka
+17.375,77.625,Telangana
+17.375,77.875,Telangana
+17.375,78.125,Telangana
+17.375,78.375,Telangana
+17.375,78.625,Telangana
+17.375,78.875,Telangana
+17.375,79.125,Telangana
+17.375,79.375,Telangana
+17.375,79.625,Telangana
+17.375,79.875,Telangana
+17.375,80.125,Telangana
+17.375,80.375,Telangana
+17.375,80.625,Telangana
+17.375,80.875,Telangana
+17.375,81.125,Telangana
+17.375,81.375,Andhra Pradesh
+17.375,81.625,Andhra Pradesh
+17.375,81.875,Andhra Pradesh
+17.375,82.125,Andhra Pradesh
+17.375,82.375,Andhra Pradesh
+17.625,73.125,Maharashtra
+17.625,73.375,Maharashtra
+17.625,73.625,Maharashtra
+17.625,73.875,Maharashtra
+17.625,74.125,Maharashtra
+17.625,74.375,Maharashtra
+17.625,74.625,Maharashtra
+17.625,74.875,Maharashtra
+17.625,75.125,Maharashtra
+17.625,75.375,Maharashtra
+17.625,75.625,Maharashtra
+17.625,75.875,Maharashtra
+17.625,76.125,Maharashtra
+17.625,76.375,Maharashtra
+17.625,76.625,Karnataka
+17.625,76.875,Karnataka
+17.625,77.125,Karnataka
+17.625,77.375,Karnataka
+17.625,77.625,Telangana
+17.625,77.875,Telangana
+17.625,78.125,Telangana
+17.625,78.375,Telangana
+17.625,78.625,Telangana
+17.625,78.875,Telangana
+17.625,79.125,Telangana
+17.625,79.375,Telangana
+17.625,79.625,Telangana
+17.625,79.875,Telangana
+17.625,80.125,Telangana
+17.625,80.375,Telangana
+17.625,80.625,Telangana
+17.625,80.875,Telangana
+17.625,81.125,Andhra Pradesh
+17.625,81.375,Andhra Pradesh
+17.625,81.625,Andhra Pradesh
+17.625,81.875,Andhra Pradesh
+17.625,82.125,Andhra Pradesh
+17.625,82.375,Andhra Pradesh
+17.625,82.625,Andhra Pradesh
+17.875,73.125,Maharashtra
+17.875,73.375,Maharashtra
+17.875,73.625,Maharashtra
+17.875,73.875,Maharashtra
+17.875,74.125,Maharashtra
+17.875,74.375,Maharashtra
+17.875,74.625,Maharashtra
+17.875,74.875,Maharashtra
+17.875,75.125,Maharashtra
+17.875,75.375,Maharashtra
+17.875,75.625,Maharashtra
+17.875,75.875,Maharashtra
+17.875,76.125,Maharashtra
+17.875,76.375,Maharashtra
+17.875,76.625,Maharashtra
+17.875,76.875,Karnataka
+17.875,77.125,Karnataka
+17.875,77.375,Karnataka
+17.875,77.625,Telangana
+17.875,77.875,Telangana
+17.875,78.125,Telangana
+17.875,78.375,Telangana
+17.875,78.625,Telangana
+17.875,78.875,Telangana
+17.875,79.125,Telangana
+17.875,79.375,Telangana
+17.875,79.625,Telangana
+17.875,79.875,Telangana
+17.875,80.125,Telangana
+17.875,80.375,Telangana
+17.875,80.625,Telangana
+17.875,80.875,Telangana
+17.875,81.125,Chhattisgarh
+17.875,81.375,Chhattisgarh
+17.875,81.625,Odisha
+17.875,81.875,Andhra Pradesh
+17.875,82.125,Andhra Pradesh
+17.875,82.375,Andhra Pradesh
+17.875,82.625,Andhra Pradesh
+17.875,82.875,Andhra Pradesh
+17.875,83.125,Andhra Pradesh
+18.125,73.125,Maharashtra
+18.125,73.375,Maharashtra
+18.125,73.625,Maharashtra
+18.125,73.875,Maharashtra
+18.125,74.125,Maharashtra
+18.125,74.375,Maharashtra
+18.125,74.625,Maharashtra
+18.125,74.875,Maharashtra
+18.125,75.125,Maharashtra
+18.125,75.375,Maharashtra
+18.125,75.625,Maharashtra
+18.125,75.875,Maharashtra
+18.125,76.125,Maharashtra
+18.125,76.375,Maharashtra
+18.125,76.625,Maharashtra
+18.125,76.875,Maharashtra
+18.125,77.125,Karnataka
+18.125,77.375,Karnataka
+18.125,77.625,Telangana
+18.125,77.875,Telangana
+18.125,78.125,Telangana
+18.125,78.375,Telangana
+18.125,78.625,Telangana
+18.125,78.875,Telangana
+18.125,79.125,Telangana
+18.125,79.375,Telangana
+18.125,79.625,Telangana
+18.125,79.875,Telangana
+18.125,80.125,Telangana
+18.125,80.375,Telangana
+18.125,80.625,Telangana
+18.125,80.875,Telangana
+18.125,81.125,Chhattisgarh
+18.125,81.375,Chhattisgarh
+18.125,81.625,Odisha
+18.125,81.875,Odisha
+18.125,82.125,Odisha
+18.125,82.375,Andhra Pradesh
+18.125,82.625,Andhra Pradesh
+18.125,82.875,Andhra Pradesh
+18.125,83.125,Andhra Pradesh
+18.125,83.375,Andhra Pradesh
+18.375,72.875,Maharashtra
+18.375,73.125,Maharashtra
+18.375,73.375,Maharashtra
+18.375,73.625,Maharashtra
+18.375,73.875,Maharashtra
+18.375,74.125,Maharashtra
+18.375,74.375,Maharashtra
+18.375,74.625,Maharashtra
+18.375,74.875,Maharashtra
+18.375,75.125,Maharashtra
+18.375,75.375,Maharashtra
+18.375,75.625,Maharashtra
+18.375,75.875,Maharashtra
+18.375,76.125,Maharashtra
+18.375,76.375,Maharashtra
+18.375,76.625,Maharashtra
+18.375,76.875,Maharashtra
+18.375,77.125,Maharashtra
+18.375,77.375,Karnataka
+18.375,77.625,Telangana
+18.375,77.875,Telangana
+18.375,78.125,Telangana
+18.375,78.375,Telangana
+18.375,78.625,Telangana
+18.375,78.875,Telangana
+18.375,79.125,Telangana
+18.375,79.375,Telangana
+18.375,79.625,Telangana
+18.375,79.875,Telangana
+18.375,80.125,Telangana
+18.375,80.375,Telangana
+18.375,80.625,Telangana
+18.375,80.875,Chhattisgarh
+18.375,81.125,Chhattisgarh
+18.375,81.375,Chhattisgarh
+18.375,81.625,Chhattisgarh
+18.375,81.875,Odisha
+18.375,82.125,Odisha
+18.375,82.375,Odisha
+18.375,82.625,Odisha
+18.375,82.875,Andhra Pradesh
+18.375,83.125,Andhra Pradesh
+18.375,83.375,Andhra Pradesh
+18.375,83.625,Andhra Pradesh
+18.625,72.875,Maharashtra
+18.625,73.125,Maharashtra
+18.625,73.375,Maharashtra
+18.625,73.625,Maharashtra
+18.625,73.875,Maharashtra
+18.625,74.125,Maharashtra
+18.625,74.375,Maharashtra
+18.625,74.625,Maharashtra
+18.625,74.875,Maharashtra
+18.625,75.125,Maharashtra
+18.625,75.375,Maharashtra
+18.625,75.625,Maharashtra
+18.625,75.875,Maharashtra
+18.625,76.125,Maharashtra
+18.625,76.375,Maharashtra
+18.625,76.625,Maharashtra
+18.625,76.875,Maharashtra
+18.625,77.125,Maharashtra
+18.625,77.375,Maharashtra
+18.625,77.625,Maharashtra
+18.625,77.875,Telangana
+18.625,78.125,Telangana
+18.625,78.375,Telangana
+18.625,78.625,Telangana
+18.625,78.875,Telangana
+18.625,79.125,Telangana
+18.625,79.375,Telangana
+18.625,79.625,Telangana
+18.625,79.875,Telangana
+18.625,80.125,Telangana
+18.625,80.375,Chhattisgarh
+18.625,80.625,Chhattisgarh
+18.625,80.875,Chhattisgarh
+18.625,81.125,Chhattisgarh
+18.625,81.375,Chhattisgarh
+18.625,81.625,Chhattisgarh
+18.625,81.875,Chhattisgarh
+18.625,82.125,Odisha
+18.625,82.375,Odisha
+18.625,82.625,Odisha
+18.625,82.875,Odisha
+18.625,83.125,Andhra Pradesh
+18.625,83.375,Andhra Pradesh
+18.625,83.625,Andhra Pradesh
+18.625,83.875,Andhra Pradesh
+18.875,72.875,Maharashtra
+18.875,73.125,Maharashtra
+18.875,73.375,Maharashtra
+18.875,73.625,Maharashtra
+18.875,73.875,Maharashtra
+18.875,74.125,Maharashtra
+18.875,74.375,Maharashtra
+18.875,74.625,Maharashtra
+18.875,74.875,Maharashtra
+18.875,75.125,Maharashtra
+18.875,75.375,Maharashtra
+18.875,75.625,Maharashtra
+18.875,75.875,Maharashtra
+18.875,76.125,Maharashtra
+18.875,76.375,Maharashtra
+18.875,76.625,Maharashtra
+18.875,76.875,Maharashtra
+18.875,77.125,Maharashtra
+18.875,77.375,Maharashtra
+18.875,77.625,Maharashtra
+18.875,77.875,Maharashtra
+18.875,78.125,Telangana
+18.875,78.375,Telangana
+18.875,78.625,Telangana
+18.875,78.875,Telangana
+18.875,79.125,Telangana
+18.875,79.375,Telangana
+18.875,79.625,Telangana
+18.875,79.875,Telangana
+18.875,80.125,Maharashtra
+18.875,80.375,Chhattisgarh
+18.875,80.625,Chhattisgarh
+18.875,80.875,Chhattisgarh
+18.875,81.125,Chhattisgarh
+18.875,81.375,Chhattisgarh
+18.875,81.625,Chhattisgarh
+18.875,81.875,Chhattisgarh
+18.875,82.125,Chhattisgarh
+18.875,82.375,Odisha
+18.875,82.625,Odisha
+18.875,82.875,Odisha
+18.875,83.125,Odisha
+18.875,83.375,Odisha
+18.875,83.625,Andhra Pradesh
+18.875,83.875,Odisha
+18.875,84.125,Odisha
+19.125,72.875,Maharashtra
+19.125,73.125,Maharashtra
+19.125,73.375,Maharashtra
+19.125,73.625,Maharashtra
+19.125,73.875,Maharashtra
+19.125,74.125,Maharashtra
+19.125,74.375,Maharashtra
+19.125,74.625,Maharashtra
+19.125,74.875,Maharashtra
+19.125,75.125,Maharashtra
+19.125,75.375,Maharashtra
+19.125,75.625,Maharashtra
+19.125,75.875,Maharashtra
+19.125,76.125,Maharashtra
+19.125,76.375,Maharashtra
+19.125,76.625,Maharashtra
+19.125,76.875,Maharashtra
+19.125,77.125,Maharashtra
+19.125,77.375,Maharashtra
+19.125,77.625,Maharashtra
+19.125,77.875,Telangana
+19.125,78.125,Telangana
+19.125,78.375,Telangana
+19.125,78.625,Telangana
+19.125,78.875,Telangana
+19.125,79.125,Telangana
+19.125,79.375,Telangana
+19.125,79.625,Telangana
+19.125,79.875,Telangana
+19.125,80.125,Maharashtra
+19.125,80.375,Chhattisgarh
+19.125,80.625,Chhattisgarh
+19.125,80.875,Chhattisgarh
+19.125,81.125,Chhattisgarh
+19.125,81.375,Chhattisgarh
+19.125,81.625,Chhattisgarh
+19.125,81.875,Chhattisgarh
+19.125,82.125,Chhattisgarh
+19.125,82.375,Odisha
+19.125,82.625,Odisha
+19.125,82.875,Odisha
+19.125,83.125,Odisha
+19.125,83.375,Odisha
+19.125,83.625,Andhra Pradesh
+19.125,83.875,Odisha
+19.125,84.125,Odisha
+19.125,84.375,Odisha
+19.375,72.875,Maharashtra
+19.375,73.125,Maharashtra
+19.375,73.375,Maharashtra
+19.375,73.625,Maharashtra
+19.375,73.875,Maharashtra
+19.375,74.125,Maharashtra
+19.375,74.375,Maharashtra
+19.375,74.625,Maharashtra
+19.375,74.875,Maharashtra
+19.375,75.125,Maharashtra
+19.375,75.375,Maharashtra
+19.375,75.625,Maharashtra
+19.375,75.875,Maharashtra
+19.375,76.125,Maharashtra
+19.375,76.375,Maharashtra
+19.375,76.625,Maharashtra
+19.375,76.875,Maharashtra
+19.375,77.125,Maharashtra
+19.375,77.375,Maharashtra
+19.375,77.625,Maharashtra
+19.375,77.875,Maharashtra
+19.375,78.125,Maharashtra
+19.375,78.375,Telangana
+19.375,78.625,Telangana
+19.375,78.875,Telangana
+19.375,79.125,Telangana
+19.375,79.375,Telangana
+19.375,79.625,Telangana
+19.375,79.875,Telangana
+19.375,80.125,Maharashtra
+19.375,80.375,Maharashtra
+19.375,80.625,Maharashtra
+19.375,80.875,Chhattisgarh
+19.375,81.125,Chhattisgarh
+19.375,81.375,Chhattisgarh
+19.375,81.625,Chhattisgarh
+19.375,81.875,Chhattisgarh
+19.375,82.125,Chhattisgarh
+19.375,82.375,Odisha
+19.375,82.625,Odisha
+19.375,82.875,Odisha
+19.375,83.125,Odisha
+19.375,83.375,Odisha
+19.375,83.625,Odisha
+19.375,83.875,Odisha
+19.375,84.125,Odisha
+19.375,84.375,Odisha
+19.375,84.625,Odisha
+19.625,72.875,Maharashtra
+19.625,73.125,Maharashtra
+19.625,73.375,Maharashtra
+19.625,73.625,Maharashtra
+19.625,73.875,Maharashtra
+19.625,74.125,Maharashtra
+19.625,74.375,Maharashtra
+19.625,74.625,Maharashtra
+19.625,74.875,Maharashtra
+19.625,75.125,Maharashtra
+19.625,75.375,Maharashtra
+19.625,75.625,Maharashtra
+19.625,75.875,Maharashtra
+19.625,76.125,Maharashtra
+19.625,76.375,Maharashtra
+19.625,76.625,Maharashtra
+19.625,76.875,Maharashtra
+19.625,77.125,Maharashtra
+19.625,77.375,Maharashtra
+19.625,77.625,Maharashtra
+19.625,77.875,Maharashtra
+19.625,78.125,Maharashtra
+19.625,78.375,Telangana
+19.625,78.625,Telangana
+19.625,78.875,Telangana
+19.625,79.125,Maharashtra
+19.625,79.375,Maharashtra
+19.625,79.625,Maharashtra
+19.625,79.875,Maharashtra
+19.625,80.125,Maharashtra
+19.625,80.375,Maharashtra
+19.625,80.625,Maharashtra
+19.625,80.875,Chhattisgarh
+19.625,81.125,Chhattisgarh
+19.625,81.375,Chhattisgarh
+19.625,81.625,Chhattisgarh
+19.625,81.875,Chhattisgarh
+19.625,82.125,Odisha
+19.625,82.375,Odisha
+19.625,82.625,Odisha
+19.625,82.875,Odisha
+19.625,83.125,Odisha
+19.625,83.375,Odisha
+19.625,83.625,Odisha
+19.625,83.875,Odisha
+19.625,84.125,Odisha
+19.625,84.375,Odisha
+19.625,84.625,Odisha
+19.625,84.875,Odisha
+19.875,72.625,Maharashtra
+19.875,72.875,Maharashtra
+19.875,73.125,Maharashtra
+19.875,73.375,Maharashtra
+19.875,73.625,Maharashtra
+19.875,73.875,Maharashtra
+19.875,74.125,Maharashtra
+19.875,74.375,Maharashtra
+19.875,74.625,Maharashtra
+19.875,74.875,Maharashtra
+19.875,75.125,Maharashtra
+19.875,75.375,Maharashtra
+19.875,75.625,Maharashtra
+19.875,75.875,Maharashtra
+19.875,76.125,Maharashtra
+19.875,76.375,Maharashtra
+19.875,76.625,Maharashtra
+19.875,76.875,Maharashtra
+19.875,77.125,Maharashtra
+19.875,77.375,Maharashtra
+19.875,77.625,Maharashtra
+19.875,77.875,Maharashtra
+19.875,78.125,Maharashtra
+19.875,78.375,Telangana
+19.875,78.625,Maharashtra
+19.875,78.875,Maharashtra
+19.875,79.125,Maharashtra
+19.875,79.375,Maharashtra
+19.875,79.625,Maharashtra
+19.875,79.875,Maharashtra
+19.875,80.125,Maharashtra
+19.875,80.375,Maharashtra
+19.875,80.625,Chhattisgarh
+19.875,80.875,Chhattisgarh
+19.875,81.125,Chhattisgarh
+19.875,81.375,Chhattisgarh
+19.875,81.625,Chhattisgarh
+19.875,81.875,Chhattisgarh
+19.875,82.125,Odisha
+19.875,82.375,Chhattisgarh
+19.875,82.625,Chhattisgarh
+19.875,82.875,Odisha
+19.875,83.125,Odisha
+19.875,83.375,Odisha
+19.875,83.625,Odisha
+19.875,83.875,Odisha
+19.875,84.125,Odisha
+19.875,84.375,Odisha
+19.875,84.625,Odisha
+19.875,84.875,Odisha
+19.875,85.125,Odisha
+19.875,85.375,Odisha
+20.125,72.875,Maharashtra
+20.125,73.125,"Dadra, Nagar Haveli, Daman & Diu"
+20.125,73.375,Maharashtra
+20.125,73.625,Maharashtra
+20.125,73.875,Maharashtra
+20.125,74.125,Maharashtra
+20.125,74.375,Maharashtra
+20.125,74.625,Maharashtra
+20.125,74.875,Maharashtra
+20.125,75.125,Maharashtra
+20.125,75.375,Maharashtra
+20.125,75.625,Maharashtra
+20.125,75.875,Maharashtra
+20.125,76.125,Maharashtra
+20.125,76.375,Maharashtra
+20.125,76.625,Maharashtra
+20.125,76.875,Maharashtra
+20.125,77.125,Maharashtra
+20.125,77.375,Maharashtra
+20.125,77.625,Maharashtra
+20.125,77.875,Maharashtra
+20.125,78.125,Maharashtra
+20.125,78.375,Maharashtra
+20.125,78.625,Maharashtra
+20.125,78.875,Maharashtra
+20.125,79.125,Maharashtra
+20.125,79.375,Maharashtra
+20.125,79.625,Maharashtra
+20.125,79.875,Maharashtra
+20.125,80.125,Maharashtra
+20.125,80.375,Maharashtra
+20.125,80.625,Chhattisgarh
+20.125,80.875,Chhattisgarh
+20.125,81.125,Chhattisgarh
+20.125,81.375,Chhattisgarh
+20.125,81.625,Chhattisgarh
+20.125,81.875,Chhattisgarh
+20.125,82.125,Chhattisgarh
+20.125,82.375,Chhattisgarh
+20.125,82.625,Odisha
+20.125,82.875,Odisha
+20.125,83.125,Odisha
+20.125,83.375,Odisha
+20.125,83.625,Odisha
+20.125,83.875,Odisha
+20.125,84.125,Odisha
+20.125,84.375,Odisha
+20.125,84.625,Odisha
+20.125,84.875,Odisha
+20.125,85.125,Odisha
+20.125,85.375,Odisha
+20.125,85.625,Odisha
+20.125,85.875,Odisha
+20.125,86.125,Odisha
+20.375,72.875,"Dadra, Nagar Haveli, Daman & Diu"
+20.375,73.125,Gujarat
+20.375,73.375,Gujarat
+20.375,73.625,Maharashtra
+20.375,73.875,Maharashtra
+20.375,74.125,Maharashtra
+20.375,74.375,Maharashtra
+20.375,74.625,Maharashtra
+20.375,74.875,Maharashtra
+20.375,75.125,Maharashtra
+20.375,75.375,Maharashtra
+20.375,75.625,Maharashtra
+20.375,75.875,Maharashtra
+20.375,76.125,Maharashtra
+20.375,76.375,Maharashtra
+20.375,76.625,Maharashtra
+20.375,76.875,Maharashtra
+20.375,77.125,Maharashtra
+20.375,77.375,Maharashtra
+20.375,77.625,Maharashtra
+20.375,77.875,Maharashtra
+20.375,78.125,Maharashtra
+20.375,78.375,Maharashtra
+20.375,78.625,Maharashtra
+20.375,78.875,Maharashtra
+20.375,79.125,Maharashtra
+20.375,79.375,Maharashtra
+20.375,79.625,Maharashtra
+20.375,79.875,Maharashtra
+20.375,80.125,Maharashtra
+20.375,80.375,Maharashtra
+20.375,80.625,Chhattisgarh
+20.375,80.875,Chhattisgarh
+20.375,81.125,Chhattisgarh
+20.375,81.375,Chhattisgarh
+20.375,81.625,Chhattisgarh
+20.375,81.875,Chhattisgarh
+20.375,82.125,Chhattisgarh
+20.375,82.375,Chhattisgarh
+20.375,82.625,Odisha
+20.375,82.875,Odisha
+20.375,83.125,Odisha
+20.375,83.375,Odisha
+20.375,83.625,Odisha
+20.375,83.875,Odisha
+20.375,84.125,Odisha
+20.375,84.375,Odisha
+20.375,84.625,Odisha
+20.375,84.875,Odisha
+20.375,85.125,Odisha
+20.375,85.375,Odisha
+20.375,85.625,Odisha
+20.375,85.875,Odisha
+20.375,86.125,Odisha
+20.375,86.375,Odisha
+20.625,72.875,Gujarat
+20.625,73.125,Gujarat
+20.625,73.375,Gujarat
+20.625,73.625,Gujarat
+20.625,73.875,Maharashtra
+20.625,74.125,Maharashtra
+20.625,74.375,Maharashtra
+20.625,74.625,Maharashtra
+20.625,74.875,Maharashtra
+20.625,75.125,Maharashtra
+20.625,75.375,Maharashtra
+20.625,75.625,Maharashtra
+20.625,75.875,Maharashtra
+20.625,76.125,Maharashtra
+20.625,76.375,Maharashtra
+20.625,76.625,Maharashtra
+20.625,76.875,Maharashtra
+20.625,77.125,Maharashtra
+20.625,77.375,Maharashtra
+20.625,77.625,Maharashtra
+20.625,77.875,Maharashtra
+20.625,78.125,Maharashtra
+20.625,78.375,Maharashtra
+20.625,78.625,Maharashtra
+20.625,78.875,Maharashtra
+20.625,79.125,Maharashtra
+20.625,79.375,Maharashtra
+20.625,79.625,Maharashtra
+20.625,79.875,Maharashtra
+20.625,80.125,Maharashtra
+20.625,80.375,Maharashtra
+20.625,80.625,Chhattisgarh
+20.625,80.875,Chhattisgarh
+20.625,81.125,Chhattisgarh
+20.625,81.375,Chhattisgarh
+20.625,81.625,Chhattisgarh
+20.625,81.875,Chhattisgarh
+20.625,82.125,Chhattisgarh
+20.625,82.375,Odisha
+20.625,82.625,Odisha
+20.625,82.875,Odisha
+20.625,83.125,Odisha
+20.625,83.375,Odisha
+20.625,83.625,Odisha
+20.625,83.875,Odisha
+20.625,84.125,Odisha
+20.625,84.375,Odisha
+20.625,84.625,Odisha
+20.625,84.875,Odisha
+20.625,85.125,Odisha
+20.625,85.375,Odisha
+20.625,85.625,Odisha
+20.625,85.875,Odisha
+20.625,86.125,Odisha
+20.625,86.375,Odisha
+20.625,86.625,Odisha
+20.875,70.875,Gujarat
+20.875,72.875,Gujarat
+20.875,73.125,Gujarat
+20.875,73.375,Gujarat
+20.875,73.625,Gujarat
+20.875,73.875,Gujarat
+20.875,74.125,Maharashtra
+20.875,74.375,Maharashtra
+20.875,74.625,Maharashtra
+20.875,74.875,Maharashtra
+20.875,75.125,Maharashtra
+20.875,75.375,Maharashtra
+20.875,75.625,Maharashtra
+20.875,75.875,Maharashtra
+20.875,76.125,Maharashtra
+20.875,76.375,Maharashtra
+20.875,76.625,Maharashtra
+20.875,76.875,Maharashtra
+20.875,77.125,Maharashtra
+20.875,77.375,Maharashtra
+20.875,77.625,Maharashtra
+20.875,77.875,Maharashtra
+20.875,78.125,Maharashtra
+20.875,78.375,Maharashtra
+20.875,78.625,Maharashtra
+20.875,78.875,Maharashtra
+20.875,79.125,Maharashtra
+20.875,79.375,Maharashtra
+20.875,79.625,Maharashtra
+20.875,79.875,Maharashtra
+20.875,80.125,Maharashtra
+20.875,80.375,Maharashtra
+20.875,80.625,Chhattisgarh
+20.875,80.875,Chhattisgarh
+20.875,81.125,Chhattisgarh
+20.875,81.375,Chhattisgarh
+20.875,81.625,Chhattisgarh
+20.875,81.875,Chhattisgarh
+20.875,82.125,Chhattisgarh
+20.875,82.375,Chhattisgarh
+20.875,82.625,Odisha
+20.875,82.875,Odisha
+20.875,83.125,Odisha
+20.875,83.375,Odisha
+20.875,83.625,Odisha
+20.875,83.875,Odisha
+20.875,84.125,Odisha
+20.875,84.375,Odisha
+20.875,84.625,Odisha
+20.875,84.875,Odisha
+20.875,85.125,Odisha
+20.875,85.375,Odisha
+20.875,85.625,Odisha
+20.875,85.875,Odisha
+20.875,86.125,Odisha
+20.875,86.375,Odisha
+20.875,86.625,Odisha
+21.125,70.125,Gujarat
+21.125,70.375,Gujarat
+21.125,70.625,Gujarat
+21.125,70.875,Gujarat
+21.125,71.125,Gujarat
+21.125,71.375,Gujarat
+21.125,72.875,Gujarat
+21.125,73.125,Gujarat
+21.125,73.375,Gujarat
+21.125,73.625,Maharashtra
+21.125,73.875,Maharashtra
+21.125,74.125,Maharashtra
+21.125,74.375,Maharashtra
+21.125,74.625,Maharashtra
+21.125,74.875,Maharashtra
+21.125,75.125,Maharashtra
+21.125,75.375,Maharashtra
+21.125,75.625,Maharashtra
+21.125,75.875,Maharashtra
+21.125,76.125,Maharashtra
+21.125,76.375,Madhya Pradesh
+21.125,76.625,Maharashtra
+21.125,76.875,Maharashtra
+21.125,77.125,Maharashtra
+21.125,77.375,Maharashtra
+21.125,77.625,Maharashtra
+21.125,77.875,Maharashtra
+21.125,78.125,Maharashtra
+21.125,78.375,Maharashtra
+21.125,78.625,Maharashtra
+21.125,78.875,Maharashtra
+21.125,79.125,Maharashtra
+21.125,79.375,Maharashtra
+21.125,79.625,Maharashtra
+21.125,79.875,Maharashtra
+21.125,80.125,Maharashtra
+21.125,80.375,Maharashtra
+21.125,80.625,Chhattisgarh
+21.125,80.875,Chhattisgarh
+21.125,81.125,Chhattisgarh
+21.125,81.375,Chhattisgarh
+21.125,81.625,Chhattisgarh
+21.125,81.875,Chhattisgarh
+21.125,82.125,Chhattisgarh
+21.125,82.375,Chhattisgarh
+21.125,82.625,Chhattisgarh
+21.125,82.875,Odisha
+21.125,83.125,Chhattisgarh
+21.125,83.375,Odisha
+21.125,83.625,Odisha
+21.125,83.875,Odisha
+21.125,84.125,Odisha
+21.125,84.375,Odisha
+21.125,84.625,Odisha
+21.125,84.875,Odisha
+21.125,85.125,Odisha
+21.125,85.375,Odisha
+21.125,85.625,Odisha
+21.125,85.875,Odisha
+21.125,86.125,Odisha
+21.125,86.375,Odisha
+21.125,86.625,Odisha
+21.375,69.875,Gujarat
+21.375,70.125,Gujarat
+21.375,70.375,Gujarat
+21.375,70.625,Gujarat
+21.375,70.875,Gujarat
+21.375,71.125,Gujarat
+21.375,71.375,Gujarat
+21.375,71.625,Gujarat
+21.375,71.875,Gujarat
+21.375,72.625,Gujarat
+21.375,72.875,Gujarat
+21.375,73.125,Gujarat
+21.375,73.375,Gujarat
+21.375,73.625,Gujarat
+21.375,73.875,Gujarat
+21.375,74.125,Maharashtra
+21.375,74.375,Maharashtra
+21.375,74.625,Maharashtra
+21.375,74.875,Maharashtra
+21.375,75.125,Maharashtra
+21.375,75.375,Maharashtra
+21.375,75.625,Maharashtra
+21.375,75.875,Maharashtra
+21.375,76.125,Madhya Pradesh
+21.375,76.375,Madhya Pradesh
+21.375,76.625,Madhya Pradesh
+21.375,76.875,Maharashtra
+21.375,77.125,Maharashtra
+21.375,77.375,Maharashtra
+21.375,77.625,Maharashtra
+21.375,77.875,Maharashtra
+21.375,78.125,Maharashtra
+21.375,78.375,Maharashtra
+21.375,78.625,Maharashtra
+21.375,78.875,Maharashtra
+21.375,79.125,Maharashtra
+21.375,79.375,Maharashtra
+21.375,79.625,Maharashtra
+21.375,79.875,Maharashtra
+21.375,80.125,Maharashtra
+21.375,80.375,Maharashtra
+21.375,80.625,Madhya Pradesh
+21.375,80.875,Chhattisgarh
+21.375,81.125,Chhattisgarh
+21.375,81.375,Chhattisgarh
+21.375,81.625,Chhattisgarh
+21.375,81.875,Chhattisgarh
+21.375,82.125,Chhattisgarh
+21.375,82.375,Chhattisgarh
+21.375,82.625,Chhattisgarh
+21.375,82.875,Chhattisgarh
+21.375,83.125,Chhattisgarh
+21.375,83.375,Chhattisgarh
+21.375,83.625,Odisha
+21.375,83.875,Odisha
+21.375,84.125,Odisha
+21.375,84.375,Odisha
+21.375,84.625,Odisha
+21.375,84.875,Odisha
+21.375,85.125,Odisha
+21.375,85.375,Odisha
+21.375,85.625,Odisha
+21.375,85.875,Odisha
+21.375,86.125,Odisha
+21.375,86.375,Odisha
+21.375,86.625,Odisha
+21.625,69.625,Gujarat
+21.625,69.875,Gujarat
+21.625,70.125,Gujarat
+21.625,70.375,Gujarat
+21.625,70.625,Gujarat
+21.625,70.875,Gujarat
+21.625,71.125,Gujarat
+21.625,71.375,Gujarat
+21.625,71.625,Gujarat
+21.625,71.875,Gujarat
+21.625,72.625,Gujarat
+21.625,72.875,Gujarat
+21.625,73.125,Gujarat
+21.625,73.375,Gujarat
+21.625,73.625,Gujarat
+21.625,73.875,Maharashtra
+21.625,74.125,Maharashtra
+21.625,74.375,Maharashtra
+21.625,74.625,Maharashtra
+21.625,74.875,Maharashtra
+21.625,75.125,Madhya Pradesh
+21.625,75.375,Madhya Pradesh
+21.625,75.625,Madhya Pradesh
+21.625,75.875,Madhya Pradesh
+21.625,76.125,Madhya Pradesh
+21.625,76.375,Madhya Pradesh
+21.625,76.625,Madhya Pradesh
+21.625,76.875,Madhya Pradesh
+21.625,77.125,Maharashtra
+21.625,77.375,Maharashtra
+21.625,77.625,Madhya Pradesh
+21.625,77.875,Madhya Pradesh
+21.625,78.125,Madhya Pradesh
+21.625,78.375,Madhya Pradesh
+21.625,78.625,Madhya Pradesh
+21.625,78.875,Madhya Pradesh
+21.625,79.125,Maharashtra
+21.625,79.375,Maharashtra
+21.625,79.625,Madhya Pradesh
+21.625,79.875,Madhya Pradesh
+21.625,80.125,Madhya Pradesh
+21.625,80.375,Madhya Pradesh
+21.625,80.625,Madhya Pradesh
+21.625,80.875,Chhattisgarh
+21.625,81.125,Chhattisgarh
+21.625,81.375,Chhattisgarh
+21.625,81.625,Chhattisgarh
+21.625,81.875,Chhattisgarh
+21.625,82.125,Chhattisgarh
+21.625,82.375,Chhattisgarh
+21.625,82.625,Chhattisgarh
+21.625,82.875,Chhattisgarh
+21.625,83.125,Chhattisgarh
+21.625,83.375,Chhattisgarh
+21.625,83.625,Odisha
+21.625,83.875,Odisha
+21.625,84.125,Odisha
+21.625,84.375,Odisha
+21.625,84.625,Odisha
+21.625,84.875,Odisha
+21.625,85.125,Odisha
+21.625,85.375,Odisha
+21.625,85.625,Odisha
+21.625,85.875,Odisha
+21.625,86.125,Odisha
+21.625,86.375,Odisha
+21.625,86.625,Odisha
+21.625,86.875,Odisha
+21.875,69.375,Gujarat
+21.875,69.625,Gujarat
+21.875,69.875,Gujarat
+21.875,70.125,Gujarat
+21.875,70.375,Gujarat
+21.875,70.625,Gujarat
+21.875,70.875,Gujarat
+21.875,71.125,Gujarat
+21.875,71.375,Gujarat
+21.875,71.625,Gujarat
+21.875,71.875,Gujarat
+21.875,72.125,Gujarat
+21.875,72.375,Gujarat
+21.875,72.625,Gujarat
+21.875,72.875,Gujarat
+21.875,73.125,Gujarat
+21.875,73.375,Gujarat
+21.875,73.625,Gujarat
+21.875,73.875,Gujarat
+21.875,74.125,Maharashtra
+21.875,74.375,Maharashtra
+21.875,74.625,Madhya Pradesh
+21.875,74.875,Madhya Pradesh
+21.875,75.125,Madhya Pradesh
+21.875,75.375,Madhya Pradesh
+21.875,75.625,Madhya Pradesh
+21.875,75.875,Madhya Pradesh
+21.875,76.125,Madhya Pradesh
+21.875,76.375,Madhya Pradesh
+21.875,76.625,Madhya Pradesh
+21.875,76.875,Madhya Pradesh
+21.875,77.125,Madhya Pradesh
+21.875,77.375,Madhya Pradesh
+21.875,77.625,Madhya Pradesh
+21.875,77.875,Madhya Pradesh
+21.875,78.125,Madhya Pradesh
+21.875,78.375,Madhya Pradesh
+21.875,78.625,Madhya Pradesh
+21.875,78.875,Madhya Pradesh
+21.875,79.125,Madhya Pradesh
+21.875,79.375,Madhya Pradesh
+21.875,79.625,Madhya Pradesh
+21.875,79.875,Madhya Pradesh
+21.875,80.125,Madhya Pradesh
+21.875,80.375,Madhya Pradesh
+21.875,80.625,Madhya Pradesh
+21.875,80.875,Chhattisgarh
+21.875,81.125,Chhattisgarh
+21.875,81.375,Chhattisgarh
+21.875,81.625,Chhattisgarh
+21.875,81.875,Chhattisgarh
+21.875,82.125,Chhattisgarh
+21.875,82.375,Chhattisgarh
+21.875,82.625,Chhattisgarh
+21.875,82.875,Chhattisgarh
+21.875,83.125,Chhattisgarh
+21.875,83.375,Chhattisgarh
+21.875,83.625,Odisha
+21.875,83.875,Odisha
+21.875,84.125,Odisha
+21.875,84.375,Odisha
+21.875,84.625,Odisha
+21.875,84.875,Odisha
+21.875,85.125,Odisha
+21.875,85.375,Odisha
+21.875,85.625,Odisha
+21.875,85.875,Odisha
+21.875,86.125,Odisha
+21.875,86.375,Odisha
+21.875,86.625,Odisha
+21.875,86.875,Odisha
+21.875,87.125,Odisha
+21.875,87.375,West Bengal
+21.875,87.625,West Bengal
+21.875,87.875,West Bengal
+21.875,88.125,West Bengal
+21.875,88.375,West Bengal
+21.875,88.625,West Bengal
+21.875,88.875,West Bengal
+22.125,69.125,Gujarat
+22.125,69.375,Gujarat
+22.125,69.625,Gujarat
+22.125,69.875,Gujarat
+22.125,70.125,Gujarat
+22.125,70.375,Gujarat
+22.125,70.625,Gujarat
+22.125,70.875,Gujarat
+22.125,71.125,Gujarat
+22.125,71.375,Gujarat
+22.125,71.625,Gujarat
+22.125,71.875,Gujarat
+22.125,72.125,Gujarat
+22.125,72.375,Gujarat
+22.125,72.625,Gujarat
+22.125,72.875,Gujarat
+22.125,73.125,Gujarat
+22.125,73.375,Gujarat
+22.125,73.625,Gujarat
+22.125,73.875,Gujarat
+22.125,74.125,Gujarat
+22.125,74.375,Madhya Pradesh
+22.125,74.625,Madhya Pradesh
+22.125,74.875,Madhya Pradesh
+22.125,75.125,Madhya Pradesh
+22.125,75.375,Madhya Pradesh
+22.125,75.625,Madhya Pradesh
+22.125,75.875,Madhya Pradesh
+22.125,76.125,Madhya Pradesh
+22.125,76.375,Madhya Pradesh
+22.125,76.625,Madhya Pradesh
+22.125,76.875,Madhya Pradesh
+22.125,77.125,Madhya Pradesh
+22.125,77.375,Madhya Pradesh
+22.125,77.625,Madhya Pradesh
+22.125,77.875,Madhya Pradesh
+22.125,78.125,Madhya Pradesh
+22.125,78.375,Madhya Pradesh
+22.125,78.625,Madhya Pradesh
+22.125,78.875,Madhya Pradesh
+22.125,79.125,Madhya Pradesh
+22.125,79.375,Madhya Pradesh
+22.125,79.625,Madhya Pradesh
+22.125,79.875,Madhya Pradesh
+22.125,80.125,Madhya Pradesh
+22.125,80.375,Madhya Pradesh
+22.125,80.625,Madhya Pradesh
+22.125,80.875,Madhya Pradesh
+22.125,81.125,Chhattisgarh
+22.125,81.375,Chhattisgarh
+22.125,81.625,Chhattisgarh
+22.125,81.875,Chhattisgarh
+22.125,82.125,Chhattisgarh
+22.125,82.375,Chhattisgarh
+22.125,82.625,Chhattisgarh
+22.125,82.875,Chhattisgarh
+22.125,83.125,Chhattisgarh
+22.125,83.375,Chhattisgarh
+22.125,83.625,Odisha
+22.125,83.875,Odisha
+22.125,84.125,Odisha
+22.125,84.375,Odisha
+22.125,84.625,Odisha
+22.125,84.875,Odisha
+22.125,85.125,Jharkhand
+22.125,85.375,Odisha
+22.125,85.625,Jharkhand
+22.125,85.875,Jharkhand
+22.125,86.125,Odisha
+22.125,86.375,Odisha
+22.125,86.625,Odisha
+22.125,86.875,West Bengal
+22.125,87.125,West Bengal
+22.125,87.375,West Bengal
+22.125,87.625,West Bengal
+22.125,87.875,West Bengal
+22.125,88.125,West Bengal
+22.125,88.375,West Bengal
+22.125,88.625,West Bengal
+22.125,88.875,West Bengal
+22.375,68.875,Gujarat
+22.375,69.125,Gujarat
+22.375,69.375,Gujarat
+22.375,69.625,Gujarat
+22.375,69.875,Gujarat
+22.375,70.125,Gujarat
+22.375,70.375,Gujarat
+22.375,70.625,Gujarat
+22.375,70.875,Gujarat
+22.375,71.125,Gujarat
+22.375,71.375,Gujarat
+22.375,71.625,Gujarat
+22.375,71.875,Gujarat
+22.375,72.125,Gujarat
+22.375,72.375,Gujarat
+22.375,72.625,Gujarat
+22.375,72.875,Gujarat
+22.375,73.125,Gujarat
+22.375,73.375,Gujarat
+22.375,73.625,Gujarat
+22.375,73.875,Gujarat
+22.375,74.125,Gujarat
+22.375,74.375,Madhya Pradesh
+22.375,74.625,Madhya Pradesh
+22.375,74.875,Madhya Pradesh
+22.375,75.125,Madhya Pradesh
+22.375,75.375,Madhya Pradesh
+22.375,75.625,Madhya Pradesh
+22.375,75.875,Madhya Pradesh
+22.375,76.125,Madhya Pradesh
+22.375,76.375,Madhya Pradesh
+22.375,76.625,Madhya Pradesh
+22.375,76.875,Madhya Pradesh
+22.375,77.125,Madhya Pradesh
+22.375,77.375,Madhya Pradesh
+22.375,77.625,Madhya Pradesh
+22.375,77.875,Madhya Pradesh
+22.375,78.125,Madhya Pradesh
+22.375,78.375,Madhya Pradesh
+22.375,78.625,Madhya Pradesh
+22.375,78.875,Madhya Pradesh
+22.375,79.125,Madhya Pradesh
+22.375,79.375,Madhya Pradesh
+22.375,79.625,Madhya Pradesh
+22.375,79.875,Madhya Pradesh
+22.375,80.125,Madhya Pradesh
+22.375,80.375,Madhya Pradesh
+22.375,80.625,Madhya Pradesh
+22.375,80.875,Madhya Pradesh
+22.375,81.125,Chhattisgarh
+22.375,81.375,Chhattisgarh
+22.375,81.625,Chhattisgarh
+22.375,81.875,Chhattisgarh
+22.375,82.125,Chhattisgarh
+22.375,82.375,Chhattisgarh
+22.375,82.625,Chhattisgarh
+22.375,82.875,Chhattisgarh
+22.375,83.125,Chhattisgarh
+22.375,83.375,Chhattisgarh
+22.375,83.625,Chhattisgarh
+22.375,83.875,Chhattisgarh
+22.375,84.125,Odisha
+22.375,84.375,Jharkhand
+22.375,84.625,Odisha
+22.375,84.875,Odisha
+22.375,85.125,Jharkhand
+22.375,85.375,Jharkhand
+22.375,85.625,Jharkhand
+22.375,85.875,Jharkhand
+22.375,86.125,Odisha
+22.375,86.375,Jharkhand
+22.375,86.625,Jharkhand
+22.375,86.875,West Bengal
+22.375,87.125,West Bengal
+22.375,87.375,West Bengal
+22.375,87.625,West Bengal
+22.375,87.875,West Bengal
+22.375,88.125,West Bengal
+22.375,88.375,West Bengal
+22.375,88.625,West Bengal
+22.375,88.875,West Bengal
+22.375,92.625,Mizoram
+22.375,92.875,Mizoram
+22.625,69.875,Gujarat
+22.625,70.125,Gujarat
+22.625,70.375,Gujarat
+22.625,70.625,Gujarat
+22.625,70.875,Gujarat
+22.625,71.125,Gujarat
+22.625,71.375,Gujarat
+22.625,71.625,Gujarat
+22.625,71.875,Gujarat
+22.625,72.125,Gujarat
+22.625,72.375,Gujarat
+22.625,72.625,Gujarat
+22.625,72.875,Gujarat
+22.625,73.125,Gujarat
+22.625,73.375,Gujarat
+22.625,73.625,Gujarat
+22.625,73.875,Gujarat
+22.625,74.125,Gujarat
+22.625,74.375,Madhya Pradesh
+22.625,74.625,Madhya Pradesh
+22.625,74.875,Madhya Pradesh
+22.625,75.125,Madhya Pradesh
+22.625,75.375,Madhya Pradesh
+22.625,75.625,Madhya Pradesh
+22.625,75.875,Madhya Pradesh
+22.625,76.125,Madhya Pradesh
+22.625,76.375,Madhya Pradesh
+22.625,76.625,Madhya Pradesh
+22.625,76.875,Madhya Pradesh
+22.625,77.125,Madhya Pradesh
+22.625,77.375,Madhya Pradesh
+22.625,77.625,Madhya Pradesh
+22.625,77.875,Madhya Pradesh
+22.625,78.125,Madhya Pradesh
+22.625,78.375,Madhya Pradesh
+22.625,78.625,Madhya Pradesh
+22.625,78.875,Madhya Pradesh
+22.625,79.125,Madhya Pradesh
+22.625,79.375,Madhya Pradesh
+22.625,79.625,Madhya Pradesh
+22.625,79.875,Madhya Pradesh
+22.625,80.125,Madhya Pradesh
+22.625,80.375,Madhya Pradesh
+22.625,80.625,Madhya Pradesh
+22.625,80.875,Madhya Pradesh
+22.625,81.125,Madhya Pradesh
+22.625,81.375,Madhya Pradesh
+22.625,81.625,Madhya Pradesh
+22.625,81.875,Chhattisgarh
+22.625,82.125,Chhattisgarh
+22.625,82.375,Chhattisgarh
+22.625,82.625,Chhattisgarh
+22.625,82.875,Chhattisgarh
+22.625,83.125,Chhattisgarh
+22.625,83.375,Chhattisgarh
+22.625,83.625,Chhattisgarh
+22.625,83.875,Chhattisgarh
+22.625,84.125,Jharkhand
+22.625,84.375,Jharkhand
+22.625,84.625,Jharkhand
+22.625,84.875,Jharkhand
+22.625,85.125,Jharkhand
+22.625,85.375,Jharkhand
+22.625,85.625,Jharkhand
+22.625,85.875,Jharkhand
+22.625,86.125,Jharkhand
+22.625,86.375,Jharkhand
+22.625,86.625,Jharkhand
+22.625,86.875,West Bengal
+22.625,87.125,West Bengal
+22.625,87.375,West Bengal
+22.625,87.625,West Bengal
+22.625,87.875,West Bengal
+22.625,88.125,West Bengal
+22.625,88.375,West Bengal
+22.625,88.625,West Bengal
+22.625,88.875,West Bengal
+22.625,92.625,Mizoram
+22.625,92.875,Mizoram
+22.875,69.875,Gujarat
+22.875,70.125,Gujarat
+22.875,70.375,Gujarat
+22.875,70.625,Gujarat
+22.875,70.875,Gujarat
+22.875,71.125,Gujarat
+22.875,71.375,Gujarat
+22.875,71.625,Gujarat
+22.875,71.875,Gujarat
+22.875,72.125,Gujarat
+22.875,72.375,Gujarat
+22.875,72.625,Gujarat
+22.875,72.875,Gujarat
+22.875,73.125,Gujarat
+22.875,73.375,Gujarat
+22.875,73.625,Gujarat
+22.875,73.875,Gujarat
+22.875,74.125,Gujarat
+22.875,74.375,Gujarat
+22.875,74.625,Madhya Pradesh
+22.875,74.875,Madhya Pradesh
+22.875,75.125,Madhya Pradesh
+22.875,75.375,Madhya Pradesh
+22.875,75.625,Madhya Pradesh
+22.875,75.875,Madhya Pradesh
+22.875,76.125,Madhya Pradesh
+22.875,76.375,Madhya Pradesh
+22.875,76.625,Madhya Pradesh
+22.875,76.875,Madhya Pradesh
+22.875,77.125,Madhya Pradesh
+22.875,77.375,Madhya Pradesh
+22.875,77.625,Madhya Pradesh
+22.875,77.875,Madhya Pradesh
+22.875,78.125,Madhya Pradesh
+22.875,78.375,Madhya Pradesh
+22.875,78.625,Madhya Pradesh
+22.875,78.875,Madhya Pradesh
+22.875,79.125,Madhya Pradesh
+22.875,79.375,Madhya Pradesh
+22.875,79.625,Madhya Pradesh
+22.875,79.875,Madhya Pradesh
+22.875,80.125,Madhya Pradesh
+22.875,80.375,Madhya Pradesh
+22.875,80.625,Madhya Pradesh
+22.875,80.875,Madhya Pradesh
+22.875,81.125,Madhya Pradesh
+22.875,81.375,Madhya Pradesh
+22.875,81.625,Madhya Pradesh
+22.875,81.875,Chhattisgarh
+22.875,82.125,Chhattisgarh
+22.875,82.375,Chhattisgarh
+22.875,82.625,Chhattisgarh
+22.875,82.875,Chhattisgarh
+22.875,83.125,Chhattisgarh
+22.875,83.375,Chhattisgarh
+22.875,83.625,Chhattisgarh
+22.875,83.875,Chhattisgarh
+22.875,84.125,Chhattisgarh
+22.875,84.375,Chhattisgarh
+22.875,84.625,Jharkhand
+22.875,84.875,Jharkhand
+22.875,85.125,Jharkhand
+22.875,85.375,Jharkhand
+22.875,85.625,Jharkhand
+22.875,85.875,Jharkhand
+22.875,86.125,Jharkhand
+22.875,86.375,Jharkhand
+22.875,86.625,West Bengal
+22.875,86.875,West Bengal
+22.875,87.125,West Bengal
+22.875,87.375,West Bengal
+22.875,87.625,West Bengal
+22.875,87.875,West Bengal
+22.875,88.125,West Bengal
+22.875,88.375,West Bengal
+22.875,88.625,West Bengal
+22.875,92.625,Mizoram
+22.875,92.875,Mizoram
+23.125,68.875,Gujarat
+23.125,69.125,Gujarat
+23.125,69.375,Gujarat
+23.125,69.625,Gujarat
+23.125,69.875,Gujarat
+23.125,70.125,Gujarat
+23.125,70.375,Gujarat
+23.125,70.625,Gujarat
+23.125,70.875,Gujarat
+23.125,71.125,Gujarat
+23.125,71.375,Gujarat
+23.125,71.625,Gujarat
+23.125,71.875,Gujarat
+23.125,72.125,Gujarat
+23.125,72.375,Gujarat
+23.125,72.625,Gujarat
+23.125,72.875,Gujarat
+23.125,73.125,Gujarat
+23.125,73.375,Gujarat
+23.125,73.625,Gujarat
+23.125,73.875,Gujarat
+23.125,74.125,Gujarat
+23.125,74.375,Rajasthan
+23.125,74.625,Madhya Pradesh
+23.125,74.875,Madhya Pradesh
+23.125,75.125,Madhya Pradesh
+23.125,75.375,Madhya Pradesh
+23.125,75.625,Madhya Pradesh
+23.125,75.875,Madhya Pradesh
+23.125,76.125,Madhya Pradesh
+23.125,76.375,Madhya Pradesh
+23.125,76.625,Madhya Pradesh
+23.125,76.875,Madhya Pradesh
+23.125,77.125,Madhya Pradesh
+23.125,77.375,Madhya Pradesh
+23.125,77.625,Madhya Pradesh
+23.125,77.875,Madhya Pradesh
+23.125,78.125,Madhya Pradesh
+23.125,78.375,Madhya Pradesh
+23.125,78.625,Madhya Pradesh
+23.125,78.875,Madhya Pradesh
+23.125,79.125,Madhya Pradesh
+23.125,79.375,Madhya Pradesh
+23.125,79.625,Madhya Pradesh
+23.125,79.875,Madhya Pradesh
+23.125,80.125,Madhya Pradesh
+23.125,80.375,Madhya Pradesh
+23.125,80.625,Madhya Pradesh
+23.125,80.875,Madhya Pradesh
+23.125,81.125,Madhya Pradesh
+23.125,81.375,Madhya Pradesh
+23.125,81.625,Madhya Pradesh
+23.125,81.875,Madhya Pradesh
+23.125,82.125,Madhya Pradesh
+23.125,82.375,Chhattisgarh
+23.125,82.625,Chhattisgarh
+23.125,82.875,Chhattisgarh
+23.125,83.125,Chhattisgarh
+23.125,83.375,Chhattisgarh
+23.125,83.625,Chhattisgarh
+23.125,83.875,Chhattisgarh
+23.125,84.125,Jharkhand
+23.125,84.375,Jharkhand
+23.125,84.625,Jharkhand
+23.125,84.875,Jharkhand
+23.125,85.125,Jharkhand
+23.125,85.375,Jharkhand
+23.125,85.625,Jharkhand
+23.125,85.875,Jharkhand
+23.125,86.125,West Bengal
+23.125,86.375,West Bengal
+23.125,86.625,West Bengal
+23.125,86.875,West Bengal
+23.125,87.125,West Bengal
+23.125,87.375,West Bengal
+23.125,87.625,West Bengal
+23.125,87.875,West Bengal
+23.125,88.125,West Bengal
+23.125,88.375,West Bengal
+23.125,88.625,West Bengal
+23.125,92.625,Mizoram
+23.125,92.875,Mizoram
+23.375,68.625,Gujarat
+23.375,68.875,Gujarat
+23.375,69.125,Gujarat
+23.375,69.375,Gujarat
+23.375,69.625,Gujarat
+23.375,69.875,Gujarat
+23.375,70.125,Gujarat
+23.375,70.375,Gujarat
+23.375,70.625,Gujarat
+23.375,70.875,Gujarat
+23.375,71.125,Gujarat
+23.375,71.375,Gujarat
+23.375,71.625,Gujarat
+23.375,71.875,Gujarat
+23.375,72.125,Gujarat
+23.375,72.375,Gujarat
+23.375,72.625,Gujarat
+23.375,72.875,Gujarat
+23.375,73.125,Gujarat
+23.375,73.375,Gujarat
+23.375,73.625,Gujarat
+23.375,73.875,Rajasthan
+23.375,74.125,Rajasthan
+23.375,74.375,Rajasthan
+23.375,74.625,Madhya Pradesh
+23.375,74.875,Madhya Pradesh
+23.375,75.125,Madhya Pradesh
+23.375,75.375,Madhya Pradesh
+23.375,75.625,Madhya Pradesh
+23.375,75.875,Madhya Pradesh
+23.375,76.125,Madhya Pradesh
+23.375,76.375,Madhya Pradesh
+23.375,76.625,Madhya Pradesh
+23.375,76.875,Madhya Pradesh
+23.375,77.125,Madhya Pradesh
+23.375,77.375,Madhya Pradesh
+23.375,77.625,Madhya Pradesh
+23.375,77.875,Madhya Pradesh
+23.375,78.125,Madhya Pradesh
+23.375,78.375,Madhya Pradesh
+23.375,78.625,Madhya Pradesh
+23.375,78.875,Madhya Pradesh
+23.375,79.125,Madhya Pradesh
+23.375,79.375,Madhya Pradesh
+23.375,79.625,Madhya Pradesh
+23.375,79.875,Madhya Pradesh
+23.375,80.125,Madhya Pradesh
+23.375,80.375,Madhya Pradesh
+23.375,80.625,Madhya Pradesh
+23.375,80.875,Madhya Pradesh
+23.375,81.125,Madhya Pradesh
+23.375,81.375,Madhya Pradesh
+23.375,81.625,Madhya Pradesh
+23.375,81.875,Madhya Pradesh
+23.375,82.125,Chhattisgarh
+23.375,82.375,Chhattisgarh
+23.375,82.625,Chhattisgarh
+23.375,82.875,Chhattisgarh
+23.375,83.125,Chhattisgarh
+23.375,83.375,Chhattisgarh
+23.375,83.625,Chhattisgarh
+23.375,83.875,Chhattisgarh
+23.375,84.125,Jharkhand
+23.375,84.375,Jharkhand
+23.375,84.625,Jharkhand
+23.375,84.875,Jharkhand
+23.375,85.125,Jharkhand
+23.375,85.375,Jharkhand
+23.375,85.625,Jharkhand
+23.375,85.875,West Bengal
+23.375,86.125,West Bengal
+23.375,86.375,West Bengal
+23.375,86.625,West Bengal
+23.375,86.875,West Bengal
+23.375,87.125,West Bengal
+23.375,87.375,West Bengal
+23.375,87.625,West Bengal
+23.375,87.875,West Bengal
+23.375,88.125,West Bengal
+23.375,88.375,West Bengal
+23.375,88.625,West Bengal
+23.375,91.375,Tripura
+23.375,91.625,Tripura
+23.375,92.375,Mizoram
+23.375,92.625,Mizoram
+23.375,92.875,Mizoram
+23.375,93.125,Mizoram
+23.625,68.375,Gujarat
+23.625,68.625,Gujarat
+23.625,68.875,Gujarat
+23.625,69.125,Gujarat
+23.625,69.375,Gujarat
+23.625,69.625,Gujarat
+23.625,69.875,Gujarat
+23.625,70.125,Gujarat
+23.625,70.375,Gujarat
+23.625,70.625,Gujarat
+23.625,70.875,Gujarat
+23.625,71.125,Gujarat
+23.625,71.375,Gujarat
+23.625,71.625,Gujarat
+23.625,71.875,Gujarat
+23.625,72.125,Gujarat
+23.625,72.375,Gujarat
+23.625,72.625,Gujarat
+23.625,72.875,Gujarat
+23.625,73.125,Gujarat
+23.625,73.375,Gujarat
+23.625,73.625,Gujarat
+23.625,73.875,Rajasthan
+23.625,74.125,Rajasthan
+23.625,74.375,Rajasthan
+23.625,74.625,Rajasthan
+23.625,74.875,Rajasthan
+23.625,75.125,Madhya Pradesh
+23.625,75.375,Madhya Pradesh
+23.625,75.625,Madhya Pradesh
+23.625,75.875,Madhya Pradesh
+23.625,76.125,Madhya Pradesh
+23.625,76.375,Madhya Pradesh
+23.625,76.625,Madhya Pradesh
+23.625,76.875,Madhya Pradesh
+23.625,77.125,Madhya Pradesh
+23.625,77.375,Madhya Pradesh
+23.625,77.625,Madhya Pradesh
+23.625,77.875,Madhya Pradesh
+23.625,78.125,Madhya Pradesh
+23.625,78.375,Madhya Pradesh
+23.625,78.625,Madhya Pradesh
+23.625,78.875,Madhya Pradesh
+23.625,79.125,Madhya Pradesh
+23.625,79.375,Madhya Pradesh
+23.625,79.625,Madhya Pradesh
+23.625,79.875,Madhya Pradesh
+23.625,80.125,Madhya Pradesh
+23.625,80.375,Madhya Pradesh
+23.625,80.625,Madhya Pradesh
+23.625,80.875,Madhya Pradesh
+23.625,81.125,Madhya Pradesh
+23.625,81.375,Madhya Pradesh
+23.625,81.625,Chhattisgarh
+23.625,81.875,Chhattisgarh
+23.625,82.125,Chhattisgarh
+23.625,82.375,Chhattisgarh
+23.625,82.625,Chhattisgarh
+23.625,82.875,Chhattisgarh
+23.625,83.125,Chhattisgarh
+23.625,83.375,Chhattisgarh
+23.625,83.625,Chhattisgarh
+23.625,83.875,Jharkhand
+23.625,84.125,Jharkhand
+23.625,84.375,Jharkhand
+23.625,84.625,Jharkhand
+23.625,84.875,Jharkhand
+23.625,85.125,Jharkhand
+23.625,85.375,Jharkhand
+23.625,85.625,Jharkhand
+23.625,85.875,Jharkhand
+23.625,86.125,Jharkhand
+23.625,86.375,Jharkhand
+23.625,86.625,West Bengal
+23.625,86.875,West Bengal
+23.625,87.125,West Bengal
+23.625,87.375,West Bengal
+23.625,87.625,West Bengal
+23.625,87.875,West Bengal
+23.625,88.125,West Bengal
+23.625,88.375,West Bengal
+23.625,91.375,Tripura
+23.625,91.625,Tripura
+23.625,92.375,Mizoram
+23.625,92.625,Mizoram
+23.625,92.875,Mizoram
+23.625,93.125,Mizoram
+23.875,68.125,Gujarat
+23.875,68.375,Gujarat
+23.875,68.625,Gujarat
+23.875,68.875,Gujarat
+23.875,69.125,Gujarat
+23.875,69.375,Gujarat
+23.875,69.625,Gujarat
+23.875,69.875,Gujarat
+23.875,70.125,Gujarat
+23.875,70.375,Gujarat
+23.875,70.625,Gujarat
+23.875,70.875,Gujarat
+23.875,71.125,Gujarat
+23.875,71.375,Gujarat
+23.875,71.625,Gujarat
+23.875,71.875,Gujarat
+23.875,72.125,Gujarat
+23.875,72.375,Gujarat
+23.875,72.625,Gujarat
+23.875,72.875,Gujarat
+23.875,73.125,Gujarat
+23.875,73.375,Rajasthan
+23.875,73.625,Rajasthan
+23.875,73.875,Rajasthan
+23.875,74.125,Rajasthan
+23.875,74.375,Rajasthan
+23.875,74.625,Rajasthan
+23.875,74.875,Rajasthan
+23.875,75.125,Madhya Pradesh
+23.875,75.375,Madhya Pradesh
+23.875,75.625,Rajasthan
+23.875,75.875,Madhya Pradesh
+23.875,76.125,Madhya Pradesh
+23.875,76.375,Madhya Pradesh
+23.875,76.625,Madhya Pradesh
+23.875,76.875,Madhya Pradesh
+23.875,77.125,Madhya Pradesh
+23.875,77.375,Madhya Pradesh
+23.875,77.625,Madhya Pradesh
+23.875,77.875,Madhya Pradesh
+23.875,78.125,Madhya Pradesh
+23.875,78.375,Madhya Pradesh
+23.875,78.625,Madhya Pradesh
+23.875,78.875,Madhya Pradesh
+23.875,79.125,Madhya Pradesh
+23.875,79.375,Madhya Pradesh
+23.875,79.625,Madhya Pradesh
+23.875,79.875,Madhya Pradesh
+23.875,80.125,Madhya Pradesh
+23.875,80.375,Madhya Pradesh
+23.875,80.625,Madhya Pradesh
+23.875,80.875,Madhya Pradesh
+23.875,81.125,Madhya Pradesh
+23.875,81.375,Madhya Pradesh
+23.875,81.625,Chhattisgarh
+23.875,81.875,Madhya Pradesh
+23.875,82.125,Madhya Pradesh
+23.875,82.375,Madhya Pradesh
+23.875,82.625,Madhya Pradesh
+23.875,82.875,Chhattisgarh
+23.875,83.125,Chhattisgarh
+23.875,83.375,Chhattisgarh
+23.875,83.625,Jharkhand
+23.875,83.875,Jharkhand
+23.875,84.125,Jharkhand
+23.875,84.375,Jharkhand
+23.875,84.625,Jharkhand
+23.875,84.875,Jharkhand
+23.875,85.125,Jharkhand
+23.875,85.375,Jharkhand
+23.875,85.625,Jharkhand
+23.875,85.875,Jharkhand
+23.875,86.125,Jharkhand
+23.875,86.375,Jharkhand
+23.875,86.625,Jharkhand
+23.875,86.875,Jharkhand
+23.875,87.125,Jharkhand
+23.875,87.375,West Bengal
+23.875,87.625,West Bengal
+23.875,87.875,West Bengal
+23.875,88.125,West Bengal
+23.875,88.375,West Bengal
+23.875,91.375,Tripura
+23.875,91.625,Tripura
+23.875,91.875,Tripura
+23.875,92.125,Tripura
+23.875,92.375,Mizoram
+23.875,92.625,Mizoram
+23.875,92.875,Mizoram
+23.875,93.125,Mizoram
+24.125,68.875,Gujarat
+24.125,69.125,Gujarat
+24.125,69.375,Gujarat
+24.125,69.625,Gujarat
+24.125,69.875,Gujarat
+24.125,70.125,Gujarat
+24.125,70.375,Gujarat
+24.125,70.625,Gujarat
+24.125,70.875,Gujarat
+24.125,71.125,Gujarat
+24.125,71.375,Gujarat
+24.125,71.625,Gujarat
+24.125,71.875,Gujarat
+24.125,72.125,Gujarat
+24.125,72.375,Gujarat
+24.125,72.625,Gujarat
+24.125,72.875,Gujarat
+24.125,73.125,Gujarat
+24.125,73.375,Rajasthan
+24.125,73.625,Rajasthan
+24.125,73.875,Rajasthan
+24.125,74.125,Rajasthan
+24.125,74.375,Rajasthan
+24.125,74.625,Rajasthan
+24.125,74.875,Rajasthan
+24.125,75.125,Madhya Pradesh
+24.125,75.375,Madhya Pradesh
+24.125,75.625,Madhya Pradesh
+24.125,75.875,Rajasthan
+24.125,76.125,Rajasthan
+24.125,76.375,Madhya Pradesh
+24.125,76.625,Madhya Pradesh
+24.125,76.875,Madhya Pradesh
+24.125,77.125,Madhya Pradesh
+24.125,77.375,Madhya Pradesh
+24.125,77.625,Madhya Pradesh
+24.125,77.875,Madhya Pradesh
+24.125,78.125,Madhya Pradesh
+24.125,78.375,Madhya Pradesh
+24.125,78.625,Madhya Pradesh
+24.125,78.875,Madhya Pradesh
+24.125,79.125,Madhya Pradesh
+24.125,79.375,Madhya Pradesh
+24.125,79.625,Madhya Pradesh
+24.125,79.875,Madhya Pradesh
+24.125,80.125,Madhya Pradesh
+24.125,80.375,Madhya Pradesh
+24.125,80.625,Madhya Pradesh
+24.125,80.875,Madhya Pradesh
+24.125,81.125,Madhya Pradesh
+24.125,81.375,Madhya Pradesh
+24.125,81.625,Madhya Pradesh
+24.125,81.875,Madhya Pradesh
+24.125,82.125,Madhya Pradesh
+24.125,82.375,Madhya Pradesh
+24.125,82.625,Madhya Pradesh
+24.125,82.875,Uttar Pradesh
+24.125,83.125,Uttar Pradesh
+24.125,83.375,Jharkhand
+24.125,83.625,Jharkhand
+24.125,83.875,Jharkhand
+24.125,84.125,Jharkhand
+24.125,84.375,Jharkhand
+24.125,84.625,Jharkhand
+24.125,84.875,Jharkhand
+24.125,85.125,Jharkhand
+24.125,85.375,Jharkhand
+24.125,85.625,Jharkhand
+24.125,85.875,Jharkhand
+24.125,86.125,Jharkhand
+24.125,86.375,Jharkhand
+24.125,86.625,Jharkhand
+24.125,86.875,Jharkhand
+24.125,87.125,Jharkhand
+24.125,87.375,Jharkhand
+24.125,87.625,West Bengal
+24.125,87.875,West Bengal
+24.125,88.125,West Bengal
+24.125,88.375,West Bengal
+24.125,91.375,Tripura
+24.125,91.625,Tripura
+24.125,91.875,Tripura
+24.125,92.125,Tripura
+24.125,92.375,Mizoram
+24.125,92.625,Mizoram
+24.125,92.875,Mizoram
+24.125,93.125,Manipur
+24.125,93.375,Manipur
+24.125,93.625,Manipur
+24.125,93.875,Manipur
+24.375,69.375,Gujarat
+24.375,70.125,Gujarat
+24.375,70.375,Gujarat
+24.375,70.625,Gujarat
+24.375,70.875,Gujarat
+24.375,71.125,Gujarat
+24.375,71.375,Gujarat
+24.375,71.625,Gujarat
+24.375,71.875,Gujarat
+24.375,72.125,Gujarat
+24.375,72.375,Gujarat
+24.375,72.625,Gujarat
+24.375,72.875,Rajasthan
+24.375,73.125,Rajasthan
+24.375,73.375,Rajasthan
+24.375,73.625,Rajasthan
+24.375,73.875,Rajasthan
+24.375,74.125,Rajasthan
+24.375,74.375,Rajasthan
+24.375,74.625,Rajasthan
+24.375,74.875,Madhya Pradesh
+24.375,75.125,Madhya Pradesh
+24.375,75.375,Madhya Pradesh
+24.375,75.625,Madhya Pradesh
+24.375,75.875,Rajasthan
+24.375,76.125,Rajasthan
+24.375,76.375,Rajasthan
+24.375,76.625,Rajasthan
+24.375,76.875,Madhya Pradesh
+24.375,77.125,Madhya Pradesh
+24.375,77.375,Madhya Pradesh
+24.375,77.625,Madhya Pradesh
+24.375,77.875,Madhya Pradesh
+24.375,78.125,Madhya Pradesh
+24.375,78.375,Uttar Pradesh
+24.375,78.625,Uttar Pradesh
+24.375,78.875,Uttar Pradesh
+24.375,79.125,Madhya Pradesh
+24.375,79.375,Madhya Pradesh
+24.375,79.625,Madhya Pradesh
+24.375,79.875,Madhya Pradesh
+24.375,80.125,Madhya Pradesh
+24.375,80.375,Madhya Pradesh
+24.375,80.625,Madhya Pradesh
+24.375,80.875,Madhya Pradesh
+24.375,81.125,Madhya Pradesh
+24.375,81.375,Madhya Pradesh
+24.375,81.625,Madhya Pradesh
+24.375,81.875,Madhya Pradesh
+24.375,82.125,Madhya Pradesh
+24.375,82.375,Madhya Pradesh
+24.375,82.625,Madhya Pradesh
+24.375,82.875,Uttar Pradesh
+24.375,83.125,Uttar Pradesh
+24.375,83.375,Uttar Pradesh
+24.375,83.625,Jharkhand
+24.375,83.875,Jharkhand
+24.375,84.125,Jharkhand
+24.375,84.375,Jharkhand
+24.375,84.625,Jharkhand
+24.375,84.875,Jharkhand
+24.375,85.125,Jharkhand
+24.375,85.375,Jharkhand
+24.375,85.625,Jharkhand
+24.375,85.875,Jharkhand
+24.375,86.125,Jharkhand
+24.375,86.375,Jharkhand
+24.375,86.625,Jharkhand
+24.375,86.875,Jharkhand
+24.375,87.125,Jharkhand
+24.375,87.375,Jharkhand
+24.375,87.625,Jharkhand
+24.375,87.875,West Bengal
+24.375,88.125,West Bengal
+24.375,88.375,West Bengal
+24.375,91.875,Tripura
+24.375,92.125,Tripura
+24.375,92.375,Assam
+24.375,92.625,Assam
+24.375,92.875,Mizoram
+24.375,93.125,Manipur
+24.375,93.375,Manipur
+24.375,93.625,Manipur
+24.375,93.875,Manipur
+24.375,94.125,Manipur
+24.625,71.125,Gujarat
+24.625,71.375,Gujarat
+24.625,71.625,Gujarat
+24.625,71.875,Gujarat
+24.625,72.125,Gujarat
+24.625,72.375,Rajasthan
+24.625,72.625,Rajasthan
+24.625,72.875,Rajasthan
+24.625,73.125,Rajasthan
+24.625,73.375,Rajasthan
+24.625,73.625,Rajasthan
+24.625,73.875,Rajasthan
+24.625,74.125,Rajasthan
+24.625,74.375,Rajasthan
+24.625,74.625,Rajasthan
+24.625,74.875,Madhya Pradesh
+24.625,75.125,Madhya Pradesh
+24.625,75.375,Madhya Pradesh
+24.625,75.625,Madhya Pradesh
+24.625,75.875,Rajasthan
+24.625,76.125,Rajasthan
+24.625,76.375,Rajasthan
+24.625,76.625,Rajasthan
+24.625,76.875,Rajasthan
+24.625,77.125,Madhya Pradesh
+24.625,77.375,Madhya Pradesh
+24.625,77.625,Madhya Pradesh
+24.625,77.875,Madhya Pradesh
+24.625,78.125,Madhya Pradesh
+24.625,78.375,Uttar Pradesh
+24.625,78.625,Uttar Pradesh
+24.625,78.875,Uttar Pradesh
+24.625,79.125,Madhya Pradesh
+24.625,79.375,Madhya Pradesh
+24.625,79.625,Madhya Pradesh
+24.625,79.875,Madhya Pradesh
+24.625,80.125,Madhya Pradesh
+24.625,80.375,Madhya Pradesh
+24.625,80.625,Madhya Pradesh
+24.625,80.875,Madhya Pradesh
+24.625,81.125,Madhya Pradesh
+24.625,81.375,Madhya Pradesh
+24.625,81.625,Madhya Pradesh
+24.625,81.875,Madhya Pradesh
+24.625,82.125,Madhya Pradesh
+24.625,82.375,Uttar Pradesh
+24.625,82.625,Madhya Pradesh
+24.625,82.875,Uttar Pradesh
+24.625,83.125,Uttar Pradesh
+24.625,83.375,Uttar Pradesh
+24.625,83.625,Bihar
+24.625,83.875,Bihar
+24.625,84.125,Bihar
+24.625,84.375,Bihar
+24.625,84.625,Bihar
+24.625,84.875,Bihar
+24.625,85.125,Bihar
+24.625,85.375,Bihar
+24.625,85.625,Bihar
+24.625,85.875,Jharkhand
+24.625,86.125,Bihar
+24.625,86.375,Bihar
+24.625,86.625,Bihar
+24.625,86.875,Bihar
+24.625,87.125,Jharkhand
+24.625,87.375,Jharkhand
+24.625,87.625,Jharkhand
+24.625,87.875,Jharkhand
+24.625,92.375,Assam
+24.625,92.625,Assam
+24.625,92.875,Assam
+24.625,93.125,Manipur
+24.625,93.375,Manipur
+24.625,93.625,Manipur
+24.625,93.875,Manipur
+24.625,94.125,Manipur
+24.875,71.125,Rajasthan
+24.875,71.375,Rajasthan
+24.875,71.625,Rajasthan
+24.875,71.875,Rajasthan
+24.875,72.125,Rajasthan
+24.875,72.375,Rajasthan
+24.875,72.625,Rajasthan
+24.875,72.875,Rajasthan
+24.875,73.125,Rajasthan
+24.875,73.375,Rajasthan
+24.875,73.625,Rajasthan
+24.875,73.875,Rajasthan
+24.875,74.125,Rajasthan
+24.875,74.375,Rajasthan
+24.875,74.625,Rajasthan
+24.875,74.875,Madhya Pradesh
+24.875,75.125,Madhya Pradesh
+24.875,75.375,Rajasthan
+24.875,75.625,Rajasthan
+24.875,75.875,Rajasthan
+24.875,76.125,Rajasthan
+24.875,76.375,Rajasthan
+24.875,76.625,Rajasthan
+24.875,76.875,Rajasthan
+24.875,77.125,Madhya Pradesh
+24.875,77.375,Madhya Pradesh
+24.875,77.625,Madhya Pradesh
+24.875,77.875,Madhya Pradesh
+24.875,78.125,Madhya Pradesh
+24.875,78.375,Uttar Pradesh
+24.875,78.625,Uttar Pradesh
+24.875,78.875,Madhya Pradesh
+24.875,79.125,Madhya Pradesh
+24.875,79.375,Madhya Pradesh
+24.875,79.625,Madhya Pradesh
+24.875,79.875,Madhya Pradesh
+24.875,80.125,Madhya Pradesh
+24.875,80.375,Madhya Pradesh
+24.875,80.625,Madhya Pradesh
+24.875,80.875,Madhya Pradesh
+24.875,81.125,Madhya Pradesh
+24.875,81.375,Madhya Pradesh
+24.875,81.625,Madhya Pradesh
+24.875,81.875,Madhya Pradesh
+24.875,82.125,Uttar Pradesh
+24.875,82.375,Uttar Pradesh
+24.875,82.625,Uttar Pradesh
+24.875,82.875,Uttar Pradesh
+24.875,83.125,Uttar Pradesh
+24.875,83.375,Bihar
+24.875,83.625,Bihar
+24.875,83.875,Bihar
+24.875,84.125,Bihar
+24.875,84.375,Bihar
+24.875,84.625,Bihar
+24.875,84.875,Bihar
+24.875,85.125,Bihar
+24.875,85.375,Bihar
+24.875,85.625,Bihar
+24.875,85.875,Bihar
+24.875,86.125,Bihar
+24.875,86.375,Bihar
+24.875,86.625,Bihar
+24.875,86.875,Bihar
+24.875,87.125,Bihar
+24.875,87.375,Jharkhand
+24.875,87.625,Jharkhand
+24.875,87.875,Jharkhand
+24.875,92.375,Assam
+24.875,92.625,Assam
+24.875,92.875,Assam
+24.875,93.125,Assam
+24.875,93.375,Manipur
+24.875,93.625,Manipur
+24.875,93.875,Manipur
+24.875,94.125,Manipur
+24.875,94.375,Manipur
+25.125,70.875,Rajasthan
+25.125,71.125,Rajasthan
+25.125,71.375,Rajasthan
+25.125,71.625,Rajasthan
+25.125,71.875,Rajasthan
+25.125,72.125,Rajasthan
+25.125,72.375,Rajasthan
+25.125,72.625,Rajasthan
+25.125,72.875,Rajasthan
+25.125,73.125,Rajasthan
+25.125,73.375,Rajasthan
+25.125,73.625,Rajasthan
+25.125,73.875,Rajasthan
+25.125,74.125,Rajasthan
+25.125,74.375,Rajasthan
+25.125,74.625,Rajasthan
+25.125,74.875,Rajasthan
+25.125,75.125,Rajasthan
+25.125,75.375,Rajasthan
+25.125,75.625,Rajasthan
+25.125,75.875,Rajasthan
+25.125,76.125,Rajasthan
+25.125,76.375,Rajasthan
+25.125,76.625,Rajasthan
+25.125,76.875,Rajasthan
+25.125,77.125,Rajasthan
+25.125,77.375,Rajasthan
+25.125,77.625,Madhya Pradesh
+25.125,77.875,Madhya Pradesh
+25.125,78.125,Madhya Pradesh
+25.125,78.375,Madhya Pradesh
+25.125,78.625,Madhya Pradesh
+25.125,78.875,Madhya Pradesh
+25.125,79.125,Madhya Pradesh
+25.125,79.375,Madhya Pradesh
+25.125,79.625,Madhya Pradesh
+25.125,79.875,Madhya Pradesh
+25.125,80.125,Madhya Pradesh
+25.125,80.375,Uttar Pradesh
+25.125,80.625,Madhya Pradesh
+25.125,80.875,Madhya Pradesh
+25.125,81.125,Uttar Pradesh
+25.125,81.375,Madhya Pradesh
+25.125,81.625,Uttar Pradesh
+25.125,81.875,Uttar Pradesh
+25.125,82.125,Uttar Pradesh
+25.125,82.375,Uttar Pradesh
+25.125,82.625,Uttar Pradesh
+25.125,82.875,Uttar Pradesh
+25.125,83.125,Uttar Pradesh
+25.125,83.375,Bihar
+25.125,83.625,Bihar
+25.125,83.875,Bihar
+25.125,84.125,Bihar
+25.125,84.375,Bihar
+25.125,84.625,Bihar
+25.125,84.875,Bihar
+25.125,85.125,Bihar
+25.125,85.375,Bihar
+25.125,85.625,Bihar
+25.125,85.875,Bihar
+25.125,86.125,Bihar
+25.125,86.375,Bihar
+25.125,86.625,Bihar
+25.125,86.875,Bihar
+25.125,87.125,Bihar
+25.125,87.375,Jharkhand
+25.125,87.625,Jharkhand
+25.125,87.875,West Bengal
+25.125,88.125,West Bengal
+25.125,92.375,Meghalaya
+25.125,92.625,Meghalaya
+25.125,92.875,Assam
+25.125,93.125,Assam
+25.125,93.375,Manipur
+25.125,93.625,Manipur
+25.125,93.875,Manipur
+25.125,94.125,Manipur
+25.125,94.375,Manipur
+25.375,70.875,Rajasthan
+25.375,71.125,Rajasthan
+25.375,71.375,Rajasthan
+25.375,71.625,Rajasthan
+25.375,71.875,Rajasthan
+25.375,72.125,Rajasthan
+25.375,72.375,Rajasthan
+25.375,72.625,Rajasthan
+25.375,72.875,Rajasthan
+25.375,73.125,Rajasthan
+25.375,73.375,Rajasthan
+25.375,73.625,Rajasthan
+25.375,73.875,Rajasthan
+25.375,74.125,Rajasthan
+25.375,74.375,Rajasthan
+25.375,74.625,Rajasthan
+25.375,74.875,Rajasthan
+25.375,75.125,Rajasthan
+25.375,75.375,Rajasthan
+25.375,75.625,Rajasthan
+25.375,75.875,Rajasthan
+25.375,76.125,Rajasthan
+25.375,76.375,Rajasthan
+25.375,76.625,Rajasthan
+25.375,76.875,Madhya Pradesh
+25.375,77.125,Madhya Pradesh
+25.375,77.375,Madhya Pradesh
+25.375,77.625,Madhya Pradesh
+25.375,77.875,Madhya Pradesh
+25.375,78.125,Madhya Pradesh
+25.375,78.375,Uttar Pradesh
+25.375,78.625,Madhya Pradesh
+25.375,78.875,Uttar Pradesh
+25.375,79.125,Uttar Pradesh
+25.375,79.375,Uttar Pradesh
+25.375,79.625,Uttar Pradesh
+25.375,79.875,Uttar Pradesh
+25.375,80.125,Uttar Pradesh
+25.375,80.375,Uttar Pradesh
+25.375,80.625,Uttar Pradesh
+25.375,80.875,Uttar Pradesh
+25.375,81.125,Uttar Pradesh
+25.375,81.375,Uttar Pradesh
+25.375,81.625,Uttar Pradesh
+25.375,81.875,Uttar Pradesh
+25.375,82.125,Uttar Pradesh
+25.375,82.375,Uttar Pradesh
+25.375,82.625,Uttar Pradesh
+25.375,82.875,Uttar Pradesh
+25.375,83.125,Uttar Pradesh
+25.375,83.375,Uttar Pradesh
+25.375,83.625,Uttar Pradesh
+25.375,83.875,Bihar
+25.375,84.125,Bihar
+25.375,84.375,Bihar
+25.375,84.625,Bihar
+25.375,84.875,Bihar
+25.375,85.125,Bihar
+25.375,85.375,Bihar
+25.375,85.625,Bihar
+25.375,85.875,Bihar
+25.375,86.125,Bihar
+25.375,86.375,Bihar
+25.375,86.625,Bihar
+25.375,86.875,Bihar
+25.375,87.125,Bihar
+25.375,87.375,Bihar
+25.375,87.625,Bihar
+25.375,87.875,West Bengal
+25.375,88.125,West Bengal
+25.375,88.375,West Bengal
+25.375,88.625,West Bengal
+25.375,90.375,Meghalaya
+25.375,90.625,Meghalaya
+25.375,90.875,Meghalaya
+25.375,91.125,Meghalaya
+25.375,91.375,Meghalaya
+25.375,91.625,Meghalaya
+25.375,91.875,Meghalaya
+25.375,92.125,Meghalaya
+25.375,92.375,Meghalaya
+25.375,92.625,Meghalaya
+25.375,92.875,Assam
+25.375,93.125,Assam
+25.375,93.375,Assam
+25.375,93.625,Nagaland
+25.375,93.875,Manipur
+25.375,94.125,Manipur
+25.375,94.375,Manipur
+25.625,70.625,Rajasthan
+25.625,70.875,Rajasthan
+25.625,71.125,Rajasthan
+25.625,71.375,Rajasthan
+25.625,71.625,Rajasthan
+25.625,71.875,Rajasthan
+25.625,72.125,Rajasthan
+25.625,72.375,Rajasthan
+25.625,72.625,Rajasthan
+25.625,72.875,Rajasthan
+25.625,73.125,Rajasthan
+25.625,73.375,Rajasthan
+25.625,73.625,Rajasthan
+25.625,73.875,Rajasthan
+25.625,74.125,Rajasthan
+25.625,74.375,Rajasthan
+25.625,74.625,Rajasthan
+25.625,74.875,Rajasthan
+25.625,75.125,Rajasthan
+25.625,75.375,Rajasthan
+25.625,75.625,Rajasthan
+25.625,75.875,Rajasthan
+25.625,76.125,Rajasthan
+25.625,76.375,Rajasthan
+25.625,76.625,Madhya Pradesh
+25.625,76.875,Madhya Pradesh
+25.625,77.125,Madhya Pradesh
+25.625,77.375,Madhya Pradesh
+25.625,77.625,Madhya Pradesh
+25.625,77.875,Madhya Pradesh
+25.625,78.125,Madhya Pradesh
+25.625,78.375,Madhya Pradesh
+25.625,78.625,Madhya Pradesh
+25.625,78.875,Uttar Pradesh
+25.625,79.125,Uttar Pradesh
+25.625,79.375,Uttar Pradesh
+25.625,79.625,Uttar Pradesh
+25.625,79.875,Uttar Pradesh
+25.625,80.125,Uttar Pradesh
+25.625,80.375,Uttar Pradesh
+25.625,80.625,Uttar Pradesh
+25.625,80.875,Uttar Pradesh
+25.625,81.125,Uttar Pradesh
+25.625,81.375,Uttar Pradesh
+25.625,81.625,Uttar Pradesh
+25.625,81.875,Uttar Pradesh
+25.625,82.125,Uttar Pradesh
+25.625,82.375,Uttar Pradesh
+25.625,82.625,Uttar Pradesh
+25.625,82.875,Uttar Pradesh
+25.625,83.125,Uttar Pradesh
+25.625,83.375,Uttar Pradesh
+25.625,83.625,Uttar Pradesh
+25.625,83.875,Uttar Pradesh
+25.625,84.125,Bihar
+25.625,84.375,Bihar
+25.625,84.625,Bihar
+25.625,84.875,Bihar
+25.625,85.125,Bihar
+25.625,85.375,Bihar
+25.625,85.625,Bihar
+25.625,85.875,Bihar
+25.625,86.125,Bihar
+25.625,86.375,Bihar
+25.625,86.625,Bihar
+25.625,86.875,Bihar
+25.625,87.125,Bihar
+25.625,87.375,Bihar
+25.625,87.625,Bihar
+25.625,87.875,Bihar
+25.625,88.125,West Bengal
+25.625,89.875,Assam
+25.625,90.125,Meghalaya
+25.625,90.375,Meghalaya
+25.625,90.625,Meghalaya
+25.625,90.875,Meghalaya
+25.625,91.125,Meghalaya
+25.625,91.375,Meghalaya
+25.625,91.625,Meghalaya
+25.625,91.875,Meghalaya
+25.625,92.125,Meghalaya
+25.625,92.375,Meghalaya
+25.625,92.625,Assam
+25.625,92.875,Assam
+25.625,93.125,Assam
+25.625,93.375,Assam
+25.625,93.625,Nagaland
+25.625,93.875,Nagaland
+25.625,94.125,Nagaland
+25.625,94.375,Nagaland
+25.875,70.375,Rajasthan
+25.875,70.625,Rajasthan
+25.875,70.875,Rajasthan
+25.875,71.125,Rajasthan
+25.875,71.375,Rajasthan
+25.875,71.625,Rajasthan
+25.875,71.875,Rajasthan
+25.875,72.125,Rajasthan
+25.875,72.375,Rajasthan
+25.875,72.625,Rajasthan
+25.875,72.875,Rajasthan
+25.875,73.125,Rajasthan
+25.875,73.375,Rajasthan
+25.875,73.625,Rajasthan
+25.875,73.875,Rajasthan
+25.875,74.125,Rajasthan
+25.875,74.375,Rajasthan
+25.875,74.625,Rajasthan
+25.875,74.875,Rajasthan
+25.875,75.125,Rajasthan
+25.875,75.375,Rajasthan
+25.875,75.625,Rajasthan
+25.875,75.875,Rajasthan
+25.875,76.125,Rajasthan
+25.875,76.375,Rajasthan
+25.875,76.625,Rajasthan
+25.875,76.875,Madhya Pradesh
+25.875,77.125,Madhya Pradesh
+25.875,77.375,Madhya Pradesh
+25.875,77.625,Madhya Pradesh
+25.875,77.875,Madhya Pradesh
+25.875,78.125,Madhya Pradesh
+25.875,78.375,Madhya Pradesh
+25.875,78.625,Madhya Pradesh
+25.875,78.875,Uttar Pradesh
+25.875,79.125,Uttar Pradesh
+25.875,79.375,Uttar Pradesh
+25.875,79.625,Uttar Pradesh
+25.875,79.875,Uttar Pradesh
+25.875,80.125,Uttar Pradesh
+25.875,80.375,Uttar Pradesh
+25.875,80.625,Uttar Pradesh
+25.875,80.875,Uttar Pradesh
+25.875,81.125,Uttar Pradesh
+25.875,81.375,Uttar Pradesh
+25.875,81.625,Uttar Pradesh
+25.875,81.875,Uttar Pradesh
+25.875,82.125,Uttar Pradesh
+25.875,82.375,Uttar Pradesh
+25.875,82.625,Uttar Pradesh
+25.875,82.875,Uttar Pradesh
+25.875,83.125,Uttar Pradesh
+25.875,83.375,Uttar Pradesh
+25.875,83.625,Uttar Pradesh
+25.875,83.875,Uttar Pradesh
+25.875,84.125,Uttar Pradesh
+25.875,84.375,Uttar Pradesh
+25.875,84.625,Bihar
+25.875,84.875,Bihar
+25.875,85.125,Bihar
+25.875,85.375,Bihar
+25.875,85.625,Bihar
+25.875,85.875,Bihar
+25.875,86.125,Bihar
+25.875,86.375,Bihar
+25.875,86.625,Bihar
+25.875,86.875,Bihar
+25.875,87.125,Bihar
+25.875,87.375,Bihar
+25.875,87.625,Bihar
+25.875,87.875,West Bengal
+25.875,88.125,West Bengal
+25.875,89.875,Assam
+25.875,90.125,Meghalaya
+25.875,90.375,Meghalaya
+25.875,90.625,Meghalaya
+25.875,90.875,Meghalaya
+25.875,91.125,Assam
+25.875,91.375,Assam
+25.875,91.625,Meghalaya
+25.875,91.875,Meghalaya
+25.875,92.125,Meghalaya
+25.875,92.375,Assam
+25.875,92.625,Assam
+25.875,92.875,Assam
+25.875,93.125,Assam
+25.875,93.375,Assam
+25.875,93.625,Assam
+25.875,93.875,Assam
+25.875,94.125,Nagaland
+25.875,94.375,Nagaland
+25.875,94.625,Nagaland
+25.875,94.875,Nagaland
+26.125,70.125,Rajasthan
+26.125,70.375,Rajasthan
+26.125,70.625,Rajasthan
+26.125,70.875,Rajasthan
+26.125,71.125,Rajasthan
+26.125,71.375,Rajasthan
+26.125,71.625,Rajasthan
+26.125,71.875,Rajasthan
+26.125,72.125,Rajasthan
+26.125,72.375,Rajasthan
+26.125,72.625,Rajasthan
+26.125,72.875,Rajasthan
+26.125,73.125,Rajasthan
+26.125,73.375,Rajasthan
+26.125,73.625,Rajasthan
+26.125,73.875,Rajasthan
+26.125,74.125,Rajasthan
+26.125,74.375,Rajasthan
+26.125,74.625,Rajasthan
+26.125,74.875,Rajasthan
+26.125,75.125,Rajasthan
+26.125,75.375,Rajasthan
+26.125,75.625,Rajasthan
+26.125,75.875,Rajasthan
+26.125,76.125,Rajasthan
+26.125,76.375,Rajasthan
+26.125,76.625,Rajasthan
+26.125,76.875,Rajasthan
+26.125,77.125,Madhya Pradesh
+26.125,77.375,Madhya Pradesh
+26.125,77.625,Madhya Pradesh
+26.125,77.875,Madhya Pradesh
+26.125,78.125,Madhya Pradesh
+26.125,78.375,Madhya Pradesh
+26.125,78.625,Madhya Pradesh
+26.125,78.875,Madhya Pradesh
+26.125,79.125,Uttar Pradesh
+26.125,79.375,Uttar Pradesh
+26.125,79.625,Uttar Pradesh
+26.125,79.875,Uttar Pradesh
+26.125,80.125,Uttar Pradesh
+26.125,80.375,Uttar Pradesh
+26.125,80.625,Uttar Pradesh
+26.125,80.875,Uttar Pradesh
+26.125,81.125,Uttar Pradesh
+26.125,81.375,Uttar Pradesh
+26.125,81.625,Uttar Pradesh
+26.125,81.875,Uttar Pradesh
+26.125,82.125,Uttar Pradesh
+26.125,82.375,Uttar Pradesh
+26.125,82.625,Uttar Pradesh
+26.125,82.875,Uttar Pradesh
+26.125,83.125,Uttar Pradesh
+26.125,83.375,Uttar Pradesh
+26.125,83.625,Uttar Pradesh
+26.125,83.875,Uttar Pradesh
+26.125,84.125,Bihar
+26.125,84.375,Bihar
+26.125,84.625,Bihar
+26.125,84.875,Bihar
+26.125,85.125,Bihar
+26.125,85.375,Bihar
+26.125,85.625,Bihar
+26.125,85.875,Bihar
+26.125,86.125,Bihar
+26.125,86.375,Bihar
+26.125,86.625,Bihar
+26.125,86.875,Bihar
+26.125,87.125,Bihar
+26.125,87.375,Bihar
+26.125,87.625,Bihar
+26.125,87.875,Bihar
+26.125,88.125,West Bengal
+26.125,89.625,West Bengal
+26.125,89.875,Assam
+26.125,90.125,Assam
+26.125,90.375,Assam
+26.125,90.625,Assam
+26.125,90.875,Assam
+26.125,91.125,Assam
+26.125,91.375,Assam
+26.125,91.625,Assam
+26.125,91.875,Assam
+26.125,92.125,Assam
+26.125,92.375,Assam
+26.125,92.625,Assam
+26.125,92.875,Assam
+26.125,93.125,Assam
+26.125,93.375,Assam
+26.125,93.625,Assam
+26.125,93.875,Assam
+26.125,94.125,Nagaland
+26.125,94.375,Nagaland
+26.125,94.625,Nagaland
+26.125,94.875,Nagaland
+26.375,70.125,Rajasthan
+26.375,70.375,Rajasthan
+26.375,70.625,Rajasthan
+26.375,70.875,Rajasthan
+26.375,71.125,Rajasthan
+26.375,71.375,Rajasthan
+26.375,71.625,Rajasthan
+26.375,71.875,Rajasthan
+26.375,72.125,Rajasthan
+26.375,72.375,Rajasthan
+26.375,72.625,Rajasthan
+26.375,72.875,Rajasthan
+26.375,73.125,Rajasthan
+26.375,73.375,Rajasthan
+26.375,73.625,Rajasthan
+26.375,73.875,Rajasthan
+26.375,74.125,Rajasthan
+26.375,74.375,Rajasthan
+26.375,74.625,Rajasthan
+26.375,74.875,Rajasthan
+26.375,75.125,Rajasthan
+26.375,75.375,Rajasthan
+26.375,75.625,Rajasthan
+26.375,75.875,Rajasthan
+26.375,76.125,Rajasthan
+26.375,76.375,Rajasthan
+26.375,76.625,Rajasthan
+26.375,76.875,Rajasthan
+26.375,77.125,Rajasthan
+26.375,77.375,Rajasthan
+26.375,77.625,Madhya Pradesh
+26.375,77.875,Madhya Pradesh
+26.375,78.125,Madhya Pradesh
+26.375,78.375,Madhya Pradesh
+26.375,78.625,Madhya Pradesh
+26.375,78.875,Madhya Pradesh
+26.375,79.125,Uttar Pradesh
+26.375,79.375,Uttar Pradesh
+26.375,79.625,Uttar Pradesh
+26.375,79.875,Uttar Pradesh
+26.375,80.125,Uttar Pradesh
+26.375,80.375,Uttar Pradesh
+26.375,80.625,Uttar Pradesh
+26.375,80.875,Uttar Pradesh
+26.375,81.125,Uttar Pradesh
+26.375,81.375,Uttar Pradesh
+26.375,81.625,Uttar Pradesh
+26.375,81.875,Uttar Pradesh
+26.375,82.125,Uttar Pradesh
+26.375,82.375,Uttar Pradesh
+26.375,82.625,Uttar Pradesh
+26.375,82.875,Uttar Pradesh
+26.375,83.125,Uttar Pradesh
+26.375,83.375,Uttar Pradesh
+26.375,83.625,Uttar Pradesh
+26.375,83.875,Uttar Pradesh
+26.375,84.125,Uttar Pradesh
+26.375,84.375,Bihar
+26.375,84.625,Bihar
+26.375,84.875,Bihar
+26.375,85.125,Bihar
+26.375,85.375,Bihar
+26.375,85.625,Bihar
+26.375,85.875,Bihar
+26.375,86.125,Bihar
+26.375,86.375,Bihar
+26.375,86.625,Bihar
+26.375,86.875,Bihar
+26.375,87.125,Bihar
+26.375,87.375,Bihar
+26.375,87.625,Bihar
+26.375,87.875,Bihar
+26.375,88.125,Bihar
+26.375,88.875,West Bengal
+26.375,89.125,West Bengal
+26.375,89.375,West Bengal
+26.375,89.625,West Bengal
+26.375,89.875,Assam
+26.375,90.125,Assam
+26.375,90.375,Assam
+26.375,90.625,Assam
+26.375,90.875,Assam
+26.375,91.125,Assam
+26.375,91.375,Assam
+26.375,91.625,Assam
+26.375,91.875,Assam
+26.375,92.125,Assam
+26.375,92.375,Assam
+26.375,92.625,Assam
+26.375,92.875,Assam
+26.375,93.125,Assam
+26.375,93.375,Assam
+26.375,93.625,Assam
+26.375,93.875,Assam
+26.375,94.125,Assam
+26.375,94.375,Nagaland
+26.375,94.625,Nagaland
+26.375,94.875,Nagaland
+26.625,70.125,Rajasthan
+26.625,70.375,Rajasthan
+26.625,70.625,Rajasthan
+26.625,70.875,Rajasthan
+26.625,71.125,Rajasthan
+26.625,71.375,Rajasthan
+26.625,71.625,Rajasthan
+26.625,71.875,Rajasthan
+26.625,72.125,Rajasthan
+26.625,72.375,Rajasthan
+26.625,72.625,Rajasthan
+26.625,72.875,Rajasthan
+26.625,73.125,Rajasthan
+26.625,73.375,Rajasthan
+26.625,73.625,Rajasthan
+26.625,73.875,Rajasthan
+26.625,74.125,Rajasthan
+26.625,74.375,Rajasthan
+26.625,74.625,Rajasthan
+26.625,74.875,Rajasthan
+26.625,75.125,Rajasthan
+26.625,75.375,Rajasthan
+26.625,75.625,Rajasthan
+26.625,75.875,Rajasthan
+26.625,76.125,Rajasthan
+26.625,76.375,Rajasthan
+26.625,76.625,Rajasthan
+26.625,76.875,Rajasthan
+26.625,77.125,Rajasthan
+26.625,77.375,Rajasthan
+26.625,77.625,Rajasthan
+26.625,77.875,Rajasthan
+26.625,78.125,Madhya Pradesh
+26.625,78.375,Madhya Pradesh
+26.625,78.625,Madhya Pradesh
+26.625,78.875,Madhya Pradesh
+26.625,79.125,Uttar Pradesh
+26.625,79.375,Uttar Pradesh
+26.625,79.625,Uttar Pradesh
+26.625,79.875,Uttar Pradesh
+26.625,80.125,Uttar Pradesh
+26.625,80.375,Uttar Pradesh
+26.625,80.625,Uttar Pradesh
+26.625,80.875,Uttar Pradesh
+26.625,81.125,Uttar Pradesh
+26.625,81.375,Uttar Pradesh
+26.625,81.625,Uttar Pradesh
+26.625,81.875,Uttar Pradesh
+26.625,82.125,Uttar Pradesh
+26.625,82.375,Uttar Pradesh
+26.625,82.625,Uttar Pradesh
+26.625,82.875,Uttar Pradesh
+26.625,83.125,Uttar Pradesh
+26.625,83.375,Uttar Pradesh
+26.625,83.625,Uttar Pradesh
+26.625,83.875,Uttar Pradesh
+26.625,84.125,Bihar
+26.625,84.375,Uttar Pradesh
+26.625,84.625,Bihar
+26.625,84.875,Bihar
+26.625,85.125,Bihar
+26.625,85.375,Bihar
+26.625,85.625,Bihar
+26.625,85.875,Bihar
+26.625,86.125,Bihar
+26.625,86.375,Bihar
+26.625,88.125,West Bengal
+26.625,88.375,West Bengal
+26.625,88.625,West Bengal
+26.625,88.875,West Bengal
+26.625,89.125,West Bengal
+26.625,89.375,West Bengal
+26.625,89.625,West Bengal
+26.625,89.875,Assam
+26.625,90.125,Assam
+26.625,90.375,Assam
+26.625,90.625,Assam
+26.625,90.875,Assam
+26.625,91.125,Assam
+26.625,91.375,Assam
+26.625,91.625,Assam
+26.625,91.875,Assam
+26.625,92.125,Assam
+26.625,92.375,Assam
+26.625,92.625,Assam
+26.625,92.875,Assam
+26.625,93.125,Assam
+26.625,93.375,Assam
+26.625,93.625,Assam
+26.625,93.875,Assam
+26.625,94.125,Assam
+26.625,94.375,Assam
+26.625,94.625,Nagaland
+26.625,94.875,Nagaland
+26.875,69.625,Rajasthan
+26.875,69.875,Rajasthan
+26.875,70.125,Rajasthan
+26.875,70.375,Rajasthan
+26.875,70.625,Rajasthan
+26.875,70.875,Rajasthan
+26.875,71.125,Rajasthan
+26.875,71.375,Rajasthan
+26.875,71.625,Rajasthan
+26.875,71.875,Rajasthan
+26.875,72.125,Rajasthan
+26.875,72.375,Rajasthan
+26.875,72.625,Rajasthan
+26.875,72.875,Rajasthan
+26.875,73.125,Rajasthan
+26.875,73.375,Rajasthan
+26.875,73.625,Rajasthan
+26.875,73.875,Rajasthan
+26.875,74.125,Rajasthan
+26.875,74.375,Rajasthan
+26.875,74.625,Rajasthan
+26.875,74.875,Rajasthan
+26.875,75.125,Rajasthan
+26.875,75.375,Rajasthan
+26.875,75.625,Rajasthan
+26.875,75.875,Rajasthan
+26.875,76.125,Rajasthan
+26.875,76.375,Rajasthan
+26.875,76.625,Rajasthan
+26.875,76.875,Rajasthan
+26.875,77.125,Rajasthan
+26.875,77.375,Rajasthan
+26.875,77.625,Uttar Pradesh
+26.875,77.875,Rajasthan
+26.875,78.125,Rajasthan
+26.875,78.375,Uttar Pradesh
+26.875,78.625,Uttar Pradesh
+26.875,78.875,Uttar Pradesh
+26.875,79.125,Uttar Pradesh
+26.875,79.375,Uttar Pradesh
+26.875,79.625,Uttar Pradesh
+26.875,79.875,Uttar Pradesh
+26.875,80.125,Uttar Pradesh
+26.875,80.375,Uttar Pradesh
+26.875,80.625,Uttar Pradesh
+26.875,80.875,Uttar Pradesh
+26.875,81.125,Uttar Pradesh
+26.875,81.375,Uttar Pradesh
+26.875,81.625,Uttar Pradesh
+26.875,81.875,Uttar Pradesh
+26.875,82.125,Uttar Pradesh
+26.875,82.375,Uttar Pradesh
+26.875,82.625,Uttar Pradesh
+26.875,82.875,Uttar Pradesh
+26.875,83.125,Uttar Pradesh
+26.875,83.375,Uttar Pradesh
+26.875,83.625,Uttar Pradesh
+26.875,83.875,Uttar Pradesh
+26.875,84.125,Uttar Pradesh
+26.875,84.375,Bihar
+26.875,84.625,Bihar
+26.875,84.875,Bihar
+26.875,85.125,Bihar
+26.875,85.375,Bihar
+26.875,88.125,West Bengal
+26.875,88.375,West Bengal
+26.875,88.625,West Bengal
+26.875,88.875,West Bengal
+26.875,89.125,West Bengal
+26.875,89.375,West Bengal
+26.875,90.125,Assam
+26.875,90.375,Assam
+26.875,90.625,Assam
+26.875,90.875,Assam
+26.875,91.125,Assam
+26.875,91.375,Assam
+26.875,91.625,Assam
+26.875,91.875,Assam
+26.875,92.125,Assam
+26.875,92.375,Assam
+26.875,92.625,Assam
+26.875,92.875,Assam
+26.875,93.125,Assam
+26.875,93.375,Assam
+26.875,93.625,Assam
+26.875,93.875,Assam
+26.875,94.125,Assam
+26.875,94.375,Assam
+26.875,94.625,Assam
+26.875,94.875,Nagaland
+26.875,95.125,Nagaland
+27.125,69.625,Rajasthan
+27.125,69.875,Rajasthan
+27.125,70.125,Rajasthan
+27.125,70.375,Rajasthan
+27.125,70.625,Rajasthan
+27.125,70.875,Rajasthan
+27.125,71.125,Rajasthan
+27.125,71.375,Rajasthan
+27.125,71.625,Rajasthan
+27.125,71.875,Rajasthan
+27.125,72.125,Rajasthan
+27.125,72.375,Rajasthan
+27.125,72.625,Rajasthan
+27.125,72.875,Rajasthan
+27.125,73.125,Rajasthan
+27.125,73.375,Rajasthan
+27.125,73.625,Rajasthan
+27.125,73.875,Rajasthan
+27.125,74.125,Rajasthan
+27.125,74.375,Rajasthan
+27.125,74.625,Rajasthan
+27.125,74.875,Rajasthan
+27.125,75.125,Rajasthan
+27.125,75.375,Rajasthan
+27.125,75.625,Rajasthan
+27.125,75.875,Rajasthan
+27.125,76.125,Rajasthan
+27.125,76.375,Rajasthan
+27.125,76.625,Rajasthan
+27.125,76.875,Rajasthan
+27.125,77.125,Rajasthan
+27.125,77.375,Rajasthan
+27.125,77.625,Uttar Pradesh
+27.125,77.875,Uttar Pradesh
+27.125,78.125,Uttar Pradesh
+27.125,78.375,Uttar Pradesh
+27.125,78.625,Uttar Pradesh
+27.125,78.875,Uttar Pradesh
+27.125,79.125,Uttar Pradesh
+27.125,79.375,Uttar Pradesh
+27.125,79.625,Uttar Pradesh
+27.125,79.875,Uttar Pradesh
+27.125,80.125,Uttar Pradesh
+27.125,80.375,Uttar Pradesh
+27.125,80.625,Uttar Pradesh
+27.125,80.875,Uttar Pradesh
+27.125,81.125,Uttar Pradesh
+27.125,81.375,Uttar Pradesh
+27.125,81.625,Uttar Pradesh
+27.125,81.875,Uttar Pradesh
+27.125,82.125,Uttar Pradesh
+27.125,82.375,Uttar Pradesh
+27.125,82.625,Uttar Pradesh
+27.125,82.875,Uttar Pradesh
+27.125,83.125,Uttar Pradesh
+27.125,83.375,Uttar Pradesh
+27.125,83.625,Uttar Pradesh
+27.125,83.875,Uttar Pradesh
+27.125,84.125,Bihar
+27.125,84.375,Bihar
+27.125,84.625,Bihar
+27.125,88.125,Sikkim
+27.125,88.375,Sikkim
+27.125,88.625,West Bengal
+27.125,92.125,Arunachal Pradesh
+27.125,92.375,Arunachal Pradesh
+27.125,92.625,Arunachal Pradesh
+27.125,92.875,Arunachal Pradesh
+27.125,93.125,Arunachal Pradesh
+27.125,93.375,Arunachal Pradesh
+27.125,93.625,Arunachal Pradesh
+27.125,93.875,Assam
+27.125,94.125,Assam
+27.125,94.375,Assam
+27.125,94.625,Assam
+27.125,94.875,Assam
+27.125,95.125,Assam
+27.125,95.375,Assam
+27.125,95.625,Arunachal Pradesh
+27.375,69.625,Rajasthan
+27.375,69.875,Rajasthan
+27.375,70.125,Rajasthan
+27.375,70.375,Rajasthan
+27.375,70.625,Rajasthan
+27.375,70.875,Rajasthan
+27.375,71.125,Rajasthan
+27.375,71.375,Rajasthan
+27.375,71.625,Rajasthan
+27.375,71.875,Rajasthan
+27.375,72.125,Rajasthan
+27.375,72.375,Rajasthan
+27.375,72.625,Rajasthan
+27.375,72.875,Rajasthan
+27.375,73.125,Rajasthan
+27.375,73.375,Rajasthan
+27.375,73.625,Rajasthan
+27.375,73.875,Rajasthan
+27.375,74.125,Rajasthan
+27.375,74.375,Rajasthan
+27.375,74.625,Rajasthan
+27.375,74.875,Rajasthan
+27.375,75.125,Rajasthan
+27.375,75.375,Rajasthan
+27.375,75.625,Rajasthan
+27.375,75.875,Rajasthan
+27.375,76.125,Rajasthan
+27.375,76.375,Rajasthan
+27.375,76.625,Rajasthan
+27.375,76.875,Rajasthan
+27.375,77.125,Rajasthan
+27.375,77.375,Rajasthan
+27.375,77.625,Uttar Pradesh
+27.375,77.875,Uttar Pradesh
+27.375,78.125,Uttar Pradesh
+27.375,78.375,Uttar Pradesh
+27.375,78.625,Uttar Pradesh
+27.375,78.875,Uttar Pradesh
+27.375,79.125,Uttar Pradesh
+27.375,79.375,Uttar Pradesh
+27.375,79.625,Uttar Pradesh
+27.375,79.875,Uttar Pradesh
+27.375,80.125,Uttar Pradesh
+27.375,80.375,Uttar Pradesh
+27.375,80.625,Uttar Pradesh
+27.375,80.875,Uttar Pradesh
+27.375,81.125,Uttar Pradesh
+27.375,81.375,Uttar Pradesh
+27.375,81.625,Uttar Pradesh
+27.375,81.875,Uttar Pradesh
+27.375,82.125,Uttar Pradesh
+27.375,82.375,Uttar Pradesh
+27.375,82.625,Uttar Pradesh
+27.375,82.875,Uttar Pradesh
+27.375,83.125,Uttar Pradesh
+27.375,83.375,Uttar Pradesh
+27.375,83.625,Uttar Pradesh
+27.375,83.875,Bihar
+27.375,84.125,Bihar
+27.375,84.375,Bihar
+27.375,88.125,Sikkim
+27.375,88.375,Sikkim
+27.375,88.625,Sikkim
+27.375,92.125,Arunachal Pradesh
+27.375,92.375,Arunachal Pradesh
+27.375,92.625,Arunachal Pradesh
+27.375,92.875,Arunachal Pradesh
+27.375,93.125,Arunachal Pradesh
+27.375,93.375,Arunachal Pradesh
+27.375,93.625,Arunachal Pradesh
+27.375,93.875,Arunachal Pradesh
+27.375,94.125,Assam
+27.375,94.375,Assam
+27.375,94.625,Assam
+27.375,94.875,Assam
+27.375,95.125,Assam
+27.375,95.375,Assam
+27.375,95.625,Assam
+27.375,95.875,Assam
+27.375,96.875,Arunachal Pradesh
+27.625,70.125,Rajasthan
+27.625,70.375,Rajasthan
+27.625,70.625,Rajasthan
+27.625,70.875,Rajasthan
+27.625,71.125,Rajasthan
+27.625,71.375,Rajasthan
+27.625,71.625,Rajasthan
+27.625,71.875,Rajasthan
+27.625,72.125,Rajasthan
+27.625,72.375,Rajasthan
+27.625,72.625,Rajasthan
+27.625,72.875,Rajasthan
+27.625,73.125,Rajasthan
+27.625,73.375,Rajasthan
+27.625,73.625,Rajasthan
+27.625,73.875,Rajasthan
+27.625,74.125,Rajasthan
+27.625,74.375,Rajasthan
+27.625,74.625,Rajasthan
+27.625,74.875,Rajasthan
+27.625,75.125,Rajasthan
+27.625,75.375,Rajasthan
+27.625,75.625,Rajasthan
+27.625,75.875,Rajasthan
+27.625,76.125,Rajasthan
+27.625,76.375,Rajasthan
+27.625,76.625,Rajasthan
+27.625,76.875,Rajasthan
+27.625,77.125,Rajasthan
+27.625,77.375,Uttar Pradesh
+27.625,77.625,Uttar Pradesh
+27.625,77.875,Uttar Pradesh
+27.625,78.125,Uttar Pradesh
+27.625,78.375,Uttar Pradesh
+27.625,78.625,Uttar Pradesh
+27.625,78.875,Uttar Pradesh
+27.625,79.125,Uttar Pradesh
+27.625,79.375,Uttar Pradesh
+27.625,79.625,Uttar Pradesh
+27.625,79.875,Uttar Pradesh
+27.625,80.125,Uttar Pradesh
+27.625,80.375,Uttar Pradesh
+27.625,80.625,Uttar Pradesh
+27.625,80.875,Uttar Pradesh
+27.625,81.125,Uttar Pradesh
+27.625,81.375,Uttar Pradesh
+27.625,81.625,Uttar Pradesh
+27.625,81.875,Uttar Pradesh
+27.625,82.125,Uttar Pradesh
+27.625,82.375,Uttar Pradesh
+27.625,82.625,Uttar Pradesh
+27.625,88.125,Sikkim
+27.625,88.375,Sikkim
+27.625,88.625,Sikkim
+27.625,91.875,Arunachal Pradesh
+27.625,92.125,Arunachal Pradesh
+27.625,92.375,Arunachal Pradesh
+27.625,92.625,Arunachal Pradesh
+27.625,92.875,Arunachal Pradesh
+27.625,93.125,Arunachal Pradesh
+27.625,93.375,Arunachal Pradesh
+27.625,93.625,Arunachal Pradesh
+27.625,93.875,Arunachal Pradesh
+27.625,94.125,Arunachal Pradesh
+27.625,94.375,Arunachal Pradesh
+27.625,94.625,Assam
+27.625,94.875,Assam
+27.625,95.125,Assam
+27.625,95.375,Assam
+27.625,95.625,Assam
+27.625,95.875,Arunachal Pradesh
+27.625,96.125,Arunachal Pradesh
+27.625,96.375,Arunachal Pradesh
+27.625,96.625,Arunachal Pradesh
+27.625,96.875,Arunachal Pradesh
+27.875,70.125,Rajasthan
+27.875,70.375,Rajasthan
+27.875,71.125,Rajasthan
+27.875,71.375,Rajasthan
+27.875,71.625,Rajasthan
+27.875,71.875,Rajasthan
+27.875,72.125,Rajasthan
+27.875,72.375,Rajasthan
+27.875,72.625,Rajasthan
+27.875,72.875,Rajasthan
+27.875,73.125,Rajasthan
+27.875,73.375,Rajasthan
+27.875,73.625,Rajasthan
+27.875,73.875,Rajasthan
+27.875,74.125,Rajasthan
+27.875,74.375,Rajasthan
+27.875,74.625,Rajasthan
+27.875,74.875,Rajasthan
+27.875,75.125,Rajasthan
+27.875,75.375,Rajasthan
+27.875,75.625,Rajasthan
+27.875,75.875,Rajasthan
+27.875,76.125,Haryana
+27.875,76.375,Rajasthan
+27.875,76.625,Rajasthan
+27.875,76.875,Rajasthan
+27.875,77.125,Haryana
+27.875,77.375,Haryana
+27.875,77.625,Uttar Pradesh
+27.875,77.875,Uttar Pradesh
+27.875,78.125,Uttar Pradesh
+27.875,78.375,Uttar Pradesh
+27.875,78.625,Uttar Pradesh
+27.875,78.875,Uttar Pradesh
+27.875,79.125,Uttar Pradesh
+27.875,79.375,Uttar Pradesh
+27.875,79.625,Uttar Pradesh
+27.875,79.875,Uttar Pradesh
+27.875,80.125,Uttar Pradesh
+27.875,80.375,Uttar Pradesh
+27.875,80.625,Uttar Pradesh
+27.875,80.875,Uttar Pradesh
+27.875,81.125,Uttar Pradesh
+27.875,81.375,Uttar Pradesh
+27.875,81.625,Uttar Pradesh
+27.875,81.875,Uttar Pradesh
+27.875,82.125,Uttar Pradesh
+27.875,88.125,Sikkim
+27.875,88.375,Sikkim
+27.875,88.625,Sikkim
+27.875,91.625,Arunachal Pradesh
+27.875,91.875,Arunachal Pradesh
+27.875,92.125,Arunachal Pradesh
+27.875,92.375,Arunachal Pradesh
+27.875,92.625,Arunachal Pradesh
+27.875,92.875,Arunachal Pradesh
+27.875,93.125,Arunachal Pradesh
+27.875,93.375,Arunachal Pradesh
+27.875,93.625,Arunachal Pradesh
+27.875,93.875,Arunachal Pradesh
+27.875,94.125,Arunachal Pradesh
+27.875,94.375,Arunachal Pradesh
+27.875,94.625,Arunachal Pradesh
+27.875,94.875,Arunachal Pradesh
+27.875,95.125,Arunachal Pradesh
+27.875,95.375,Arunachal Pradesh
+27.875,95.625,Assam
+27.875,95.875,Assam
+27.875,96.125,Arunachal Pradesh
+27.875,96.375,Arunachal Pradesh
+27.875,96.625,Arunachal Pradesh
+27.875,96.875,Arunachal Pradesh
+28.125,71.875,Rajasthan
+28.125,72.125,Rajasthan
+28.125,72.375,Rajasthan
+28.125,72.625,Rajasthan
+28.125,72.875,Rajasthan
+28.125,73.125,Rajasthan
+28.125,73.375,Rajasthan
+28.125,73.625,Rajasthan
+28.125,73.875,Rajasthan
+28.125,74.125,Rajasthan
+28.125,74.375,Rajasthan
+28.125,74.625,Rajasthan
+28.125,74.875,Rajasthan
+28.125,75.125,Rajasthan
+28.125,75.375,Rajasthan
+28.125,75.625,Rajasthan
+28.125,75.875,Rajasthan
+28.125,76.125,Haryana
+28.125,76.375,Rajasthan
+28.125,76.625,Haryana
+28.125,76.875,Rajasthan
+28.125,77.125,Haryana
+28.125,77.375,Haryana
+28.125,77.625,Uttar Pradesh
+28.125,77.875,Uttar Pradesh
+28.125,78.125,Uttar Pradesh
+28.125,78.375,Uttar Pradesh
+28.125,78.625,Uttar Pradesh
+28.125,78.875,Uttar Pradesh
+28.125,79.125,Uttar Pradesh
+28.125,79.375,Uttar Pradesh
+28.125,79.625,Uttar Pradesh
+28.125,79.875,Uttar Pradesh
+28.125,80.125,Uttar Pradesh
+28.125,80.375,Uttar Pradesh
+28.125,80.625,Uttar Pradesh
+28.125,80.875,Uttar Pradesh
+28.125,81.125,Uttar Pradesh
+28.125,81.375,Uttar Pradesh
+28.125,88.625,Sikkim
+28.125,92.625,Arunachal Pradesh
+28.125,92.875,Arunachal Pradesh
+28.125,93.125,Arunachal Pradesh
+28.125,93.375,Arunachal Pradesh
+28.125,93.625,Arunachal Pradesh
+28.125,93.875,Arunachal Pradesh
+28.125,94.125,Arunachal Pradesh
+28.125,94.375,Arunachal Pradesh
+28.125,94.625,Arunachal Pradesh
+28.125,94.875,Arunachal Pradesh
+28.125,95.125,Arunachal Pradesh
+28.125,95.375,Arunachal Pradesh
+28.125,95.625,Arunachal Pradesh
+28.125,95.875,Arunachal Pradesh
+28.125,96.125,Arunachal Pradesh
+28.125,96.375,Arunachal Pradesh
+28.125,96.625,Arunachal Pradesh
+28.125,96.875,Arunachal Pradesh
+28.125,97.125,Arunachal Pradesh
+28.375,72.125,Rajasthan
+28.375,72.375,Rajasthan
+28.375,72.625,Rajasthan
+28.375,72.875,Rajasthan
+28.375,73.125,Rajasthan
+28.375,73.375,Rajasthan
+28.375,73.625,Rajasthan
+28.375,73.875,Rajasthan
+28.375,74.125,Rajasthan
+28.375,74.375,Rajasthan
+28.375,74.625,Rajasthan
+28.375,74.875,Rajasthan
+28.375,75.125,Rajasthan
+28.375,75.375,Rajasthan
+28.375,75.625,Rajasthan
+28.375,75.875,Rajasthan
+28.375,76.125,Haryana
+28.375,76.375,Haryana
+28.375,76.625,Haryana
+28.375,76.875,Haryana
+28.375,77.125,Haryana
+28.375,77.375,Haryana
+28.375,77.625,Uttar Pradesh
+28.375,77.875,Uttar Pradesh
+28.375,78.125,Uttar Pradesh
+28.375,78.375,Uttar Pradesh
+28.375,78.625,Uttar Pradesh
+28.375,78.875,Uttar Pradesh
+28.375,79.125,Uttar Pradesh
+28.375,79.375,Uttar Pradesh
+28.375,79.625,Uttar Pradesh
+28.375,79.875,Uttar Pradesh
+28.375,80.125,Uttar Pradesh
+28.375,80.375,Uttar Pradesh
+28.375,80.625,Uttar Pradesh
+28.375,80.875,Uttar Pradesh
+28.375,81.125,Uttar Pradesh
+28.375,93.125,Arunachal Pradesh
+28.375,93.375,Arunachal Pradesh
+28.375,93.625,Arunachal Pradesh
+28.375,93.875,Arunachal Pradesh
+28.375,94.125,Arunachal Pradesh
+28.375,94.375,Arunachal Pradesh
+28.375,94.625,Arunachal Pradesh
+28.375,94.875,Arunachal Pradesh
+28.375,95.125,Arunachal Pradesh
+28.375,95.375,Arunachal Pradesh
+28.375,95.625,Arunachal Pradesh
+28.375,95.875,Arunachal Pradesh
+28.375,96.125,Arunachal Pradesh
+28.375,96.375,Arunachal Pradesh
+28.375,96.625,Arunachal Pradesh
+28.375,96.875,Arunachal Pradesh
+28.625,72.375,Rajasthan
+28.625,72.625,Rajasthan
+28.625,72.875,Rajasthan
+28.625,73.125,Rajasthan
+28.625,73.375,Rajasthan
+28.625,73.625,Rajasthan
+28.625,73.875,Rajasthan
+28.625,74.125,Rajasthan
+28.625,74.375,Rajasthan
+28.625,74.625,Rajasthan
+28.625,74.875,Rajasthan
+28.625,75.125,Rajasthan
+28.625,75.375,Rajasthan
+28.625,75.625,Haryana
+28.625,75.875,Haryana
+28.625,76.125,Haryana
+28.625,76.375,Haryana
+28.625,76.625,Haryana
+28.625,76.875,Haryana
+28.625,77.125,Delhi
+28.625,77.375,Uttar Pradesh
+28.625,77.625,Uttar Pradesh
+28.625,77.875,Uttar Pradesh
+28.625,78.125,Uttar Pradesh
+28.625,78.375,Uttar Pradesh
+28.625,78.625,Uttar Pradesh
+28.625,78.875,Uttar Pradesh
+28.625,79.125,Uttar Pradesh
+28.625,79.375,Uttar Pradesh
+28.625,79.625,Uttar Pradesh
+28.625,79.875,Uttar Pradesh
+28.625,80.125,Uttar Pradesh
+28.625,80.375,Uttar Pradesh
+28.625,80.625,Uttar Pradesh
+28.625,93.375,Arunachal Pradesh
+28.625,93.625,Arunachal Pradesh
+28.625,93.875,Arunachal Pradesh
+28.625,94.125,Arunachal Pradesh
+28.625,94.375,Arunachal Pradesh
+28.625,94.625,Arunachal Pradesh
+28.625,94.875,Arunachal Pradesh
+28.625,95.125,Arunachal Pradesh
+28.625,95.375,Arunachal Pradesh
+28.625,95.625,Arunachal Pradesh
+28.625,95.875,Arunachal Pradesh
+28.625,96.125,Arunachal Pradesh
+28.625,96.375,Arunachal Pradesh
+28.875,72.375,Rajasthan
+28.875,72.625,Rajasthan
+28.875,72.875,Rajasthan
+28.875,73.125,Rajasthan
+28.875,73.375,Rajasthan
+28.875,73.625,Rajasthan
+28.875,73.875,Rajasthan
+28.875,74.125,Rajasthan
+28.875,74.375,Rajasthan
+28.875,74.625,Rajasthan
+28.875,74.875,Rajasthan
+28.875,75.125,Rajasthan
+28.875,75.375,Rajasthan
+28.875,75.625,Haryana
+28.875,75.875,Haryana
+28.875,76.125,Haryana
+28.875,76.375,Haryana
+28.875,76.625,Haryana
+28.875,76.875,Haryana
+28.875,77.125,Haryana
+28.875,77.375,Uttar Pradesh
+28.875,77.625,Uttar Pradesh
+28.875,77.875,Uttar Pradesh
+28.875,78.125,Uttar Pradesh
+28.875,78.375,Uttar Pradesh
+28.875,78.625,Uttar Pradesh
+28.875,78.875,Uttar Pradesh
+28.875,79.125,Uttar Pradesh
+28.875,79.375,Uttar Pradesh
+28.875,79.625,Uttarakhand
+28.875,79.875,Uttarakhand
+28.875,94.125,Arunachal Pradesh
+28.875,94.375,Arunachal Pradesh
+28.875,94.625,Arunachal Pradesh
+28.875,94.875,Arunachal Pradesh
+28.875,95.125,Arunachal Pradesh
+28.875,95.375,Arunachal Pradesh
+28.875,95.625,Arunachal Pradesh
+28.875,95.875,Arunachal Pradesh
+28.875,96.125,Arunachal Pradesh
+28.875,96.375,Arunachal Pradesh
+29.125,72.875,Rajasthan
+29.125,73.125,Rajasthan
+29.125,73.375,Rajasthan
+29.125,73.625,Rajasthan
+29.125,73.875,Rajasthan
+29.125,74.125,Rajasthan
+29.125,74.375,Rajasthan
+29.125,74.625,Rajasthan
+29.125,74.875,Rajasthan
+29.125,75.125,Rajasthan
+29.125,75.375,Rajasthan
+29.125,75.625,Haryana
+29.125,75.875,Haryana
+29.125,76.125,Haryana
+29.125,76.375,Haryana
+29.125,76.625,Haryana
+29.125,76.875,Haryana
+29.125,77.125,Haryana
+29.125,77.375,Uttar Pradesh
+29.125,77.625,Uttar Pradesh
+29.125,77.875,Uttar Pradesh
+29.125,78.125,Uttar Pradesh
+29.125,78.375,Uttar Pradesh
+29.125,78.625,Uttar Pradesh
+29.125,78.875,Uttar Pradesh
+29.125,79.125,Uttar Pradesh
+29.125,79.375,Uttarakhand
+29.125,79.625,Uttarakhand
+29.125,79.875,Uttarakhand
+29.125,94.125,Arunachal Pradesh
+29.125,94.375,Arunachal Pradesh
+29.125,94.625,Arunachal Pradesh
+29.125,94.875,Arunachal Pradesh
+29.125,95.125,Arunachal Pradesh
+29.125,95.375,Arunachal Pradesh
+29.125,95.625,Arunachal Pradesh
+29.125,95.875,Arunachal Pradesh
+29.125,96.125,Arunachal Pradesh
+29.125,96.375,Arunachal Pradesh
+29.375,73.125,Rajasthan
+29.375,73.375,Rajasthan
+29.375,73.625,Rajasthan
+29.375,73.875,Rajasthan
+29.375,74.125,Rajasthan
+29.375,74.375,Rajasthan
+29.375,74.625,Haryana
+29.375,74.875,Rajasthan
+29.375,75.125,Haryana
+29.375,75.375,Haryana
+29.375,75.625,Haryana
+29.375,75.875,Haryana
+29.375,76.125,Haryana
+29.375,76.375,Haryana
+29.375,76.625,Haryana
+29.375,76.875,Haryana
+29.375,77.125,Haryana
+29.375,77.375,Uttar Pradesh
+29.375,77.625,Uttar Pradesh
+29.375,77.875,Uttar Pradesh
+29.375,78.125,Uttar Pradesh
+29.375,78.375,Uttar Pradesh
+29.375,78.625,Uttar Pradesh
+29.375,78.875,Uttar Pradesh
+29.375,79.125,Uttarakhand
+29.375,79.375,Uttarakhand
+29.375,79.625,Uttarakhand
+29.375,79.875,Uttarakhand
+29.375,80.125,Uttarakhand
+29.375,95.625,Arunachal Pradesh
+29.375,95.875,Arunachal Pradesh
+29.375,96.125,Arunachal Pradesh
+29.625,73.125,Rajasthan
+29.625,73.375,Rajasthan
+29.625,73.625,Rajasthan
+29.625,73.875,Rajasthan
+29.625,74.125,Rajasthan
+29.625,74.375,Rajasthan
+29.625,74.625,Haryana
+29.625,74.875,Haryana
+29.625,75.125,Haryana
+29.625,75.375,Haryana
+29.625,75.625,Haryana
+29.625,75.875,Haryana
+29.625,76.125,Haryana
+29.625,76.375,Haryana
+29.625,76.625,Haryana
+29.625,76.875,Haryana
+29.625,77.125,Uttar Pradesh
+29.625,77.375,Uttar Pradesh
+29.625,77.625,Uttar Pradesh
+29.625,77.875,Uttar Pradesh
+29.625,78.125,Uttar Pradesh
+29.625,78.375,Uttar Pradesh
+29.625,78.625,Uttarakhand
+29.625,78.875,Uttarakhand
+29.625,79.125,Uttarakhand
+29.625,79.375,Uttarakhand
+29.625,79.625,Uttarakhand
+29.625,79.875,Uttarakhand
+29.625,80.125,Uttarakhand
+29.875,73.375,Rajasthan
+29.875,73.625,Rajasthan
+29.875,73.875,Rajasthan
+29.875,74.125,Rajasthan
+29.875,74.375,Rajasthan
+29.875,74.625,Haryana
+29.875,74.875,Haryana
+29.875,75.125,Punjab
+29.875,75.375,Punjab
+29.875,75.625,Punjab
+29.875,75.875,Punjab
+29.875,76.125,Punjab
+29.875,76.375,Haryana
+29.875,76.625,Haryana
+29.875,76.875,Haryana
+29.875,77.125,Haryana
+29.875,77.375,Uttar Pradesh
+29.875,77.625,Uttar Pradesh
+29.875,77.875,Uttarakhand
+29.875,78.125,Uttarakhand
+29.875,78.375,Uttarakhand
+29.875,78.625,Uttarakhand
+29.875,78.875,Uttarakhand
+29.875,79.125,Uttarakhand
+29.875,79.375,Uttarakhand
+29.875,79.625,Uttarakhand
+29.875,79.875,Uttarakhand
+29.875,80.125,Uttarakhand
+30.125,73.625,Rajasthan
+30.125,73.875,Rajasthan
+30.125,74.125,Punjab
+30.125,74.375,Punjab
+30.125,74.625,Punjab
+30.125,74.875,Punjab
+30.125,75.125,Punjab
+30.125,75.375,Punjab
+30.125,75.625,Punjab
+30.125,75.875,Punjab
+30.125,76.125,Punjab
+30.125,76.375,Punjab
+30.125,76.625,Haryana
+30.125,76.875,Haryana
+30.125,77.125,Haryana
+30.125,77.375,Haryana
+30.125,77.625,Uttar Pradesh
+30.125,77.875,Uttarakhand
+30.125,78.125,Uttarakhand
+30.125,78.375,Uttarakhand
+30.125,78.625,Uttarakhand
+30.125,78.875,Uttarakhand
+30.125,79.125,Uttarakhand
+30.125,79.375,Uttarakhand
+30.125,79.625,Uttarakhand
+30.125,79.875,Uttarakhand
+30.125,80.125,Uttarakhand
+30.125,80.375,Uttarakhand
+30.375,73.875,Punjab
+30.375,74.125,Punjab
+30.375,74.375,Punjab
+30.375,74.625,Punjab
+30.375,74.875,Punjab
+30.375,75.125,Punjab
+30.375,75.375,Punjab
+30.375,75.625,Punjab
+30.375,75.875,Punjab
+30.375,76.125,Punjab
+30.375,76.375,Punjab
+30.375,76.625,Punjab
+30.375,76.875,Haryana
+30.375,77.125,Haryana
+30.375,77.375,Haryana
+30.375,77.625,Uttar Pradesh
+30.375,77.875,Uttarakhand
+30.375,78.125,Uttarakhand
+30.375,78.375,Uttarakhand
+30.375,78.625,Uttarakhand
+30.375,78.875,Uttarakhand
+30.375,79.125,Uttarakhand
+30.375,79.375,Uttarakhand
+30.375,79.625,Uttarakhand
+30.375,79.875,Uttarakhand
+30.375,80.125,Uttarakhand
+30.375,80.375,Uttarakhand
+30.375,80.625,Uttarakhand
+30.625,74.125,Punjab
+30.625,74.375,Punjab
+30.625,74.625,Punjab
+30.625,74.875,Punjab
+30.625,75.125,Punjab
+30.625,75.375,Punjab
+30.625,75.625,Punjab
+30.625,75.875,Punjab
+30.625,76.125,Punjab
+30.625,76.375,Punjab
+30.625,76.625,Punjab
+30.625,76.875,Punjab
+30.625,77.125,Haryana
+30.625,77.375,Himachal Pradesh
+30.625,77.625,Himachal Pradesh
+30.625,77.875,Uttarakhand
+30.625,78.125,Uttarakhand
+30.625,78.375,Uttarakhand
+30.625,78.625,Uttarakhand
+30.625,78.875,Uttarakhand
+30.625,79.125,Uttarakhand
+30.625,79.375,Uttarakhand
+30.625,79.625,Uttarakhand
+30.625,79.875,Uttarakhand
+30.625,80.125,Uttarakhand
+30.875,74.375,Punjab
+30.875,74.625,Punjab
+30.875,74.875,Punjab
+30.875,75.125,Punjab
+30.875,75.375,Punjab
+30.875,75.625,Punjab
+30.875,75.875,Punjab
+30.875,76.125,Punjab
+30.875,76.375,Punjab
+30.875,76.625,Punjab
+30.875,76.875,Himachal Pradesh
+30.875,77.125,Himachal Pradesh
+30.875,77.375,Himachal Pradesh
+30.875,77.625,Himachal Pradesh
+30.875,77.875,Uttarakhand
+30.875,78.125,Uttarakhand
+30.875,78.375,Uttarakhand
+30.875,78.625,Uttarakhand
+30.875,78.875,Uttarakhand
+30.875,79.125,Uttarakhand
+30.875,79.375,Uttarakhand
+30.875,79.625,Uttarakhand
+30.875,79.875,Uttarakhand
+31.125,74.625,Punjab
+31.125,74.875,Punjab
+31.125,75.125,Punjab
+31.125,75.375,Punjab
+31.125,75.625,Punjab
+31.125,75.875,Punjab
+31.125,76.125,Punjab
+31.125,76.375,Punjab
+31.125,76.625,Himachal Pradesh
+31.125,76.875,Himachal Pradesh
+31.125,77.125,Himachal Pradesh
+31.125,77.375,Himachal Pradesh
+31.125,77.625,Himachal Pradesh
+31.125,77.875,Himachal Pradesh
+31.125,78.125,Uttarakhand
+31.125,78.375,Uttarakhand
+31.125,78.625,Uttarakhand
+31.125,78.875,Himachal Pradesh
+31.125,79.125,Uttarakhand
+31.125,79.375,Uttarakhand
+31.375,74.625,Punjab
+31.375,74.875,Punjab
+31.375,75.125,Punjab
+31.375,75.375,Punjab
+31.375,75.625,Punjab
+31.375,75.875,Punjab
+31.375,76.125,Punjab
+31.375,76.375,Punjab
+31.375,76.625,Himachal Pradesh
+31.375,76.875,Himachal Pradesh
+31.375,77.125,Himachal Pradesh
+31.375,77.375,Himachal Pradesh
+31.375,77.625,Himachal Pradesh
+31.375,77.875,Himachal Pradesh
+31.375,78.125,Himachal Pradesh
+31.375,78.375,Himachal Pradesh
+31.375,78.625,Himachal Pradesh
+31.375,78.875,Himachal Pradesh
+31.625,74.625,Punjab
+31.625,74.875,Punjab
+31.625,75.125,Punjab
+31.625,75.375,Punjab
+31.625,75.625,Punjab
+31.625,75.875,Punjab
+31.625,76.125,Himachal Pradesh
+31.625,76.375,Himachal Pradesh
+31.625,76.625,Himachal Pradesh
+31.625,76.875,Himachal Pradesh
+31.625,77.125,Himachal Pradesh
+31.625,77.375,Himachal Pradesh
+31.625,77.625,Himachal Pradesh
+31.625,77.875,Himachal Pradesh
+31.625,78.125,Himachal Pradesh
+31.625,78.375,Himachal Pradesh
+31.625,78.625,Himachal Pradesh
+31.875,74.625,Punjab
+31.875,74.875,Punjab
+31.875,75.125,Punjab
+31.875,75.375,Punjab
+31.875,75.625,Punjab
+31.875,75.875,Punjab
+31.875,76.125,Himachal Pradesh
+31.875,76.375,Himachal Pradesh
+31.875,76.625,Himachal Pradesh
+31.875,76.875,Himachal Pradesh
+31.875,77.125,Himachal Pradesh
+31.875,77.375,Himachal Pradesh
+31.875,77.625,Himachal Pradesh
+31.875,77.875,Himachal Pradesh
+31.875,78.125,Himachal Pradesh
+31.875,78.375,Himachal Pradesh
+31.875,78.625,Himachal Pradesh
+32.125,74.875,Punjab
+32.125,75.125,Punjab
+32.125,75.375,Punjab
+32.125,75.625,Punjab
+32.125,75.875,Himachal Pradesh
+32.125,76.125,Himachal Pradesh
+32.125,76.375,Himachal Pradesh
+32.125,76.625,Himachal Pradesh
+32.125,76.875,Himachal Pradesh
+32.125,77.125,Himachal Pradesh
+32.125,77.375,Himachal Pradesh
+32.125,77.625,Himachal Pradesh
+32.125,77.875,Himachal Pradesh
+32.125,78.125,Himachal Pradesh
+32.125,78.375,Himachal Pradesh
+32.375,74.875,Jammu & Kashmir
+32.375,75.125,Jammu & Kashmir
+32.375,75.375,Jammu & Kashmir
+32.375,75.625,Punjab
+32.375,75.875,Himachal Pradesh
+32.375,76.125,Himachal Pradesh
+32.375,76.375,Himachal Pradesh
+32.375,76.625,Himachal Pradesh
+32.375,76.875,Himachal Pradesh
+32.375,77.125,Himachal Pradesh
+32.375,77.375,Himachal Pradesh
+32.375,77.625,Himachal Pradesh
+32.375,77.875,Himachal Pradesh
+32.375,78.125,Himachal Pradesh
+32.375,78.375,Himachal Pradesh
+32.625,74.875,Jammu & Kashmir
+32.625,75.125,Jammu & Kashmir
+32.625,75.375,Jammu & Kashmir
+32.625,75.625,Jammu & Kashmir
+32.625,75.875,Jammu & Kashmir
+32.625,76.125,Himachal Pradesh
+32.625,76.375,Himachal Pradesh
+32.625,76.625,Himachal Pradesh
+32.625,76.875,Himachal Pradesh
+32.625,77.125,Himachal Pradesh
+32.625,77.375,Himachal Pradesh
+32.625,77.625,Himachal Pradesh
+32.625,77.875,Himachal Pradesh
+32.625,78.125,Himachal Pradesh
+32.625,78.375,Himachal Pradesh
+32.625,78.625,Ladakh
+32.625,78.875,Ladakh
+32.875,74.625,Jammu & Kashmir
+32.875,74.875,Jammu & Kashmir
+32.875,75.125,Jammu & Kashmir
+32.875,75.375,Jammu & Kashmir
+32.875,75.625,Jammu & Kashmir
+32.875,75.875,Himachal Pradesh
+32.875,76.125,Himachal Pradesh
+32.875,76.375,Himachal Pradesh
+32.875,76.625,Himachal Pradesh
+32.875,76.875,Himachal Pradesh
+32.875,77.125,Himachal Pradesh
+32.875,77.375,Ladakh
+32.875,77.625,Himachal Pradesh
+32.875,77.875,Ladakh
+32.875,78.125,Ladakh
+32.875,78.375,Ladakh
+32.875,78.625,Ladakh
+32.875,78.875,Ladakh
+32.875,79.125,Ladakh
+32.875,79.375,Ladakh
+33.125,73.875,Jammu & Kashmir
+33.125,74.125,Jammu & Kashmir
+33.125,74.375,Jammu & Kashmir
+33.125,74.625,Jammu & Kashmir
+33.125,74.875,Jammu & Kashmir
+33.125,75.125,Jammu & Kashmir
+33.125,75.375,Jammu & Kashmir
+33.125,75.625,Jammu & Kashmir
+33.125,75.875,Jammu & Kashmir
+33.125,76.125,Jammu & Kashmir
+33.125,76.375,Himachal Pradesh
+33.125,76.625,Himachal Pradesh
+33.125,76.875,Ladakh
+33.125,77.125,Ladakh
+33.125,77.375,Ladakh
+33.125,77.625,Ladakh
+33.125,77.875,Ladakh
+33.125,78.125,Ladakh
+33.125,78.375,Ladakh
+33.125,78.625,Ladakh
+33.125,78.875,Ladakh
+33.125,79.125,Ladakh
+33.375,73.625,Jammu & Kashmir
+33.375,73.875,Jammu & Kashmir
+33.375,74.125,Jammu & Kashmir
+33.375,74.375,Jammu & Kashmir
+33.375,74.625,Jammu & Kashmir
+33.375,74.875,Jammu & Kashmir
+33.375,75.125,Jammu & Kashmir
+33.375,75.375,Jammu & Kashmir
+33.375,75.625,Jammu & Kashmir
+33.375,75.875,Jammu & Kashmir
+33.375,76.125,Jammu & Kashmir
+33.375,76.375,Jammu & Kashmir
+33.375,76.625,Jammu & Kashmir
+33.375,76.875,Ladakh
+33.375,77.125,Ladakh
+33.375,77.375,Ladakh
+33.375,77.625,Ladakh
+33.375,77.875,Ladakh
+33.375,78.125,Ladakh
+33.375,78.375,Ladakh
+33.375,78.625,Ladakh
+33.375,78.875,Ladakh
+33.375,79.125,Ladakh
+33.625,73.625,Jammu & Kashmir
+33.625,73.875,Jammu & Kashmir
+33.625,74.125,Jammu & Kashmir
+33.625,74.375,Jammu & Kashmir
+33.625,74.625,Jammu & Kashmir
+33.625,74.875,Jammu & Kashmir
+33.625,75.125,Jammu & Kashmir
+33.625,75.375,Jammu & Kashmir
+33.625,75.625,Jammu & Kashmir
+33.625,75.875,Jammu & Kashmir
+33.625,76.125,Jammu & Kashmir
+33.625,76.375,Ladakh
+33.625,76.625,Ladakh
+33.625,76.875,Ladakh
+33.625,77.125,Ladakh
+33.625,77.375,Ladakh
+33.625,77.625,Ladakh
+33.625,77.875,Ladakh
+33.625,78.125,Ladakh
+33.625,78.375,Ladakh
+33.625,78.625,Ladakh
+33.625,78.875,Ladakh
+33.875,73.625,Jammu & Kashmir
+33.875,73.875,Jammu & Kashmir
+33.875,74.125,Jammu & Kashmir
+33.875,74.375,Jammu & Kashmir
+33.875,74.625,Jammu & Kashmir
+33.875,74.875,Jammu & Kashmir
+33.875,75.125,Jammu & Kashmir
+33.875,75.375,Jammu & Kashmir
+33.875,75.625,Jammu & Kashmir
+33.875,75.875,Jammu & Kashmir
+33.875,76.125,Jammu & Kashmir
+33.875,76.375,Ladakh
+33.875,76.625,Ladakh
+33.875,76.875,Ladakh
+33.875,77.125,Ladakh
+33.875,77.375,Ladakh
+33.875,77.625,Ladakh
+33.875,77.875,Ladakh
+33.875,78.125,Ladakh
+33.875,78.375,Ladakh
+33.875,78.625,Ladakh
+33.875,78.875,Ladakh
+34.125,73.625,Jammu & Kashmir
+34.125,73.875,Jammu & Kashmir
+34.125,74.125,Jammu & Kashmir
+34.125,74.375,Jammu & Kashmir
+34.125,74.625,Jammu & Kashmir
+34.125,74.875,Jammu & Kashmir
+34.125,75.125,Jammu & Kashmir
+34.125,75.375,Jammu & Kashmir
+34.125,75.625,Jammu & Kashmir
+34.125,75.875,Ladakh
+34.125,76.125,Ladakh
+34.125,76.375,Ladakh
+34.125,76.625,Ladakh
+34.125,76.875,Ladakh
+34.125,77.125,Ladakh
+34.125,77.375,Ladakh
+34.125,77.625,Ladakh
+34.125,77.875,Ladakh
+34.125,78.125,Ladakh
+34.125,78.375,Ladakh
+34.125,78.625,Ladakh
+34.125,78.875,Ladakh
+34.375,73.625,Jammu & Kashmir
+34.375,73.875,Jammu & Kashmir
+34.375,74.125,Jammu & Kashmir
+34.375,74.375,Jammu & Kashmir
+34.375,74.625,Jammu & Kashmir
+34.375,74.875,Jammu & Kashmir
+34.375,75.125,Jammu & Kashmir
+34.375,75.375,Jammu & Kashmir
+34.375,75.625,Ladakh
+34.375,75.875,Ladakh
+34.375,76.125,Ladakh
+34.375,76.375,Ladakh
+34.375,76.625,Ladakh
+34.375,76.875,Ladakh
+34.375,77.125,Ladakh
+34.375,77.375,Ladakh
+34.375,77.625,Ladakh
+34.375,77.875,Ladakh
+34.375,78.125,Ladakh
+34.375,78.375,Ladakh
+34.375,78.625,Ladakh
+34.375,78.875,Ladakh
+34.375,79.125,Ladakh
+34.375,79.375,Ladakh
+34.625,73.375,Jammu & Kashmir
+34.625,73.625,Jammu & Kashmir
+34.625,73.875,Jammu & Kashmir
+34.625,74.125,Jammu & Kashmir
+34.625,74.375,Jammu & Kashmir
+34.625,74.625,Jammu & Kashmir
+34.625,74.875,Jammu & Kashmir
+34.625,75.125,Jammu & Kashmir
+34.625,75.375,Ladakh
+34.625,75.625,Ladakh
+34.625,75.875,Ladakh
+34.625,76.125,Ladakh
+34.625,76.375,Ladakh
+34.625,76.625,Ladakh
+34.625,76.875,Ladakh
+34.625,77.125,Ladakh
+34.625,77.375,Ladakh
+34.625,77.625,Ladakh
+34.625,77.875,Ladakh
+34.625,78.125,Ladakh
+34.625,78.375,Ladakh
+34.625,78.625,Ladakh
+34.625,78.875,Ladakh
+34.625,79.125,Ladakh
+34.625,79.375,Ladakh
+34.625,79.625,Ladakh
+34.875,73.875,Jammu & Kashmir
+34.875,74.125,Jammu & Kashmir
+34.875,74.375,Jammu & Kashmir
+34.875,74.625,Jammu & Kashmir
+34.875,74.875,Ladakh
+34.875,75.125,Jammu & Kashmir
+34.875,75.375,Ladakh
+34.875,75.625,Ladakh
+34.875,75.875,Ladakh
+34.875,76.125,Ladakh
+34.875,76.375,Ladakh
+34.875,76.625,Ladakh
+34.875,76.875,Ladakh
+34.875,77.125,Ladakh
+34.875,77.375,Ladakh
+34.875,77.625,Ladakh
+34.875,77.875,Ladakh
+34.875,78.125,Ladakh
+34.875,78.375,Ladakh
+34.875,78.625,Ladakh
+34.875,78.875,Ladakh
+34.875,79.125,Ladakh
+34.875,79.375,Ladakh
+34.875,79.625,Ladakh
+34.875,79.875,Ladakh
+35.125,73.875,Ladakh
+35.125,74.125,Ladakh
+35.125,74.375,Ladakh
+35.125,74.625,Ladakh
+35.125,74.875,Ladakh
+35.125,75.125,Ladakh
+35.125,75.375,Ladakh
+35.125,75.625,Ladakh
+35.125,75.875,Ladakh
+35.125,76.125,Ladakh
+35.125,76.375,Ladakh
+35.125,76.625,Ladakh
+35.125,76.875,Ladakh
+35.125,77.125,Ladakh
+35.125,77.375,Ladakh
+35.125,77.625,Ladakh
+35.125,77.875,Ladakh
+35.125,78.125,Ladakh
+35.125,78.375,Ladakh
+35.125,78.625,Ladakh
+35.125,78.875,Ladakh
+35.125,79.125,Ladakh
+35.125,79.375,Ladakh
+35.125,79.625,Ladakh
+35.125,79.875,Ladakh
+35.375,73.875,Ladakh
+35.375,74.125,Ladakh
+35.375,74.375,Ladakh
+35.375,74.625,Ladakh
+35.375,74.875,Ladakh
+35.375,75.125,Ladakh
+35.375,75.375,Ladakh
+35.375,75.625,Ladakh
+35.375,75.875,Ladakh
+35.375,76.125,Ladakh
+35.375,76.375,Ladakh
+35.375,76.625,Ladakh
+35.375,76.875,Ladakh
+35.375,77.125,Ladakh
+35.375,77.375,Ladakh
+35.375,77.625,Ladakh
+35.375,77.875,Ladakh
+35.375,78.125,Ladakh
+35.375,78.375,Ladakh
+35.375,78.625,Ladakh
+35.375,78.875,Ladakh
+35.375,79.125,Ladakh
+35.375,79.375,Ladakh
+35.375,79.625,Ladakh
+35.375,79.875,Ladakh
+35.625,73.625,Ladakh
+35.625,73.875,Ladakh
+35.625,74.125,Ladakh
+35.625,74.375,Ladakh
+35.625,74.625,Ladakh
+35.625,74.875,Ladakh
+35.625,75.125,Ladakh
+35.625,75.375,Ladakh
+35.625,75.625,Ladakh
+35.625,75.875,Ladakh
+35.625,76.125,Ladakh
+35.625,76.375,Ladakh
+35.625,76.625,Ladakh
+35.625,76.875,Ladakh
+35.625,77.125,Ladakh
+35.625,77.875,Ladakh
+35.625,78.125,Ladakh
+35.625,78.375,Ladakh
+35.625,78.625,Ladakh
+35.625,78.875,Ladakh
+35.625,79.125,Ladakh
+35.625,79.375,Ladakh
+35.625,79.625,Ladakh
+35.625,79.875,Ladakh
+35.625,80.125,Ladakh
+35.875,73.125,Ladakh
+35.875,73.375,Ladakh
+35.875,73.625,Ladakh
+35.875,73.875,Ladakh
+35.875,74.125,Ladakh
+35.875,74.375,Ladakh
+35.875,74.625,Ladakh
+35.875,74.875,Ladakh
+35.875,75.125,Ladakh
+35.875,75.375,Ladakh
+35.875,75.625,Ladakh
+35.875,75.875,Ladakh
+35.875,76.125,Ladakh
+35.875,76.375,Ladakh
+35.875,76.625,Ladakh
+35.875,76.875,Ladakh
+35.875,78.625,Ladakh
+35.875,78.875,Ladakh
+35.875,79.125,Ladakh
+35.875,79.375,Ladakh
+35.875,79.625,Ladakh
+35.875,79.875,Ladakh
+36.125,72.625,Ladakh
+36.125,72.875,Ladakh
+36.125,73.125,Ladakh
+36.125,73.375,Ladakh
+36.125,73.625,Ladakh
+36.125,73.875,Ladakh
+36.125,74.125,Ladakh
+36.125,74.375,Ladakh
+36.125,74.625,Ladakh
+36.125,74.875,Ladakh
+36.125,75.125,Ladakh
+36.125,75.375,Ladakh
+36.125,75.625,Ladakh
+36.125,75.875,Ladakh
+36.125,76.125,Ladakh
+36.125,76.375,Ladakh
+36.125,76.625,Ladakh
+36.375,72.625,Ladakh
+36.375,72.875,Ladakh
+36.375,73.125,Ladakh
+36.375,73.375,Ladakh
+36.375,73.625,Ladakh
+36.375,73.875,Ladakh
+36.375,74.125,Ladakh
+36.375,74.375,Ladakh
+36.375,74.625,Ladakh
+36.375,74.875,Ladakh
+36.375,75.125,Ladakh
+36.375,75.375,Ladakh
+36.375,75.625,Ladakh
+36.375,75.875,Ladakh
+36.375,76.125,Ladakh
+36.625,73.125,Ladakh
+36.625,73.375,Ladakh
+36.625,73.625,Ladakh
+36.625,73.875,Ladakh
+36.625,74.125,Ladakh
+36.625,74.375,Ladakh
+36.625,74.625,Ladakh
+36.625,74.875,Ladakh
+36.625,75.125,Ladakh
+36.625,75.375,Ladakh
+36.625,75.625,Ladakh
+36.875,73.625,Ladakh
+36.875,73.875,Ladakh
+36.875,74.125,Ladakh
+36.875,74.375,Ladakh
+36.875,74.625,Ladakh
+36.875,74.875,Ladakh
+36.875,75.125,Ladakh
+36.875,75.375,Ladakh
+37.125,74.625,Ladakh
+37.125,74.875,Ladakh
+37.125,75.125,Ladakh

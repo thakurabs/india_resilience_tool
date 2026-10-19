@@ -1,0 +1,259 @@
+{
+  "tool": "tools/diagnostics/wbgt_outdoor_selection.py",
+  "spec": "docs/diagnostics/wbgt_outdoor_selection/SPEC.md",
+  "milestone_1_spec": "docs/diagnostics/wbgt_outdoor_feasibility/SPEC.md",
+  "generated_utc": "2026-09-29T09:13:49.336400+00:00",
+  "git_branch": "add_flood_depth",
+  "git_sha": "afe6cb8",
+  "git_dirty": true,
+  "command": "D:\\projects\\india_resilience_tool\\tools\\diagnostics\\wbgt_outdoor_selection.py --stage all --workers 1 --resume",
+  "python": "3.10.20",
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "thermofeel": "2.3.0",
+  "reference_signatures": {
+    "legacy": "liljegren-legacy-v1:cossza-at-label",
+    "audited": "liljegren-audited-v1:cossza-at-radiation-interval-midpoint",
+    "midpoint": "liljegren-midpoint-v1:all-drivers-interpolated-to-radiation-interval-midpoint"
+  },
+  "gates": {
+    "median_abs_error_c": 1.0,
+    "rmse_c": 1.5,
+    "count_min_ref_per_year": 5.0,
+    "count_rel_tol": 0.2,
+    "count_abs_floor_per_year": 2.0,
+    "source": "imported from wbgt_outdoor_feasibility, unchanged"
+  },
+  "w1": {
+    "slope_per_c": 0.03,
+    "amplitude_bounds": [
+      0.1,
+      0.8
+    ],
+    "hinge_dtr_c": 13.333333333333334,
+    "status": "declared assumption, not a published coefficient"
+  },
+  "w2": {
+    "primary_calibration": "1990-2004",
+    "primary_evaluation": "2005-2014",
+    "needs_spatial_climatology_for_national_use": true
+  },
+  "carbonplan": {
+    "repo": "github.com/carbonplan/extreme-heat",
+    "revision": "f662b37200fe219db912ebd09ceb52fdac979861",
+    "revision_date": "2024-06-14",
+    "notebooks": [
+      "07_solar_radiation_wind.ipynb",
+      "08_shade_sun_adjustment.ipynb"
+    ],
+    "coefficients": [
+      -2.156355932203391,
+      -0.005375000000002303,
+      1.042372881355932
+    ]
+  },
+  "qdm": {
+    "status": "RUN (trigger fired)",
+    "future_sample": "available",
+    "rows": 24
+  },
+  "stages_run": [
+    "windows",
+    "reference",
+    "nex",
+    "qdm"
+  ],
+  "selection": {
+    "rule": "SPEC.md 7, predeclared",
+    "selected": "W1",
+    "status": "BEST DEVELOPMENT CANDIDATE (count gate not passed)",
+    "ranking": [
+      {
+        "candidate": "W1",
+        "name": "W1 recon-wind-dtr (DTR-dependent amplitude, declared assumption)",
+        "needs_climatology_asset": false,
+        "daily_pairs": 12,
+        "daily_pairs_passing": 12,
+        "daily_gate": "PASS",
+        "worst_median_abs_error_c": 0.7279301032390322,
+        "worst_rmse_c": 1.2397650309430162,
+        "count_pairs_gated": 30,
+        "count_pairs_failing": 2,
+        "count_gate": "FAIL",
+        "worst_count_error_per_year": 15.625,
+        "n_individual_years_outside_tolerance": 19
+      },
+      {
+        "candidate": "C2",
+        "name": "C2 recon-wind-diurnal (fixed amplitude 0.4) [milestone 1, unchanged]",
+        "needs_climatology_asset": false,
+        "daily_pairs": 12,
+        "daily_pairs_passing": 12,
+        "daily_gate": "PASS",
+        "worst_median_abs_error_c": 0.7100824690230922,
+        "worst_rmse_c": 1.2322871334673628,
+        "count_pairs_gated": 30,
+        "count_pairs_failing": 2,
+        "count_gate": "FAIL",
+        "worst_count_error_per_year": 21.230769230769226,
+        "n_individual_years_outside_tolerance": 21
+      },
+      {
+        "candidate": "W2",
+        "name": "W2 recon-wind-climatology (site-month hourly profile, forward calibration)",
+        "needs_climatology_asset": true,
+        "daily_pairs": 6,
+        "daily_pairs_passing": 6,
+        "daily_gate": "PASS",
+        "worst_median_abs_error_c": 0.8535257980382198,
+        "worst_rmse_c": 1.1945143077351539,
+        "count_pairs_gated": 15,
+        "count_pairs_failing": 2,
+        "count_gate": "FAIL",
+        "worst_count_error_per_year": 23.75,
+        "n_individual_years_outside_tolerance": 9
+      },
+      {
+        "candidate": "C1",
+        "name": "C1 recon-baseline (constant daily-mean wind) [milestone 1, unchanged]",
+        "needs_climatology_asset": false,
+        "daily_pairs": 12,
+        "daily_pairs_passing": 12,
+        "daily_gate": "PASS",
+        "worst_median_abs_error_c": 0.9025507051204045,
+        "worst_rmse_c": 1.1597250413485758,
+        "count_pairs_gated": 30,
+        "count_pairs_failing": 2,
+        "count_gate": "FAIL",
+        "worst_count_error_per_year": 38.25,
+        "n_individual_years_outside_tolerance": 29
+      }
+    ],
+    "eliminated": [],
+    "all_candidates": [
+      {
+        "candidate": "C1",
+        "name": "C1 recon-baseline (constant daily-mean wind) [milestone 1, unchanged]",
+        "needs_climatology_asset": false,
+        "daily_pairs": 12,
+        "daily_pairs_passing": 12,
+        "daily_gate": "PASS",
+        "worst_median_abs_error_c": 0.9025507051204045,
+        "worst_rmse_c": 1.1597250413485758,
+        "count_pairs_gated": 30,
+        "count_pairs_failing": 2,
+        "count_gate": "FAIL",
+        "worst_count_error_per_year": 38.25,
+        "n_individual_years_outside_tolerance": 29
+      },
+      {
+        "candidate": "C2",
+        "name": "C2 recon-wind-diurnal (fixed amplitude 0.4) [milestone 1, unchanged]",
+        "needs_climatology_asset": false,
+        "daily_pairs": 12,
+        "daily_pairs_passing": 12,
+        "daily_gate": "PASS",
+        "worst_median_abs_error_c": 0.7100824690230922,
+        "worst_rmse_c": 1.2322871334673628,
+        "count_pairs_gated": 30,
+        "count_pairs_failing": 2,
+        "count_gate": "FAIL",
+        "worst_count_error_per_year": 21.230769230769226,
+        "n_individual_years_outside_tolerance": 21
+      },
+      {
+        "candidate": "W1",
+        "name": "W1 recon-wind-dtr (DTR-dependent amplitude, declared assumption)",
+        "needs_climatology_asset": false,
+        "daily_pairs": 12,
+        "daily_pairs_passing": 12,
+        "daily_gate": "PASS",
+        "worst_median_abs_error_c": 0.7279301032390322,
+        "worst_rmse_c": 1.2397650309430162,
+        "count_pairs_gated": 30,
+        "count_pairs_failing": 2,
+        "count_gate": "FAIL",
+        "worst_count_error_per_year": 15.625,
+        "n_individual_years_outside_tolerance": 19
+      },
+      {
+        "candidate": "W2",
+        "name": "W2 recon-wind-climatology (site-month hourly profile, forward calibration)",
+        "needs_climatology_asset": true,
+        "daily_pairs": 6,
+        "daily_pairs_passing": 6,
+        "daily_gate": "PASS",
+        "worst_median_abs_error_c": 0.8535257980382198,
+        "worst_rmse_c": 1.1945143077351539,
+        "count_pairs_gated": 15,
+        "count_pairs_failing": 2,
+        "count_gate": "FAIL",
+        "worst_count_error_per_year": 23.75,
+        "n_individual_years_outside_tolerance": 9
+      }
+    ]
+  },
+  "reference_sensitivity": {
+    "verdict": "REFERENCE UNCERTAINTY: a gate verdict changes under R3",
+    "sites": [
+      "Bikaner",
+      "Hyderabad"
+    ],
+    "n_count_gate_verdicts_changed": 13,
+    "n_daily_gate_verdicts_changed": 0,
+    "signature": "liljegren-midpoint-v1:all-drivers-interpolated-to-radiation-interval-midpoint"
+  },
+  "nex": {
+    "models": [
+      "ACCESS-CM2",
+      "MRI-ESM2-0"
+    ],
+    "scenario": "historical",
+    "years": "1990-1999",
+    "candidate": "W1",
+    "day_boundary": "INFERRED from the CMIP6 daily convention; no file publishes time_bnds, so this is not verified locally",
+    "qdm_trigger": {
+      "fired": true,
+      "threshold_c": 32.0,
+      "relative_tolerance": 0.25,
+      "min_sites": 2,
+      "absolute_tolerance_days_per_year": 15.0,
+      "per_model": [
+        {
+          "model": "ACCESS-CM2",
+          "sites_over_relative_tolerance": [
+            "Bikaner",
+            "Hyderabad",
+            "Kochi",
+            "Kolkata"
+          ],
+          "sites_over_absolute_tolerance": [
+            "Bikaner",
+            "Hyderabad",
+            "Kochi",
+            "Kolkata",
+            "Lucknow"
+          ],
+          "fired": true
+        },
+        {
+          "model": "MRI-ESM2-0",
+          "sites_over_relative_tolerance": [
+            "Bikaner",
+            "Hyderabad",
+            "Kochi",
+            "Kolkata",
+            "Lucknow"
+          ],
+          "sites_over_absolute_tolerance": [
+            "Bikaner",
+            "Kochi",
+            "Kolkata",
+            "Lucknow"
+          ],
+          "fired": true
+        }
+      ]
+    }
+  }
+}

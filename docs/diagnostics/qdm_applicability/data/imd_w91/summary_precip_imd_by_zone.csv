@@ -1,0 +1,65 @@
+metric,zone,err_raw,err_qdm,raw_2050,qdm_2050,verdict,n_units
+cwd_consecutive_wet_days,arid <600,4.25,3.8,10.49,9.08,NO EFFECT,12
+cwd_consecutive_wet_days,humid >1500,9.76,7.81,27.39,30.27,MARGINAL,12
+cwd_consecutive_wet_days,semi-arid 600-1000,5.83,6.18,17.88,17.13,NO EFFECT,27
+cwd_consecutive_wet_days,sub-humid 1000-1500,6.86,8.23,21.82,23.6,WORSE,23
+pr_consecutive_dry_days_lt1mm,arid <600,35.73,14.61,127.75,101.01,MATERIAL,12
+pr_consecutive_dry_days_lt1mm,humid >1500,12.4,8.52,63.38,56.19,MARGINAL,12
+pr_consecutive_dry_days_lt1mm,semi-arid 600-1000,31.85,14.83,120.43,91.4,MATERIAL,27
+pr_consecutive_dry_days_lt1mm,sub-humid 1000-1500,20.59,12.49,87.93,69.26,MARGINAL,23
+pr_max_1day_precip,arid <600,14.83,16.04,42.5,54.96,NO EFFECT,12
+pr_max_1day_precip,humid >1500,54.47,18.1,67.59,120.5,MATERIAL,12
+pr_max_1day_precip,semi-arid 600-1000,29.93,26.98,54.77,84.95,NO EFFECT,27
+pr_max_1day_precip,sub-humid 1000-1500,40.47,24.27,54.36,89.95,MARGINAL,23
+pr_max_5day_precip,arid <600,31.99,33.13,108.1,122.5,NO EFFECT,12
+pr_max_5day_precip,humid >1500,98.04,54.29,193.27,309.73,MARGINAL,12
+pr_max_5day_precip,semi-arid 600-1000,41.61,48.52,154.35,189.22,NO EFFECT,27
+pr_max_5day_precip,sub-humid 1000-1500,54.52,46.19,157.53,212.87,NO EFFECT,23
+r20mm_very_heavy_precip_days,arid <600,2.88,1.79,6.81,6.32,NO EFFECT,12
+r20mm_very_heavy_precip_days,humid >1500,13.83,5.74,31.31,38.13,MATERIAL,12
+r20mm_very_heavy_precip_days,semi-arid 600-1000,6.29,3.05,15.94,12.26,MARGINAL,27
+r20mm_very_heavy_precip_days,sub-humid 1000-1500,9.62,4.04,22.37,18.8,MATERIAL,23
+r95p_interannual_variability,arid <600,0.29,0.27,1.01,0.99,NO EFFECT,12
+r95p_interannual_variability,humid >1500,0.22,0.22,0.51,0.5,NO EFFECT,12
+r95p_interannual_variability,semi-arid 600-1000,0.26,0.28,0.68,0.68,NO EFFECT,27
+r95p_interannual_variability,sub-humid 1000-1500,0.16,0.17,0.59,0.57,NO EFFECT,23
+r95p_very_wet_precip,arid <600,28.46,38.76,104.77,136.13,WORSE,12
+r95p_very_wet_precip,humid >1500,278.62,133.35,375.6,643.57,MATERIAL,12
+r95p_very_wet_precip,semi-arid 600-1000,106.76,96.52,203.83,289.77,NO EFFECT,27
+r95p_very_wet_precip,sub-humid 1000-1500,149.89,108.96,240.67,387.11,MARGINAL,23
+r95ptot_contribution_pct,arid <600,6.05,5.17,19.78,23.81,MARGINAL,12
+r95ptot_contribution_pct,humid >1500,7.32,3.8,19.32,25.6,MARGINAL,12
+r95ptot_contribution_pct,semi-arid 600-1000,8.1,5.03,20.04,27.45,MARGINAL,27
+r95ptot_contribution_pct,sub-humid 1000-1500,9.25,5.33,18.73,26.74,MARGINAL,23
+r99p_extreme_wet_precip,arid <600,18.11,26.35,37.44,50.83,WORSE,12
+r99p_extreme_wet_precip,humid >1500,104.24,69.01,132.03,239.48,MARGINAL,12
+r99p_extreme_wet_precip,semi-arid 600-1000,49.25,53.88,70.79,118.02,WORSE,27
+r99p_extreme_wet_precip,sub-humid 1000-1500,66.68,58.59,83.47,140.99,MARGINAL,23
+spi12_count_events_lt_minus1,arid <600,0.32,0.32,0.39,0.39,NO EFFECT,12
+spi12_count_events_lt_minus1,humid >1500,0.33,0.28,0.44,0.42,NO EFFECT,12
+spi12_count_events_lt_minus1,semi-arid 600-1000,0.29,0.32,0.31,0.3,NO EFFECT,27
+spi12_count_events_lt_minus1,sub-humid 1000-1500,0.28,0.29,0.37,0.34,NO EFFECT,23
+spi12_max_spell_lt_minus1,arid <600,1.4,1.4,1.53,1.49,NO EFFECT,12
+spi12_max_spell_lt_minus1,humid >1500,1.21,1.28,1.55,1.37,NO EFFECT,12
+spi12_max_spell_lt_minus1,semi-arid 600-1000,1.08,1.2,1.05,0.93,NO EFFECT,27
+spi12_max_spell_lt_minus1,sub-humid 1000-1500,1.31,1.37,1.23,1.11,NO EFFECT,23
+spi3_count_events_lt_minus1,arid <600,0.29,0.3,0.72,1.04,NO EFFECT,12
+spi3_count_events_lt_minus1,humid >1500,0.47,0.47,1.14,1.12,NO EFFECT,12
+spi3_count_events_lt_minus1,semi-arid 600-1000,0.37,0.31,0.79,0.94,NO EFFECT,27
+spi3_count_events_lt_minus1,sub-humid 1000-1500,0.35,0.37,1.01,0.99,NO EFFECT,23
+spi3_count_months_lt_minus1,arid <600,0.72,0.82,1.37,1.88,NO EFFECT,12
+spi3_count_months_lt_minus1,humid >1500,0.8,0.8,2.06,2.02,NO EFFECT,12
+spi3_count_months_lt_minus1,semi-arid 600-1000,0.62,0.59,1.34,1.52,NO EFFECT,27
+spi3_count_months_lt_minus1,sub-humid 1000-1500,0.86,0.92,1.85,1.75,NO EFFECT,23
+spi3_max_spell_lt_minus1,arid <600,0.59,0.63,1.21,1.54,NO EFFECT,12
+spi3_max_spell_lt_minus1,humid >1500,0.64,0.66,1.63,1.62,NO EFFECT,12
+spi3_max_spell_lt_minus1,semi-arid 600-1000,0.51,0.47,1.12,1.23,NO EFFECT,27
+spi3_max_spell_lt_minus1,sub-humid 1000-1500,0.69,0.72,1.51,1.43,NO EFFECT,23
+spi6_count_events_lt_minus1,arid <600,0.29,0.28,0.68,0.74,NO EFFECT,12
+spi6_count_events_lt_minus1,humid >1500,0.37,0.34,0.83,0.8,NO EFFECT,12
+spi6_count_events_lt_minus1,semi-arid 600-1000,0.29,0.29,0.68,0.63,NO EFFECT,27
+spi6_count_events_lt_minus1,sub-humid 1000-1500,0.34,0.36,0.79,0.73,NO EFFECT,23
+spi6_max_spell_lt_minus1,arid <600,0.79,0.78,1.41,1.53,NO EFFECT,12
+spi6_max_spell_lt_minus1,humid >1500,0.96,1.04,1.63,1.52,NO EFFECT,12
+spi6_max_spell_lt_minus1,semi-arid 600-1000,0.6,0.67,1.16,1.11,NO EFFECT,27
+spi6_max_spell_lt_minus1,sub-humid 1000-1500,0.87,0.92,1.49,1.32,NO EFFECT,23

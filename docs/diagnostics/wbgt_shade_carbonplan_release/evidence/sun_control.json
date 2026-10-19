@@ -1,0 +1,46 @@
+{
+  "verdict": "FAIL",
+  "model": "ACCESS-CM2",
+  "route_b_manifest_sha256": "ee9fbbb91f082a7542deb7a0d470a0c5943a21ade4c96b0fbef2298df1bad305",
+  "reports": [
+    {
+      "scenario": "historical",
+      "years": [
+        1990,
+        2010
+      ],
+      "eligible_units": 7752,
+      "values_checked": 813960,
+      "jointly_missing_values": 0,
+      "mismatches_above_csv_roundtrip": 325583,
+      "max_abs_difference": 2.8893099113247445e-07,
+      "verdict": "FAIL"
+    },
+    {
+      "scenario": "ssp245",
+      "years": [
+        2020,
+        2080
+      ],
+      "eligible_units": 7752,
+      "values_checked": 2364360,
+      "jointly_missing_values": 1710,
+      "mismatches_above_csv_roundtrip": 0,
+      "max_abs_difference": 2.8421709430404007e-13,
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "ssp585",
+      "years": [
+        2020,
+        2080
+      ],
+      "eligible_units": 7752,
+      "values_checked": 2364360,
+      "jointly_missing_values": 210,
+      "mismatches_above_csv_roundtrip": 0,
+      "max_abs_difference": 3.410605131648481e-13,
+      "verdict": "PASS"
+    }
+  ]
+}

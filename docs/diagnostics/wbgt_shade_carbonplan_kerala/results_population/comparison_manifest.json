@@ -1,0 +1,12 @@
+{
+  "pilot_run": "scratch/carbonplan_kerala/run_population",
+  "irt_source": "scratch/wbgt_shade_national/processed",
+  "model": "ACCESS-CM2",
+  "scenario": "historical",
+  "matched_units": {
+    "district": 14,
+    "block": 152
+  },
+  "unmatched_rows": 0,
+  "difference_convention": "pilot minus shade-peak-v1"
+}

@@ -1,0 +1,65 @@
+state_name,model,left_run,right_run,field,n_cells_valid_left,n_cells_valid_right,n_cells_common_valid,n_cells_gained,n_cells_lost,mean_delta_common,min_delta_common,max_delta_common,max_abs_delta_common,n_cells_changed_common
+Kerala,ACCESS-CM2,baseline,rh,wbgt_annual_mean_c,85,85,85,0,0,0.0,0.0,0.0,0.0,0
+Kerala,ACCESS-CM2,baseline,rh,days_ge_28,85,85,85,0,0,0.0,0.0,0.0,0.0,0
+Kerala,ACCESS-CM2,baseline,rh,days_ge_30,85,85,85,0,0,0.0,0.0,0.0,0.0,0
+Kerala,ACCESS-CM2,baseline,rh,days_ge_32,85,85,85,0,0,0.0,0.0,0.0,0.0,0
+Rajasthan,ACCESS-CM2,baseline,rh,wbgt_annual_mean_c,582,582,582,0,0,0.0,0.0,0.0,0.0,0
+Rajasthan,ACCESS-CM2,baseline,rh,days_ge_28,582,582,582,0,0,0.0,0.0,0.0,0.0,0
+Rajasthan,ACCESS-CM2,baseline,rh,days_ge_30,582,582,582,0,0,0.0,0.0,0.0,0.0,0
+Rajasthan,ACCESS-CM2,baseline,rh,days_ge_32,582,582,582,0,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,ACCESS-CM2,baseline,rh,wbgt_annual_mean_c,105,116,105,11,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,ACCESS-CM2,baseline,rh,days_ge_28,105,116,105,11,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,ACCESS-CM2,baseline,rh,days_ge_30,105,116,105,11,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,ACCESS-CM2,baseline,rh,days_ge_32,105,116,105,11,0,0.0,0.0,0.0,0.0,0
+Kerala,ACCESS-CM2,baseline,elev,wbgt_annual_mean_c,85,85,85,0,0,-0.01859306035198889,-0.12871302213154934,-1.6128050468466881e-06,0.12871302213154934,85
+Kerala,ACCESS-CM2,baseline,elev,days_ge_28,85,85,85,0,0,-1.0823529411764705,-7.0,0.0,7.0,31
+Kerala,ACCESS-CM2,baseline,elev,days_ge_30,85,85,85,0,0,-0.7058823529411765,-6.0,1.0,6.0,34
+Kerala,ACCESS-CM2,baseline,elev,days_ge_32,85,85,85,0,0,-0.2235294117647059,-5.0,1.0,5.0,13
+Rajasthan,ACCESS-CM2,baseline,elev,wbgt_annual_mean_c,582,582,582,0,0,-0.0657865215453741,-0.18678264543151002,-0.001986199015643564,0.18678264543151002,582
+Rajasthan,ACCESS-CM2,baseline,elev,days_ge_28,582,582,582,0,0,-1.2800687285223367,-7.0,0.0,7.0,389
+Rajasthan,ACCESS-CM2,baseline,elev,days_ge_30,582,582,582,0,0,-1.6305841924398625,-9.0,1.0,9.0,439
+Rajasthan,ACCESS-CM2,baseline,elev,days_ge_32,582,582,582,0,0,-1.8058419243986255,-7.0,1.0,7.0,467
+Himachal Pradesh,ACCESS-CM2,baseline,elev,wbgt_annual_mean_c,105,105,105,0,0,-0.12312927494648343,-0.2609418591634718,0.02532456399719507,0.2609418591634718,105
+Himachal Pradesh,ACCESS-CM2,baseline,elev,days_ge_28,105,105,105,0,0,-0.6,-5.0,0.0,5.0,30
+Himachal Pradesh,ACCESS-CM2,baseline,elev,days_ge_30,105,105,105,0,0,-0.37142857142857144,-4.0,0.0,4.0,22
+Himachal Pradesh,ACCESS-CM2,baseline,elev,days_ge_32,105,105,105,0,0,-0.13333333333333333,-4.0,1.0,4.0,12
+Kerala,ACCESS-CM2,baseline,combined,wbgt_annual_mean_c,85,85,85,0,0,-0.01859306035198889,-0.12871302213154934,-1.6128050468466881e-06,0.12871302213154934,85
+Kerala,ACCESS-CM2,baseline,combined,days_ge_28,85,85,85,0,0,-1.0823529411764705,-7.0,0.0,7.0,31
+Kerala,ACCESS-CM2,baseline,combined,days_ge_30,85,85,85,0,0,-0.7058823529411765,-6.0,1.0,6.0,34
+Kerala,ACCESS-CM2,baseline,combined,days_ge_32,85,85,85,0,0,-0.2235294117647059,-5.0,1.0,5.0,13
+Rajasthan,ACCESS-CM2,baseline,combined,wbgt_annual_mean_c,582,582,582,0,0,-0.0657865215453741,-0.18678264543151002,-0.001986199015643564,0.18678264543151002,582
+Rajasthan,ACCESS-CM2,baseline,combined,days_ge_28,582,582,582,0,0,-1.2800687285223367,-7.0,0.0,7.0,389
+Rajasthan,ACCESS-CM2,baseline,combined,days_ge_30,582,582,582,0,0,-1.6305841924398625,-9.0,1.0,9.0,439
+Rajasthan,ACCESS-CM2,baseline,combined,days_ge_32,582,582,582,0,0,-1.8058419243986255,-7.0,1.0,7.0,467
+Himachal Pradesh,ACCESS-CM2,baseline,combined,wbgt_annual_mean_c,105,116,105,11,0,-0.12312927494648343,-0.2609418591634718,0.02532456399719507,0.2609418591634718,105
+Himachal Pradesh,ACCESS-CM2,baseline,combined,days_ge_28,105,116,105,11,0,-0.6,-5.0,0.0,5.0,30
+Himachal Pradesh,ACCESS-CM2,baseline,combined,days_ge_30,105,116,105,11,0,-0.37142857142857144,-4.0,0.0,4.0,22
+Himachal Pradesh,ACCESS-CM2,baseline,combined,days_ge_32,105,116,105,11,0,-0.13333333333333333,-4.0,1.0,4.0,12
+Kerala,ACCESS-CM2,rh,combined,wbgt_annual_mean_c,85,85,85,0,0,-0.01859306035198889,-0.12871302213154934,-1.6128050468466881e-06,0.12871302213154934,85
+Kerala,ACCESS-CM2,rh,combined,days_ge_28,85,85,85,0,0,-1.0823529411764705,-7.0,0.0,7.0,31
+Kerala,ACCESS-CM2,rh,combined,days_ge_30,85,85,85,0,0,-0.7058823529411765,-6.0,1.0,6.0,34
+Kerala,ACCESS-CM2,rh,combined,days_ge_32,85,85,85,0,0,-0.2235294117647059,-5.0,1.0,5.0,13
+Rajasthan,ACCESS-CM2,rh,combined,wbgt_annual_mean_c,582,582,582,0,0,-0.0657865215453741,-0.18678264543151002,-0.001986199015643564,0.18678264543151002,582
+Rajasthan,ACCESS-CM2,rh,combined,days_ge_28,582,582,582,0,0,-1.2800687285223367,-7.0,0.0,7.0,389
+Rajasthan,ACCESS-CM2,rh,combined,days_ge_30,582,582,582,0,0,-1.6305841924398625,-9.0,1.0,9.0,439
+Rajasthan,ACCESS-CM2,rh,combined,days_ge_32,582,582,582,0,0,-1.8058419243986255,-7.0,1.0,7.0,467
+Himachal Pradesh,ACCESS-CM2,rh,combined,wbgt_annual_mean_c,116,116,116,0,0,-0.11848135191043299,-0.2609418591634718,0.02532456399719507,0.2609418591634718,116
+Himachal Pradesh,ACCESS-CM2,rh,combined,days_ge_28,116,116,116,0,0,-0.5431034482758621,-5.0,0.0,5.0,30
+Himachal Pradesh,ACCESS-CM2,rh,combined,days_ge_30,116,116,116,0,0,-0.33620689655172414,-4.0,0.0,4.0,22
+Himachal Pradesh,ACCESS-CM2,rh,combined,days_ge_32,116,116,116,0,0,-0.1206896551724138,-4.0,1.0,4.0,12
+Kerala,ACCESS-CM2,elev,combined,wbgt_annual_mean_c,85,85,85,0,0,0.0,0.0,0.0,0.0,0
+Kerala,ACCESS-CM2,elev,combined,days_ge_28,85,85,85,0,0,0.0,0.0,0.0,0.0,0
+Kerala,ACCESS-CM2,elev,combined,days_ge_30,85,85,85,0,0,0.0,0.0,0.0,0.0,0
+Kerala,ACCESS-CM2,elev,combined,days_ge_32,85,85,85,0,0,0.0,0.0,0.0,0.0,0
+Rajasthan,ACCESS-CM2,elev,combined,wbgt_annual_mean_c,582,582,582,0,0,0.0,0.0,0.0,0.0,0
+Rajasthan,ACCESS-CM2,elev,combined,days_ge_28,582,582,582,0,0,0.0,0.0,0.0,0.0,0
+Rajasthan,ACCESS-CM2,elev,combined,days_ge_30,582,582,582,0,0,0.0,0.0,0.0,0.0,0
+Rajasthan,ACCESS-CM2,elev,combined,days_ge_32,582,582,582,0,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,ACCESS-CM2,elev,combined,wbgt_annual_mean_c,105,116,105,11,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,ACCESS-CM2,elev,combined,days_ge_28,105,116,105,11,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,ACCESS-CM2,elev,combined,days_ge_30,105,116,105,11,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,ACCESS-CM2,elev,combined,days_ge_32,105,116,105,11,0,0.0,0.0,0.0,0.0,0
+Himachal Pradesh,MRI-ESM2-0,baseline,combined,wbgt_annual_mean_c,105,116,105,11,0,-0.07428646280859676,-0.20215697536096933,0.10218485058061955,0.20215697536096933,105
+Himachal Pradesh,MRI-ESM2-0,baseline,combined,days_ge_28,105,116,105,11,0,-0.4666666666666667,-4.0,0.0,4.0,29
+Himachal Pradesh,MRI-ESM2-0,baseline,combined,days_ge_30,105,116,105,11,0,-0.34285714285714286,-5.0,1.0,5.0,23
+Himachal Pradesh,MRI-ESM2-0,baseline,combined,days_ge_32,105,116,105,11,0,-0.1523809523809524,-2.0,0.0,2.0,13

@@ -1,0 +1,237 @@
+level,state,district,block,district_key,block_key,scenario,period,expected_score,expected_hex
+block,Delhi,Central,Central,,delhi|central|central,ssp245,2020-2040,45.041265,#82c64d
+block,Delhi,Central,Central,,delhi|central|central,ssp245,2040-2060,56.366214,#fae259
+block,Delhi,Central,Central,,delhi|central|central,ssp245,2060-2080,65.077795,#f7973b
+block,Delhi,Central,Central,,delhi|central|central,ssp585,2020-2040,47.014604,#9acc50
+block,Delhi,Central,Central,,delhi|central|central,ssp585,2040-2060,62.625198,#f7a842
+block,Delhi,Central,Central,,delhi|central|central,ssp585,2060-2080,78.267049,#e44228
+block,Delhi,Central,East,,delhi|central|east,ssp245,2020-2040,45.670106,#8cc84e
+block,Delhi,Central,East,,delhi|central|east,ssp245,2040-2060,57.557884,#f9d152
+block,Delhi,Central,East,,delhi|central|east,ssp245,2060-2080,66.000732,#f69039
+block,Delhi,Central,East,,delhi|central|east,ssp585,2020-2040,47.857296,#a4cf51
+block,Delhi,Central,East,,delhi|central|east,ssp585,2040-2060,63.644674,#f7a13f
+block,Delhi,Central,East,,delhi|central|east,ssp585,2060-2080,79.479007,#e23e28
+block,Delhi,East,East,,delhi|east|east,ssp245,2020-2040,45.918847,#8cc84e
+block,Delhi,East,East,,delhi|east|east,ssp245,2040-2060,58.06928,#f9d152
+block,Delhi,East,East,,delhi|east|east,ssp245,2060-2080,66.334203,#f69039
+block,Delhi,East,East,,delhi|east|east,ssp585,2020-2040,48.215724,#a4cf51
+block,Delhi,East,East,,delhi|east|east,ssp585,2040-2060,64.140901,#f7a13f
+block,Delhi,East,East,,delhi|east|east,ssp585,2060-2080,80.069913,#df3828
+block,Delhi,New Delhi,New Delhi,,delhi|new delhi|new delhi,ssp245,2020-2040,45.287805,#82c64d
+block,Delhi,New Delhi,New Delhi,,delhi|new delhi|new delhi,ssp245,2040-2060,56.527639,#f9db56
+block,Delhi,New Delhi,New Delhi,,delhi|new delhi|new delhi,ssp245,2060-2080,65.315713,#f7973b
+block,Delhi,New Delhi,New Delhi,,delhi|new delhi|new delhi,ssp585,2020-2040,47.261489,#9acc50
+block,Delhi,New Delhi,New Delhi,,delhi|new delhi|new delhi,ssp585,2040-2060,62.793943,#f7a842
+block,Delhi,New Delhi,New Delhi,,delhi|new delhi|new delhi,ssp585,2060-2080,78.265018,#e44228
+block,Delhi,North,North,,delhi|north|north,ssp245,2020-2040,44.02668,#79c34c
+block,Delhi,North,North,,delhi|north|north,ssp245,2040-2060,55.302478,#f4e75b
+block,Delhi,North,North,,delhi|north|north,ssp245,2060-2080,63.991772,#f7a13f
+block,Delhi,North,North,,delhi|north|north,ssp585,2020-2040,45.993172,#8cc84e
+block,Delhi,North,North,,delhi|north|north,ssp585,2040-2060,61.57981,#f8af45
+block,Delhi,North,North,,delhi|north|north,ssp585,2060-2080,77.763925,#e44228
+block,Delhi,North East,North East,,delhi|north east|north east,ssp245,2020-2040,45.314658,#82c64d
+block,Delhi,North East,North East,,delhi|north east|north east,ssp245,2040-2060,57.158202,#f9db56
+block,Delhi,North East,North East,,delhi|north east|north east,ssp245,2060-2080,65.590954,#f69039
+block,Delhi,North East,North East,,delhi|north east|north east,ssp585,2020-2040,47.481587,#9acc50
+block,Delhi,North East,North East,,delhi|north east|north east,ssp585,2040-2060,63.262909,#f7a842
+block,Delhi,North East,North East,,delhi|north east|north east,ssp585,2060-2080,79.283029,#e23e28
+block,Delhi,North West,North West,,delhi|north west|north west,ssp245,2020-2040,45.382269,#82c64d
+block,Delhi,North West,North West,,delhi|north west|north west,ssp245,2040-2060,56.662863,#f9db56
+block,Delhi,North West,North West,,delhi|north west|north west,ssp245,2060-2080,65.425522,#f7973b
+block,Delhi,North West,North West,,delhi|north west|north west,ssp585,2020-2040,47.285944,#9acc50
+block,Delhi,North West,North West,,delhi|north west|north west,ssp585,2040-2060,62.830386,#f7a842
+block,Delhi,North West,North West,,delhi|north west|north west,ssp585,2060-2080,78.499981,#e44228
+block,Delhi,Shahdara,Shahdara,,delhi|shahdara|shahdara,ssp245,2020-2040,45.873293,#8cc84e
+block,Delhi,Shahdara,Shahdara,,delhi|shahdara|shahdara,ssp245,2040-2060,58.077432,#f9d152
+block,Delhi,Shahdara,Shahdara,,delhi|shahdara|shahdara,ssp245,2060-2080,66.315981,#f69039
+block,Delhi,Shahdara,Shahdara,,delhi|shahdara|shahdara,ssp585,2020-2040,48.163937,#a4cf51
+block,Delhi,Shahdara,Shahdara,,delhi|shahdara|shahdara,ssp585,2040-2060,64.122679,#f7a13f
+block,Delhi,Shahdara,Shahdara,,delhi|shahdara|shahdara,ssp585,2060-2080,80.051692,#df3828
+block,Delhi,South,South,,delhi|south|south,ssp245,2020-2040,45.198615,#82c64d
+block,Delhi,South,South,,delhi|south|south,ssp245,2040-2060,56.125326,#fae259
+block,Delhi,South,South,,delhi|south|south,ssp245,2060-2080,64.879834,#f7973b
+block,Delhi,South,South,,delhi|south|south,ssp585,2020-2040,47.057216,#9acc50
+block,Delhi,South,South,,delhi|south|south,ssp585,2040-2060,62.320661,#f8af45
+block,Delhi,South,South,,delhi|south|south,ssp585,2060-2080,78.616983,#e23e28
+block,Delhi,South East,South East,,delhi|south east|south east,ssp245,2020-2040,45.992213,#8cc84e
+block,Delhi,South East,South East,,delhi|south east|south east,ssp245,2040-2060,57.924467,#f9d152
+block,Delhi,South East,South East,,delhi|south east|south east,ssp245,2060-2080,66.346191,#f69039
+block,Delhi,South East,South East,,delhi|south east|south east,ssp585,2020-2040,48.172568,#a4cf51
+block,Delhi,South East,South East,,delhi|south east|south east,ssp585,2040-2060,64.077125,#f7a13f
+block,Delhi,South East,South East,,delhi|south east|south east,ssp585,2060-2080,79.870435,#df3828
+block,Delhi,South West,South West,,delhi|south west|south west,ssp245,2020-2040,46.037287,#8cc84e
+block,Delhi,South West,South West,,delhi|south west|south west,ssp245,2040-2060,57.270888,#f9db56
+block,Delhi,South West,South West,,delhi|south west|south west,ssp245,2060-2080,66.32701,#f69039
+block,Delhi,South West,South West,,delhi|south west|south west,ssp585,2020-2040,47.949593,#a4cf51
+block,Delhi,South West,South West,,delhi|south west|south west,ssp585,2040-2060,63.341549,#f7a842
+block,Delhi,South West,South West,,delhi|south west|south west,ssp585,2060-2080,79.08403,#e23e28
+block,Delhi,West,West,,delhi|west|west,ssp245,2020-2040,45.369323,#82c64d
+block,Delhi,West,West,,delhi|west|west,ssp245,2040-2060,56.662383,#f9db56
+block,Delhi,West,West,,delhi|west|west,ssp245,2060-2080,65.503683,#f69039
+block,Delhi,West,West,,delhi|west|west,ssp585,2020-2040,47.450898,#9acc50
+block,Delhi,West,West,,delhi|west|west,ssp585,2040-2060,62.890805,#f7a842
+block,Delhi,West,West,,delhi|west|west,ssp585,2060-2080,78.406955,#e44228
+block,Ladakh,Kargil,Drass,,ladakh|kargil|drass,ssp245,2020-2040,0.547451,#ddf2fc
+block,Ladakh,Kargil,Drass,,ladakh|kargil|drass,ssp245,2040-2060,0.682885,#ddf2fc
+block,Ladakh,Kargil,Drass,,ladakh|kargil|drass,ssp245,2060-2080,0.856286,#ddf2fc
+block,Ladakh,Kargil,Drass,,ladakh|kargil|drass,ssp585,2020-2040,0.575155,#ddf2fc
+block,Ladakh,Kargil,Drass,,ladakh|kargil|drass,ssp585,2040-2060,0.856788,#ddf2fc
+block,Ladakh,Kargil,Drass,,ladakh|kargil|drass,ssp585,2060-2080,1.283338,#ddf2fc
+block,Ladakh,Kargil,Gm Pora (Trespone),,ladakh|kargil|gm pora trespone,ssp245,2020-2040,0.674872,#ddf2fc
+block,Ladakh,Kargil,Gm Pora (Trespone),,ladakh|kargil|gm pora trespone,ssp245,2040-2060,0.785413,#ddf2fc
+block,Ladakh,Kargil,Gm Pora (Trespone),,ladakh|kargil|gm pora trespone,ssp245,2060-2080,1.011757,#ddf2fc
+block,Ladakh,Kargil,Gm Pora (Trespone),,ladakh|kargil|gm pora trespone,ssp585,2020-2040,0.684993,#ddf2fc
+block,Ladakh,Kargil,Gm Pora (Trespone),,ladakh|kargil|gm pora trespone,ssp585,2040-2060,1.015593,#ddf2fc
+block,Ladakh,Kargil,Gm Pora (Trespone),,ladakh|kargil|gm pora trespone,ssp585,2060-2080,1.51358,#d5effc
+block,Ladakh,Kargil,Kargil,,ladakh|kargil|kargil,ssp245,2020-2040,1.253424,#ddf2fc
+block,Ladakh,Kargil,Kargil,,ladakh|kargil|kargil,ssp245,2040-2060,1.59349,#d5effc
+block,Ladakh,Kargil,Kargil,,ladakh|kargil|kargil,ssp245,2060-2080,2.040858,#d5effc
+block,Ladakh,Kargil,Kargil,,ladakh|kargil|kargil,ssp585,2020-2040,1.292891,#ddf2fc
+block,Ladakh,Kargil,Kargil,,ladakh|kargil|kargil,ssp585,2040-2060,2.040778,#d5effc
+block,Ladakh,Kargil,Kargil,,ladakh|kargil|kargil,ssp585,2060-2080,3.155848,#cfedfb
+block,Ladakh,Kargil,Karsha,,ladakh|kargil|karsha,ssp245,2020-2040,0.283364,#e2f4fd
+block,Ladakh,Kargil,Karsha,,ladakh|kargil|karsha,ssp245,2040-2060,0.336896,#e2f4fd
+block,Ladakh,Kargil,Karsha,,ladakh|kargil|karsha,ssp245,2060-2080,0.475309,#e2f4fd
+block,Ladakh,Kargil,Karsha,,ladakh|kargil|karsha,ssp585,2020-2040,0.309276,#e2f4fd
+block,Ladakh,Kargil,Karsha,,ladakh|kargil|karsha,ssp585,2040-2060,0.452869,#e2f4fd
+block,Ladakh,Kargil,Karsha,,ladakh|kargil|karsha,ssp585,2060-2080,0.727485,#ddf2fc
+block,Ladakh,Kargil,Lungnak,,ladakh|kargil|lungnak,ssp245,2020-2040,0.328707,#e2f4fd
+block,Ladakh,Kargil,Lungnak,,ladakh|kargil|lungnak,ssp245,2040-2060,0.437969,#e2f4fd
+block,Ladakh,Kargil,Lungnak,,ladakh|kargil|lungnak,ssp245,2060-2080,0.600549,#ddf2fc
+block,Ladakh,Kargil,Lungnak,,ladakh|kargil|lungnak,ssp585,2020-2040,0.364183,#e2f4fd
+block,Ladakh,Kargil,Lungnak,,ladakh|kargil|lungnak,ssp585,2040-2060,0.580074,#ddf2fc
+block,Ladakh,Kargil,Lungnak,,ladakh|kargil|lungnak,ssp585,2060-2080,0.925693,#ddf2fc
+block,Ladakh,Kargil,Sankoo,,ladakh|kargil|sankoo,ssp245,2020-2040,0.407258,#e2f4fd
+block,Ladakh,Kargil,Sankoo,,ladakh|kargil|sankoo,ssp245,2040-2060,0.489159,#e2f4fd
+block,Ladakh,Kargil,Sankoo,,ladakh|kargil|sankoo,ssp245,2060-2080,0.65541,#ddf2fc
+block,Ladakh,Kargil,Sankoo,,ladakh|kargil|sankoo,ssp585,2020-2040,0.422295,#e2f4fd
+block,Ladakh,Kargil,Sankoo,,ladakh|kargil|sankoo,ssp585,2040-2060,0.657276,#ddf2fc
+block,Ladakh,Kargil,Sankoo,,ladakh|kargil|sankoo,ssp585,2060-2080,1.018028,#ddf2fc
+block,Ladakh,Kargil,Shaker Chaktan,,ladakh|kargil|shaker chaktan,ssp245,2020-2040,0.818001,#ddf2fc
+block,Ladakh,Kargil,Shaker Chaktan,,ladakh|kargil|shaker chaktan,ssp245,2040-2060,0.992619,#ddf2fc
+block,Ladakh,Kargil,Shaker Chaktan,,ladakh|kargil|shaker chaktan,ssp245,2060-2080,1.296178,#ddf2fc
+block,Ladakh,Kargil,Shaker Chaktan,,ladakh|kargil|shaker chaktan,ssp585,2020-2040,0.836412,#ddf2fc
+block,Ladakh,Kargil,Shaker Chaktan,,ladakh|kargil|shaker chaktan,ssp585,2040-2060,1.29796,#ddf2fc
+block,Ladakh,Kargil,Shaker Chaktan,,ladakh|kargil|shaker chaktan,ssp585,2060-2080,2.119371,#d5effc
+block,Ladakh,Kargil,Shargol,,ladakh|kargil|shargol,ssp245,2020-2040,0.89797,#ddf2fc
+block,Ladakh,Kargil,Shargol,,ladakh|kargil|shargol,ssp245,2040-2060,1.059476,#ddf2fc
+block,Ladakh,Kargil,Shargol,,ladakh|kargil|shargol,ssp245,2060-2080,1.374723,#ddf2fc
+block,Ladakh,Kargil,Shargol,,ladakh|kargil|shargol,ssp585,2020-2040,0.918566,#ddf2fc
+block,Ladakh,Kargil,Shargol,,ladakh|kargil|shargol,ssp585,2040-2060,1.367599,#ddf2fc
+block,Ladakh,Kargil,Shargol,,ladakh|kargil|shargol,ssp585,2060-2080,2.213392,#d5effc
+block,Ladakh,Kargil,Taisuru,,ladakh|kargil|taisuru,ssp245,2020-2040,0.270279,#e2f4fd
+block,Ladakh,Kargil,Taisuru,,ladakh|kargil|taisuru,ssp245,2040-2060,0.339714,#e2f4fd
+block,Ladakh,Kargil,Taisuru,,ladakh|kargil|taisuru,ssp245,2060-2080,0.453863,#e2f4fd
+block,Ladakh,Kargil,Taisuru,,ladakh|kargil|taisuru,ssp585,2020-2040,0.300715,#e2f4fd
+block,Ladakh,Kargil,Taisuru,,ladakh|kargil|taisuru,ssp585,2040-2060,0.444127,#e2f4fd
+block,Ladakh,Kargil,Taisuru,,ladakh|kargil|taisuru,ssp585,2060-2080,0.714561,#ddf2fc
+block,Ladakh,Kargil,Zansker,,ladakh|kargil|zansker,ssp245,2020-2040,0.225923,#e2f4fd
+block,Ladakh,Kargil,Zansker,,ladakh|kargil|zansker,ssp245,2040-2060,0.305422,#e2f4fd
+block,Ladakh,Kargil,Zansker,,ladakh|kargil|zansker,ssp245,2060-2080,0.434634,#e2f4fd
+block,Ladakh,Kargil,Zansker,,ladakh|kargil|zansker,ssp585,2020-2040,0.251002,#e2f4fd
+block,Ladakh,Kargil,Zansker,,ladakh|kargil|zansker,ssp585,2040-2060,0.393595,#e2f4fd
+block,Ladakh,Kargil,Zansker,,ladakh|kargil|zansker,ssp585,2060-2080,0.659969,#ddf2fc
+block,Ladakh,Leh Ladakh,Chuchot,,ladakh|leh ladakh|chuchot,ssp245,2020-2040,0.64493,#ddf2fc
+block,Ladakh,Leh Ladakh,Chuchot,,ladakh|leh ladakh|chuchot,ssp245,2040-2060,0.817005,#ddf2fc
+block,Ladakh,Leh Ladakh,Chuchot,,ladakh|leh ladakh|chuchot,ssp245,2060-2080,1.076664,#ddf2fc
+block,Ladakh,Leh Ladakh,Chuchot,,ladakh|leh ladakh|chuchot,ssp585,2020-2040,0.67321,#ddf2fc
+block,Ladakh,Leh Ladakh,Chuchot,,ladakh|leh ladakh|chuchot,ssp585,2040-2060,1.076152,#ddf2fc
+block,Ladakh,Leh Ladakh,Chuchot,,ladakh|leh ladakh|chuchot,ssp585,2060-2080,1.779452,#d5effc
+block,Ladakh,Leh Ladakh,Deskit,,ladakh|leh ladakh|deskit,ssp245,2020-2040,0.299146,#e2f4fd
+block,Ladakh,Leh Ladakh,Deskit,,ladakh|leh ladakh|deskit,ssp245,2040-2060,0.433569,#e2f4fd
+block,Ladakh,Leh Ladakh,Deskit,,ladakh|leh ladakh|deskit,ssp245,2060-2080,0.576817,#ddf2fc
+block,Ladakh,Leh Ladakh,Deskit,,ladakh|leh ladakh|deskit,ssp585,2020-2040,0.316826,#e2f4fd
+block,Ladakh,Leh Ladakh,Deskit,,ladakh|leh ladakh|deskit,ssp585,2040-2060,0.580855,#ddf2fc
+block,Ladakh,Leh Ladakh,Deskit,,ladakh|leh ladakh|deskit,ssp585,2060-2080,1.025312,#ddf2fc
+block,Ladakh,Leh Ladakh,Durbuk,,ladakh|leh ladakh|durbuk,ssp245,2020-2040,0.205446,#e2f4fd
+block,Ladakh,Leh Ladakh,Durbuk,,ladakh|leh ladakh|durbuk,ssp245,2040-2060,0.288147,#e2f4fd
+block,Ladakh,Leh Ladakh,Durbuk,,ladakh|leh ladakh|durbuk,ssp245,2060-2080,0.415757,#e2f4fd
+block,Ladakh,Leh Ladakh,Durbuk,,ladakh|leh ladakh|durbuk,ssp585,2020-2040,0.247036,#e2f4fd
+block,Ladakh,Leh Ladakh,Durbuk,,ladakh|leh ladakh|durbuk,ssp585,2040-2060,0.41981,#e2f4fd
+block,Ladakh,Leh Ladakh,Durbuk,,ladakh|leh ladakh|durbuk,ssp585,2060-2080,0.814482,#ddf2fc
+block,Ladakh,Leh Ladakh,Khaltsi,,ladakh|leh ladakh|khaltsi,ssp245,2020-2040,0.553802,#ddf2fc
+block,Ladakh,Leh Ladakh,Khaltsi,,ladakh|leh ladakh|khaltsi,ssp245,2040-2060,0.690623,#ddf2fc
+block,Ladakh,Leh Ladakh,Khaltsi,,ladakh|leh ladakh|khaltsi,ssp245,2060-2080,0.890853,#ddf2fc
+block,Ladakh,Leh Ladakh,Khaltsi,,ladakh|leh ladakh|khaltsi,ssp585,2020-2040,0.570842,#ddf2fc
+block,Ladakh,Leh Ladakh,Khaltsi,,ladakh|leh ladakh|khaltsi,ssp585,2040-2060,0.907785,#ddf2fc
+block,Ladakh,Leh Ladakh,Khaltsi,,ladakh|leh ladakh|khaltsi,ssp585,2060-2080,1.480777,#ddf2fc
+block,Ladakh,Leh Ladakh,Kharu,,ladakh|leh ladakh|kharu,ssp245,2020-2040,0.262247,#e2f4fd
+block,Ladakh,Leh Ladakh,Kharu,,ladakh|leh ladakh|kharu,ssp245,2040-2060,0.338174,#e2f4fd
+block,Ladakh,Leh Ladakh,Kharu,,ladakh|leh ladakh|kharu,ssp245,2060-2080,0.464283,#e2f4fd
+block,Ladakh,Leh Ladakh,Kharu,,ladakh|leh ladakh|kharu,ssp585,2020-2040,0.287464,#e2f4fd
+block,Ladakh,Leh Ladakh,Kharu,,ladakh|leh ladakh|kharu,ssp585,2040-2060,0.453997,#e2f4fd
+block,Ladakh,Leh Ladakh,Kharu,,ladakh|leh ladakh|kharu,ssp585,2060-2080,0.820141,#ddf2fc
+block,Ladakh,Leh Ladakh,Leh,,ladakh|leh ladakh|leh,ssp245,2020-2040,0.641715,#ddf2fc
+block,Ladakh,Leh Ladakh,Leh,,ladakh|leh ladakh|leh,ssp245,2040-2060,0.849795,#ddf2fc
+block,Ladakh,Leh Ladakh,Leh,,ladakh|leh ladakh|leh,ssp245,2060-2080,1.0397,#ddf2fc
+block,Ladakh,Leh Ladakh,Leh,,ladakh|leh ladakh|leh,ssp585,2020-2040,0.660436,#ddf2fc
+block,Ladakh,Leh Ladakh,Leh,,ladakh|leh ladakh|leh,ssp585,2040-2060,1.003534,#ddf2fc
+block,Ladakh,Leh Ladakh,Leh,,ladakh|leh ladakh|leh,ssp585,2060-2080,1.527746,#d5effc
+block,Ladakh,Leh Ladakh,Nyoma,,ladakh|leh ladakh|nyoma,ssp245,2020-2040,0.138568,#e2f4fd
+block,Ladakh,Leh Ladakh,Nyoma,,ladakh|leh ladakh|nyoma,ssp245,2040-2060,0.231499,#e2f4fd
+block,Ladakh,Leh Ladakh,Nyoma,,ladakh|leh ladakh|nyoma,ssp245,2060-2080,0.301681,#e2f4fd
+block,Ladakh,Leh Ladakh,Nyoma,,ladakh|leh ladakh|nyoma,ssp585,2020-2040,0.19778,#e2f4fd
+block,Ladakh,Leh Ladakh,Nyoma,,ladakh|leh ladakh|nyoma,ssp585,2040-2060,0.315865,#e2f4fd
+block,Ladakh,Leh Ladakh,Nyoma,,ladakh|leh ladakh|nyoma,ssp585,2060-2080,0.625019,#ddf2fc
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,ssp245,2020-2040,0.188743,#e2f4fd
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,ssp245,2040-2060,0.287324,#e2f4fd
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,ssp245,2060-2080,0.368409,#e2f4fd
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,ssp585,2020-2040,0.206261,#e2f4fd
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,ssp585,2040-2060,0.369075,#e2f4fd
+block,Ladakh,Leh Ladakh,Panamic,,ladakh|leh ladakh|panamic,ssp585,2060-2080,0.67789,#ddf2fc
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp245,2020-2040,0.103972,#e2f4fd
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp245,2040-2060,0.160416,#e2f4fd
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp245,2060-2080,0.246684,#e2f4fd
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp585,2020-2040,0.129415,#e2f4fd
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp585,2040-2060,0.255394,#e2f4fd
+block,Ladakh,Leh Ladakh,Rupsho,,ladakh|leh ladakh|rupsho,ssp585,2060-2080,0.423315,#e2f4fd
+block,Ladakh,Leh Ladakh,Saspol,,ladakh|leh ladakh|saspol,ssp245,2020-2040,0.651123,#ddf2fc
+block,Ladakh,Leh Ladakh,Saspol,,ladakh|leh ladakh|saspol,ssp245,2040-2060,0.799599,#ddf2fc
+block,Ladakh,Leh Ladakh,Saspol,,ladakh|leh ladakh|saspol,ssp245,2060-2080,1.031492,#ddf2fc
+block,Ladakh,Leh Ladakh,Saspol,,ladakh|leh ladakh|saspol,ssp585,2020-2040,0.681876,#ddf2fc
+block,Ladakh,Leh Ladakh,Saspol,,ladakh|leh ladakh|saspol,ssp585,2040-2060,1.05799,#ddf2fc
+block,Ladakh,Leh Ladakh,Saspol,,ladakh|leh ladakh|saspol,ssp585,2060-2080,1.661322,#d5effc
+district,Arunachal Pradesh,Shi Yomi,,arunachal pradesh|shi yomi,,ssp585,2040-2060,2.029787,#d5effc
+district,Himachal Pradesh,Kinnaur,,himachal pradesh|kinnaur,,ssp585,2040-2060,1.708512,#d5effc
+district,Himachal Pradesh,Kullu,,himachal pradesh|kullu,,ssp585,2040-2060,2.044652,#d5effc
+district,Himachal Pradesh,Lahul and Spiti,,himachal pradesh|lahul and spiti,,ssp585,2040-2060,0.311205,#e2f4fd
+district,Jammu & Kashmir,Kishtwar,,jammu kashmir|kishtwar,,ssp585,2040-2060,1.398266,#ddf2fc
+district,Kerala,Alappuzha,,kerala|alappuzha,,ssp245,2020-2040,45.140114,#82c64d
+district,Kerala,Ernakulam,,kerala|ernakulam,,ssp245,2020-2040,40.1896,#4ab546
+district,Kerala,Idukki,,kerala|idukki,,ssp245,2020-2040,14.447311,#89c9ec
+district,Kerala,Kannur,,kerala|kannur,,ssp245,2020-2040,33.006943,#49a285
+district,Kerala,Kasaragod,,kerala|kasaragod,,ssp245,2020-2040,28.583896,#4898a9
+district,Kerala,Kollam,,kerala|kollam,,ssp245,2020-2040,26.891208,#4892ba
+district,Ladakh,Kargil,,ladakh|kargil,,ssp585,2040-2060,0.676116,#ddf2fc
+district,Ladakh,Leh Ladakh,,ladakh|leh ladakh,,ssp585,2040-2060,0.871758,#ddf2fc
+district,Maharashtra,Bhandara,,maharashtra|bhandara,,ssp585,2040-2060,91.191307,#ba1b22
+district,Maharashtra,Chandrapur,,maharashtra|chandrapur,,ssp585,2040-2060,93.270485,#b21a20
+district,Maharashtra,Gadchiroli,,maharashtra|gadchiroli,,ssp585,2040-2060,92.156571,#b51a21
+district,Maharashtra,Wardha,,maharashtra|wardha,,ssp585,2040-2060,91.696716,#b51a21
+district,Rajasthan,Ajmer,,rajasthan|ajmer,,ssp245,2020-2040,53.522518,#ebe45a
+district,Rajasthan,Alwar,,rajasthan|alwar,,ssp245,2020-2040,48.90239,#b2d353
+district,Rajasthan,Anoopgarh,,rajasthan|anoopgarh,,ssp245,2020-2040,69.148477,#f5762e
+district,Rajasthan,Balotra,,rajasthan|balotra,,ssp245,2020-2040,72.021732,#f06129
+district,Rajasthan,Banswara,,rajasthan|banswara,,ssp245,2020-2040,62.436704,#f8af45
+district,Rajasthan,Baran,,rajasthan|baran,,ssp245,2020-2040,64.128433,#f7a13f
+district,Sikkim,Gangtok,,sikkim|gangtok,,ssp245,2020-2040,2.197618,#d5effc
+district,Sikkim,Gyalshing,,sikkim|gyalshing,,ssp245,2020-2040,0.600832,#ddf2fc
+district,Sikkim,Gyalshing,,sikkim|gyalshing,,ssp585,2040-2060,0.921149,#ddf2fc
+district,Sikkim,Mangan,,sikkim|mangan,,ssp245,2020-2040,0.315041,#e2f4fd
+district,Sikkim,Mangan,,sikkim|mangan,,ssp585,2040-2060,0.538495,#ddf2fc
+district,Sikkim,Namchi,,sikkim|namchi,,ssp245,2020-2040,4.144929,#c7eafa
+district,Sikkim,Pakyong,,sikkim|pakyong,,ssp245,2020-2040,2.915931,#cfedfb
+district,Sikkim,Soreng,,sikkim|soreng,,ssp245,2020-2040,2.682887,#cfedfb
+district,Telangana,Adilabad,,telangana|adilabad,,ssp245,2020-2040,72.222169,#f06129
+district,Telangana,Bhadradri Kothagudem,,telangana|bhadradri kothagudem,,ssp245,2020-2040,68.195201,#f68032
+district,Telangana,Hanumakonda,,telangana|hanumakonda,,ssp245,2020-2040,74.593851,#eb5329
+district,Telangana,Hyderabad,,telangana|hyderabad,,ssp245,2020-2040,55.151431,#f4e75b
+district,Telangana,Jagitial,,telangana|jagitial,,ssp245,2020-2040,77.770638,#e44228
+district,Telangana,Jagitial,,telangana|jagitial,,ssp585,2040-2060,91.713979,#b51a21
+district,Telangana,Jangoan,,telangana|jangoan,,ssp245,2020-2040,68.741369,#f5762e
+district,Telangana,Jayashankar Bhupalapally,,telangana|jayashankar bhupalapally,,ssp585,2040-2060,94.235749,#ac191f
+district,Telangana,Karimnagar,,telangana|karimnagar,,ssp585,2040-2060,91.222955,#ba1b22
+district,Telangana,Kumuram Bheem Asifabad,,telangana|kumuram bheem asifabad,,ssp585,2040-2060,91.704868,#b51a21
+district,Telangana,Mancherial,,telangana|mancherial,,ssp585,2040-2060,94.171014,#ac191f
+district,Telangana,Peddapalli,,telangana|peddapalli,,ssp585,2040-2060,93.497775,#b21a20
+district,Uttarakhand,Chamoli,,uttarakhand|chamoli,,ssp585,2040-2060,1.791468,#d5effc

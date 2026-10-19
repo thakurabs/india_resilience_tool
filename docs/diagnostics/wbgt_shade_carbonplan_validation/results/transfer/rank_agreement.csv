@@ -1,0 +1,73 @@
+state,level,slug,pair,units,spearman,ties_in_raw,zeros_in_raw,zeros_in_uhe,ties_in_qdm,zeros_in_qdm
+Kerala,block,annual_mean,raw vs uhe,152,0.5387748686089981,0.0,0.0,0.0,,
+Kerala,block,annual_mean,qdm vs uhe,152,0.9854154279348546,,,0.0,0.0,0.0
+Kerala,block,annual_mean,raw vs qdm,152,0.626658192032477,0.0,0.0,,,0.0
+Kerala,block,days_ge_28,raw vs uhe,152,0.4191834279895297,0.0,0.0,1.0,,
+Kerala,block,days_ge_28,qdm vs uhe,152,0.9802554692145243,,,1.0,0.0,1.0
+Kerala,block,days_ge_28,raw vs qdm,152,0.512380483737587,0.0,0.0,,,1.0
+Kerala,block,days_ge_30,raw vs uhe,152,0.48134010860019194,4.0,4.0,4.0,,
+Kerala,block,days_ge_30,qdm vs uhe,152,0.9761067133360984,,,4.0,3.0,3.0
+Kerala,block,days_ge_30,raw vs qdm,152,0.5897442031006843,4.0,4.0,,,3.0
+Kerala,block,days_ge_32,raw vs uhe,152,0.6297232393053139,63.0,57.0,93.0,,
+Kerala,block,days_ge_32,qdm vs uhe,152,0.6656444206040508,,,93.0,23.0,23.0
+Kerala,block,days_ge_32,raw vs qdm,152,0.7470903819484596,63.0,57.0,,,23.0
+Kerala,district,annual_mean,raw vs uhe,14,0.5516483516483517,0.0,0.0,0.0,,
+Kerala,district,annual_mean,qdm vs uhe,14,0.9824175824175824,,,0.0,0.0,0.0
+Kerala,district,annual_mean,raw vs qdm,14,0.5560439560439561,0.0,0.0,,,0.0
+Kerala,district,days_ge_28,raw vs uhe,14,0.3010989010989011,0.0,0.0,0.0,,
+Kerala,district,days_ge_28,qdm vs uhe,14,0.9472527472527472,,,0.0,0.0,0.0
+Kerala,district,days_ge_28,raw vs qdm,14,0.432967032967033,0.0,0.0,,,0.0
+Kerala,district,days_ge_30,raw vs uhe,14,0.49890109890109896,0.0,0.0,0.0,,
+Kerala,district,days_ge_30,qdm vs uhe,14,0.9208791208791209,,,0.0,0.0,0.0
+Kerala,district,days_ge_30,raw vs qdm,14,0.6879120879120879,0.0,0.0,,,0.0
+Kerala,district,days_ge_32,raw vs uhe,14,0.4950044722033707,4.0,4.0,6.0,,
+Kerala,district,days_ge_32,qdm vs uhe,14,0.5718862635895969,,,6.0,0.0,1.0
+Kerala,district,days_ge_32,raw vs qdm,14,0.6400395098311948,4.0,4.0,,,1.0
+Rajasthan,block,annual_mean,raw vs uhe,348,0.8974432422443476,0.0,0.0,0.0,,
+Rajasthan,block,annual_mean,qdm vs uhe,348,0.9938818110659293,,,0.0,0.0,0.0
+Rajasthan,block,annual_mean,raw vs qdm,348,0.884495586116919,0.0,0.0,,,0.0
+Rajasthan,block,days_ge_28,raw vs uhe,348,0.8677685879816751,0.0,0.0,0.0,,
+Rajasthan,block,days_ge_28,qdm vs uhe,348,0.9846670844738319,,,0.0,0.0,0.0
+Rajasthan,block,days_ge_28,raw vs qdm,348,0.8200602678768457,0.0,0.0,,,0.0
+Rajasthan,block,days_ge_30,raw vs uhe,348,0.8914534706421179,0.0,0.0,0.0,,
+Rajasthan,block,days_ge_30,qdm vs uhe,348,0.9955284572522619,,,0.0,0.0,0.0
+Rajasthan,block,days_ge_30,raw vs qdm,348,0.8921519356421307,0.0,0.0,,,0.0
+Rajasthan,block,days_ge_32,raw vs uhe,348,0.7984532697690314,7.0,7.0,14.0,,
+Rajasthan,block,days_ge_32,qdm vs uhe,348,0.9886408918150055,,,14.0,0.0,1.0
+Rajasthan,block,days_ge_32,raw vs qdm,348,0.8324007616297812,7.0,7.0,,,1.0
+Rajasthan,district,annual_mean,raw vs uhe,49,0.8832653061224488,0.0,0.0,0.0,,
+Rajasthan,district,annual_mean,qdm vs uhe,49,0.9916326530612243,,,0.0,0.0,0.0
+Rajasthan,district,annual_mean,raw vs qdm,49,0.8695918367346938,0.0,0.0,,,0.0
+Rajasthan,district,days_ge_28,raw vs uhe,49,0.8697959183673468,0.0,0.0,0.0,,
+Rajasthan,district,days_ge_28,qdm vs uhe,49,0.9852040816326529,,,0.0,0.0,0.0
+Rajasthan,district,days_ge_28,raw vs qdm,49,0.8196938775510203,0.0,0.0,,,0.0
+Rajasthan,district,days_ge_30,raw vs uhe,49,0.8972448979591836,0.0,0.0,0.0,,
+Rajasthan,district,days_ge_30,qdm vs uhe,49,0.995204081632653,,,0.0,0.0,0.0
+Rajasthan,district,days_ge_30,raw vs qdm,49,0.8885714285714286,0.0,0.0,,,0.0
+Rajasthan,district,days_ge_32,raw vs uhe,49,0.803673469387755,0.0,0.0,0.0,,
+Rajasthan,district,days_ge_32,qdm vs uhe,49,0.9896938775510203,,,0.0,0.0,0.0
+Rajasthan,district,days_ge_32,raw vs qdm,49,0.8262244897959183,0.0,0.0,,,0.0
+Himachal Pradesh,block,annual_mean,raw vs uhe,81,0.9828139114724481,0.0,0.0,0.0,,
+Himachal Pradesh,block,annual_mean,qdm vs uhe,81,0.9995257452574526,,,0.0,0.0,0.0
+Himachal Pradesh,block,annual_mean,raw vs qdm,81,0.9846657633242999,0.0,0.0,,,0.0
+Himachal Pradesh,block,days_ge_28,raw vs uhe,81,0.9658999539760478,29.0,29.0,33.0,,
+Himachal Pradesh,block,days_ge_28,qdm vs uhe,81,0.9577738214010982,,,33.0,14.0,14.0
+Himachal Pradesh,block,days_ge_28,raw vs qdm,81,0.9410586694405452,29.0,29.0,,,14.0
+Himachal Pradesh,block,days_ge_30,raw vs uhe,81,0.9136022435035906,41.0,41.0,43.0,,
+Himachal Pradesh,block,days_ge_30,qdm vs uhe,81,0.9556823582901597,,,43.0,36.0,36.0
+Himachal Pradesh,block,days_ge_30,raw vs qdm,81,0.9018896664210595,41.0,41.0,,,36.0
+Himachal Pradesh,block,days_ge_32,raw vs uhe,81,0.68842398676257,69.0,69.0,66.0,,
+Himachal Pradesh,block,days_ge_32,qdm vs uhe,81,0.7987292706788998,,,66.0,67.0,67.0
+Himachal Pradesh,block,days_ge_32,raw vs qdm,81,0.904876621167747,69.0,69.0,,,67.0
+Himachal Pradesh,district,annual_mean,raw vs uhe,12,0.9930069930069931,0.0,0.0,0.0,,
+Himachal Pradesh,district,annual_mean,qdm vs uhe,12,0.9930069930069931,,,0.0,0.0,0.0
+Himachal Pradesh,district,annual_mean,raw vs qdm,12,0.9860139860139862,0.0,0.0,,,0.0
+Himachal Pradesh,district,days_ge_28,raw vs uhe,12,0.9453395110177101,2.0,2.0,3.0,,
+Himachal Pradesh,district,days_ge_28,qdm vs uhe,12,0.9929823694376383,,,3.0,0.0,1.0
+Himachal Pradesh,district,days_ge_28,raw vs qdm,12,0.938705467573384,2.0,2.0,,,1.0
+Himachal Pradesh,district,days_ge_30,raw vs uhe,12,0.9710144927536232,4.0,4.0,4.0,,
+Himachal Pradesh,district,days_ge_30,qdm vs uhe,12,0.9893045053244827,,,4.0,3.0,3.0
+Himachal Pradesh,district,days_ge_30,raw vs qdm,12,0.9606290124165265,4.0,4.0,,,3.0
+Himachal Pradesh,district,days_ge_32,raw vs uhe,12,0.8740142550707414,7.0,7.0,6.0,,
+Himachal Pradesh,district,days_ge_32,qdm vs uhe,12,0.99203187250996,,,6.0,6.0,6.0
+Himachal Pradesh,district,days_ge_32,raw vs qdm,12,0.8823382003571294,7.0,7.0,,,6.0

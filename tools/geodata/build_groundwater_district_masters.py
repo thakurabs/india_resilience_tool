@@ -66,12 +66,25 @@ EXPECTED_HEADER_FRAGMENTS: dict[str, tuple[str, ...]] = {
 }
 
 STATE_ALIASES: dict[str, str] = {
-    "chhattisgarh": "chhatisgarh",
+    "andaman and nicobar islands": "andaman nicobar islands",
     "dadra and nagar haveli": "dadra nagar haveli daman diu",
     "daman and diu": "dadra nagar haveli daman diu",
-    "lakshdweep": "lakshadweep ut",
+    "jammu and kashmir": "jammu kashmir",
+    "lakshdweep": "lakshadweep",
     "tamilnadu": "tamil nadu",
 }
+
+# Sentinel value for the alias CSV's canonical_district column: marks a source
+# row as an intentional drop (no canonical district counterpart exists).
+GROUNDWATER_EXCLUDE_SENTINEL = "__EXCLUDE__"
+
+# Source-level district collapses for districts absent from the canonical LGD
+# layer: child rows are summed into the target (parent) row before resolution.
+SOURCE_DISTRICT_AGGREGATIONS: list[dict[str, object]] = [
+    {"rule": "mp_maihar_into_satna", "state": "MADHYA PRADESH", "children": ("MAIHAR",), "target": "SATNA"},
+    {"rule": "mp_mauganj_into_rewa", "state": "MADHYA PRADESH", "children": ("MAUGANJ",), "target": "REWA"},
+    {"rule": "mp_pandhurna_into_chhindwara", "state": "MADHYA PRADESH", "children": ("PANDHURNA",), "target": "CHHINDWARA"},
+]
 
 
 @dataclass(frozen=True)
@@ -434,17 +447,126 @@ def _collapse_lakshadweep_source_rows(
     return normalized, aggregation_df
 
 
-def _load_alias_overrides(alias_csv_path: Path) -> pd.DataFrame:
-    if not alias_csv_path.exists():
-        return pd.DataFrame(
-            columns=[
-                "source_state",
-                "source_district",
-                "canonical_state",
-                "canonical_district",
-                "prefill_status",
-            ]
+def _collapse_declared_source_aggregations(
+    source_df: pd.DataFrame,
+    aggregation_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Apply :data:`SOURCE_DISTRICT_AGGREGATIONS`: sum child rows into their target row.
+
+    A rule only fires when the target and every child are present exactly once
+    in the workbook; otherwise it is skipped and any orphan child rows surface
+    as unmatched downstream (the correct failure signal).
+    """
+    source = source_df.copy()
+    aggregation_rows: list[pd.DataFrame] = []
+
+    for rule in SOURCE_DISTRICT_AGGREGATIONS:
+        state_norm = _normalize_state(str(rule["state"]))
+        target_norm = _normalize_district(str(rule["target"]))
+        child_norms = {_normalize_district(str(child)) for child in rule["children"]}
+
+        state_mask = source["source_state"].map(_normalize_state) == state_norm
+        district_norms = source["source_district"].map(_normalize_district)
+        target_mask = state_mask & (district_norms == target_norm)
+        child_mask = state_mask & district_norms.isin(child_norms)
+        if int(target_mask.sum()) != 1 or int(child_mask.sum()) != len(child_norms):
+            continue
+
+        group = source.loc[target_mask | child_mask]
+        extractable = pd.to_numeric(
+            group[GROUNDWATER_EXTRACTABLE_RESOURCE_COL], errors="coerce"
+        ).sum(min_count=1)
+        total_extraction = pd.to_numeric(
+            group[GROUNDWATER_TOTAL_EXTRACTION_COL], errors="coerce"
+        ).sum(min_count=1)
+        future_availability = pd.to_numeric(
+            group[GROUNDWATER_FUTURE_AVAILABILITY_COL], errors="coerce"
+        ).sum(min_count=1)
+        if pd.notna(extractable) and float(extractable) != 0.0 and pd.notna(total_extraction):
+            stage_pct = (float(total_extraction) / float(extractable)) * 100.0
+        else:
+            stage_pct = pd.NA
+
+        target_idx = source.index[target_mask][0]
+        target_state = str(source.loc[target_idx, "source_state"]).strip()
+        target_district = str(source.loc[target_idx, "source_district"]).strip()
+        source.loc[target_idx, GROUNDWATER_EXTRACTABLE_RESOURCE_COL] = extractable
+        source.loc[target_idx, GROUNDWATER_TOTAL_EXTRACTION_COL] = total_extraction
+        source.loc[target_idx, GROUNDWATER_FUTURE_AVAILABILITY_COL] = future_availability
+        source.loc[target_idx, GROUNDWATER_STAGE_COL] = stage_pct
+        source = source.drop(index=source.index[child_mask])
+
+        aggregation_rows.append(
+            pd.DataFrame(
+                [
+                    {
+                        "aggregation_rule": str(rule["rule"]),
+                        "source_state": target_state,
+                        "source_districts": "|".join(
+                            sorted(
+                                str(v).strip()
+                                for v in group["source_district"].dropna().astype("string").tolist()
+                                if str(v).strip()
+                            )
+                        ),
+                        "source_rows": "|".join(
+                            str(int(v))
+                            for v in sorted(
+                                int(v)
+                                for v in pd.to_numeric(group["source_row"], errors="coerce")
+                                .dropna()
+                                .astype(int)
+                                .tolist()
+                            )
+                        ),
+                        "aggregated_source_state": target_state,
+                        "aggregated_source_district": target_district,
+                        GROUNDWATER_EXTRACTABLE_RESOURCE_COL: extractable,
+                        GROUNDWATER_TOTAL_EXTRACTION_COL: total_extraction,
+                        GROUNDWATER_FUTURE_AVAILABILITY_COL: future_availability,
+                        GROUNDWATER_STAGE_COL: stage_pct,
+                    }
+                ]
+            )
         )
+
+    if not aggregation_rows:
+        return source_df.reset_index(drop=True), aggregation_df.copy()
+    out_aggregation_df = pd.concat([aggregation_df, *aggregation_rows], ignore_index=True)
+    return source.reset_index(drop=True), out_aggregation_df.reset_index(drop=True)
+
+
+def _empty_groundwater_exclusions_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "source_state",
+            "source_district",
+            "reason",
+            "source_state_norm",
+            "source_district_norm",
+        ]
+    )
+
+
+def _load_alias_overrides(alias_csv_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load the manual alias CSV, splitting mapping rows from ``__EXCLUDE__`` rows.
+
+    Returns ``(alias_df, exclusions_df)``. Rows whose ``canonical_district``
+    equals :data:`GROUNDWATER_EXCLUDE_SENTINEL` mark intentional source drops
+    (``notes`` carries the reason) and never enter the canonical join or the
+    bad-alias validation.
+    """
+    empty_alias = pd.DataFrame(
+        columns=[
+            "source_state",
+            "source_district",
+            "canonical_state",
+            "canonical_district",
+            "prefill_status",
+        ]
+    )
+    if not alias_csv_path.exists():
+        return empty_alias, _empty_groundwater_exclusions_df()
     df = pd.read_csv(alias_csv_path)
     required = {"source_state", "source_district", "canonical_state", "canonical_district"}
     missing = sorted(required - set(df.columns))
@@ -452,7 +574,7 @@ def _load_alias_overrides(alias_csv_path: Path) -> pd.DataFrame:
         raise ValueError(
             f"Groundwater district alias CSV is missing required columns {missing}: {alias_csv_path}"
         )
-    optional_cols = [col for col in ["prefill_status"] if col in df.columns]
+    optional_cols = [col for col in ["prefill_status", "notes"] if col in df.columns]
     out = df[list(required) + optional_cols].copy()
     for col in required:
         out[col] = out[col].astype("string").str.strip()
@@ -460,6 +582,10 @@ def _load_alias_overrides(alias_csv_path: Path) -> pd.DataFrame:
         out["prefill_status"] = out["prefill_status"].astype("string").str.strip().str.lower()
     else:
         out["prefill_status"] = pd.NA
+    if "notes" in out.columns:
+        out["notes"] = out["notes"].astype("string").str.strip()
+    else:
+        out["notes"] = pd.NA
     out = out.dropna(subset=["source_state", "source_district", "canonical_state", "canonical_district"]).copy()
     out = out.loc[
         out["source_state"].ne("")
@@ -469,8 +595,6 @@ def _load_alias_overrides(alias_csv_path: Path) -> pd.DataFrame:
     ].copy()
     out["source_state_norm"] = out["source_state"].map(_normalize_state)
     out["source_district_norm"] = out["source_district"].map(_normalize_district)
-    out["canonical_state_norm"] = out["canonical_state"].map(_normalize_state)
-    out["canonical_district_norm"] = out["canonical_district"].map(_normalize_district)
     if out.duplicated(["source_state_norm", "source_district_norm"]).any():
         dupes = out.loc[
             out.duplicated(["source_state_norm", "source_district_norm"], keep=False),
@@ -480,7 +604,18 @@ def _load_alias_overrides(alias_csv_path: Path) -> pd.DataFrame:
             "Groundwater district alias CSV contains duplicate source mappings: "
             + dupes.head(10).to_dict(orient="records").__repr__()
         )
-    return out.reset_index(drop=True)
+
+    exclusion_mask = out["canonical_district"].eq(GROUNDWATER_EXCLUDE_SENTINEL)
+    exclusions = out.loc[
+        exclusion_mask,
+        ["source_state", "source_district", "notes", "source_state_norm", "source_district_norm"],
+    ].rename(columns={"notes": "reason"})
+    exclusions["reason"] = exclusions["reason"].fillna("")
+
+    alias_out = out.loc[~exclusion_mask].drop(columns=["notes"]).copy()
+    alias_out["canonical_state_norm"] = alias_out["canonical_state"].map(_normalize_state)
+    alias_out["canonical_district_norm"] = alias_out["canonical_district"].map(_normalize_district)
+    return alias_out.reset_index(drop=True), exclusions.reset_index(drop=True)
 
 
 def _build_canonical_districts(districts_path: Path) -> pd.DataFrame:
@@ -671,7 +806,8 @@ def _resolve_groundwater_districts(
     *,
     canonical_df: pd.DataFrame,
     alias_df: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    exclusions_df: Optional[pd.DataFrame] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     source = source_df.copy()
     source["source_state_norm"] = source["source_state"].map(_normalize_state)
     source["source_district_norm"] = source["source_district"].map(_normalize_district)
@@ -684,6 +820,37 @@ def _resolve_groundwater_districts(
             "Groundwater source workbook contains duplicate state/district rows: "
             + dupes.head(10).to_dict(orient="records").__repr__()
         )
+
+    if exclusions_df is None or exclusions_df.empty:
+        excluded_df = _empty_groundwater_exclusions_df()[
+            ["source_state", "source_district", "reason"]
+        ].copy()
+        excluded_df["found_in_source"] = pd.Series(dtype="boolean")
+    else:
+        source_keys = set(
+            zip(source["source_state_norm"].tolist(), source["source_district_norm"].tolist())
+        )
+        excluded_df = exclusions_df[["source_state", "source_district", "reason"]].copy()
+        excluded_df["found_in_source"] = [
+            (state_norm, district_norm) in source_keys
+            for state_norm, district_norm in zip(
+                exclusions_df["source_state_norm"].tolist(),
+                exclusions_df["source_district_norm"].tolist(),
+            )
+        ]
+        exclusion_keys = set(
+            zip(
+                exclusions_df["source_state_norm"].tolist(),
+                exclusions_df["source_district_norm"].tolist(),
+            )
+        )
+        drop_mask = [
+            (state_norm, district_norm) in exclusion_keys
+            for state_norm, district_norm in zip(
+                source["source_state_norm"].tolist(), source["source_district_norm"].tolist()
+            )
+        ]
+        source = source.loc[[not flag for flag in drop_mask]].copy()
 
     direct = source.merge(
         canonical_df,
@@ -762,7 +929,12 @@ def _resolve_groundwater_districts(
         matched.duplicated(["district_key"], keep=False),
         ["source_state", "source_district", "canonical_state", "canonical_district", "district_key", "match_method"],
     ].sort_values(["canonical_state", "canonical_district", "source_state", "source_district"])
-    return matched.reset_index(drop=True), unmatched.reset_index(drop=True), duplicate_targets.reset_index(drop=True)
+    return (
+        matched.reset_index(drop=True),
+        unmatched.reset_index(drop=True),
+        duplicate_targets.reset_index(drop=True),
+        excluded_df.reset_index(drop=True),
+    )
 
 
 def _resolve_placeholder_duplicate_targets(
@@ -971,14 +1143,16 @@ def build_groundwater_district_outputs(
     workbook = parse_groundwater_workbook(workbook_path)
     raw_source_df = workbook.records_df.copy()
     source_df, aggregation_df = _collapse_lakshadweep_source_rows(raw_source_df)
+    source_df, aggregation_df = _collapse_declared_source_aggregations(source_df, aggregation_df)
     canonical_df = _build_canonical_districts(districts_path)
-    alias_df = _load_alias_overrides(alias_csv_path)
+    alias_df, exclusions_df = _load_alias_overrides(alias_csv_path)
     data_dir = get_paths_config().data_dir
 
-    matched_df, unmatched_df, duplicate_targets_df = _resolve_groundwater_districts(
+    matched_df, unmatched_df, duplicate_targets_df, excluded_df = _resolve_groundwater_districts(
         source_df,
         canonical_df=canonical_df,
         alias_df=alias_df,
+        exclusions_df=exclusions_df,
     )
     matched_df, duplicate_targets_df, duplicate_resolution_df = _resolve_placeholder_duplicate_targets(
         matched_df
@@ -1020,6 +1194,7 @@ def build_groundwater_district_outputs(
         _write_csv(unmatched_df[["source_state", "source_district"]].drop_duplicates().sort_values(["source_state", "source_district"]).reset_index(drop=True), qa_dir / "groundwater_unmatched_districts.csv", overwrite=overwrite)
         _write_csv(duplicate_targets_df, qa_dir / "groundwater_duplicate_canonical_matches.csv", overwrite=overwrite)
         _write_csv(alias_template_df, qa_dir / "groundwater_district_alias_template.csv", overwrite=overwrite)
+        _write_csv(excluded_df, qa_dir / "groundwater_excluded_sources.csv", overwrite=overwrite)
 
     if not unmatched_df.empty:
         raise ValueError(
@@ -1073,6 +1248,7 @@ def build_groundwater_district_outputs(
                 "unique_states": int(master_df["state"].nunique()),
                 "period": GROUNDWATER_PERIOD,
                 "alias_rows": int(alias_df.shape[0]),
+                "excluded_rows": int(excluded_df.shape[0]),
             }
         ]
     )
@@ -1084,6 +1260,7 @@ def build_groundwater_district_outputs(
         "source_df": source_df,
         "aggregation_df": aggregation_df,
         "duplicate_resolution_df": duplicate_resolution_df,
+        "excluded_df": excluded_df,
         "crosswalk_df": crosswalk_df,
         "master_df": master_df,
         "summary_df": summary_df,

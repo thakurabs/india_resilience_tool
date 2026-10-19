@@ -1,0 +1,4 @@
+processing_id,hierid,cells,days,max_abs_c,days_over_1e3,raw_identity_c,days_ge_28,published_days_ge_28,days_ge_30,published_days_ge_30,days_ge_32,published_days_ge_32,counts_match
+19567,IND.18.251.962,10,10957,5.471493592423826e-05,0,0.0,2876,2876,427,427,0,0,True
+20346,IND.18.245.940,8,10957,0.18061962973807866,2,0.0,1,1,0,0,0,0,True
+20372,IND.18.245.941,6,10957,0.006728137820033453,2,0.0,64,64,0,0,0,0,True

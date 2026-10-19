@@ -1,0 +1,53 @@
+site,window,season,reference,candidate,kind,n_available_days,n_valid_days,bias_c,median_abs_error_c,rmse_c,pearson_r,q50_difference_c,q90_difference_c,q95_difference_c,q99_difference_c,n_hottest_1pct_days,cond_mean_error_hottest_1pct_c,daily_gate,mean_peak_hour_audited_utc,mean_peak_hour_R3_utc,frac_days_peak_hour_differs,threshold_c,reference_per_year_audited,reference_per_year_R3,candidate_per_year,count_gate_audited,count_gate_R3,count_gate_verdict_changed,daily_gate_audited,daily_gate_R3,daily_gate_verdict_changed
+Bikaner,1990-2004,ALL,ref_audited,ref_R3_midpoint,reference sensitivity,5478.0,5477.0,-0.23410864735168838,0.20523904765860834,0.34852125126950434,0.9986471525142429,-0.24965269311121574,-0.22089513943697625,-0.23805208665325495,-0.4223853328226852,55.0,-0.43066635606526854,PASS,8.324753559693319,8.589921489866715,0.4393939393939394,,,,,,,,,,
+Bikaner,1990-2004,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,28.0,194.64285714285714,190.21428571428572,194.0,PASS,PASS,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,30.0,152.5,146.71428571428572,155.5,PASS,PASS,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,32.0,73.07142857142857,65.35714285714286,92.0,FAIL,FAIL,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,28.0,194.64285714285714,190.21428571428572,187.78571428571428,PASS,PASS,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,30.0,152.5,146.71428571428572,149.21428571428572,PASS,PASS,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,32.0,73.07142857142857,65.35714285714286,81.14285714285714,PASS,FAIL,True,PASS,PASS,False
+Bikaner,1990-2004,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,28.0,194.64285714285714,190.21428571428572,188.14285714285714,PASS,PASS,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,30.0,152.5,146.71428571428572,149.42857142857142,PASS,PASS,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,32.0,73.07142857142857,65.35714285714286,83.85714285714286,PASS,FAIL,True,PASS,PASS,False
+Bikaner,1990-2004,,,cand_W2rev,gate under both references,,,,,,,,,,,,,,,,,28.0,194.64285714285714,190.21428571428572,194.85714285714286,PASS,PASS,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_W2rev,gate under both references,,,,,,,,,,,,,,,,,30.0,152.5,146.71428571428572,156.07142857142858,PASS,PASS,False,PASS,PASS,False
+Bikaner,1990-2004,,,cand_W2rev,gate under both references,,,,,,,,,,,,,,,,,32.0,73.07142857142857,65.35714285714286,92.5,FAIL,FAIL,False,PASS,PASS,False
+Hyderabad,1990-2004,ALL,ref_audited,ref_R3_midpoint,reference sensitivity,5478.0,5477.0,-0.19965054144123787,0.18692928317170754,0.28402441331359884,0.9970902235592893,-0.1715235970896174,-0.2647928998141076,-0.28491505962775676,-0.2783149198627157,55.0,-0.4137617293443286,PASS,7.823293172690763,8.097681212342524,0.4421321650237313,,,,,,,,,,
+Hyderabad,1990-2004,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,28.0,212.57142857142858,202.42857142857142,230.21428571428572,PASS,PASS,False,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,30.0,106.71428571428571,98.42857142857143,126.92857142857143,PASS,FAIL,True,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,32.0,39.5,33.714285714285715,41.57142857142857,PASS,FAIL,True,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,28.0,212.57142857142858,202.42857142857142,212.35714285714286,PASS,PASS,False,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,30.0,106.71428571428571,98.42857142857143,109.28571428571429,PASS,PASS,False,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,32.0,39.5,33.714285714285715,28.928571428571427,FAIL,PASS,True,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,28.0,212.57142857142858,202.42857142857142,217.57142857142858,PASS,PASS,False,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,30.0,106.71428571428571,98.42857142857143,113.28571428571429,PASS,PASS,False,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,32.0,39.5,33.714285714285715,30.857142857142858,FAIL,PASS,True,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_W2rev,gate under both references,,,,,,,,,,,,,,,,,28.0,212.57142857142858,202.42857142857142,223.64285714285714,PASS,PASS,False,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_W2rev,gate under both references,,,,,,,,,,,,,,,,,30.0,106.71428571428571,98.42857142857143,123.21428571428571,PASS,FAIL,True,PASS,PASS,False
+Hyderabad,1990-2004,,,cand_W2rev,gate under both references,,,,,,,,,,,,,,,,,32.0,39.5,33.714285714285715,49.0,FAIL,FAIL,False,PASS,PASS,False
+Bikaner,2005-2014,ALL,ref_audited,ref_R3_midpoint,reference sensitivity,3651.0,3650.0,-0.21527174079730818,0.1878544885254314,0.33868908131563547,0.9987047717525116,-0.23116175708034348,-0.2404359707543975,-0.25642346804369254,-0.33062431873396747,37.0,-0.371313289270834,PASS,8.259654889071488,8.533698630136985,0.43330594357710217,,,,,,,,,,
+Bikaner,2005-2014,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,28.0,204.66666666666666,200.77777777777777,203.88888888888889,PASS,PASS,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,30.0,158.88888888888889,154.33333333333334,168.33333333333334,PASS,PASS,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,32.0,87.22222222222223,78.11111111111111,107.44444444444444,FAIL,FAIL,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,28.0,204.66666666666666,200.77777777777777,197.11111111111111,PASS,PASS,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,30.0,158.88888888888889,154.33333333333334,160.88888888888889,PASS,PASS,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,32.0,87.22222222222223,78.11111111111111,96.22222222222223,PASS,FAIL,True,PASS,PASS,False
+Bikaner,2005-2014,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,28.0,204.66666666666666,200.77777777777777,196.66666666666666,PASS,PASS,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,30.0,158.88888888888889,154.33333333333334,161.33333333333334,PASS,PASS,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,32.0,87.22222222222223,78.11111111111111,98.55555555555556,PASS,FAIL,True,PASS,PASS,False
+Bikaner,2005-2014,,,cand_W2,gate under both references,,,,,,,,,,,,,,,,,28.0,204.66666666666666,200.77777777777777,206.22222222222223,PASS,PASS,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_W2,gate under both references,,,,,,,,,,,,,,,,,30.0,158.88888888888889,154.33333333333334,169.66666666666666,PASS,PASS,False,PASS,PASS,False
+Bikaner,2005-2014,,,cand_W2,gate under both references,,,,,,,,,,,,,,,,,32.0,87.22222222222223,78.11111111111111,109.11111111111111,FAIL,FAIL,False,PASS,PASS,False
+Hyderabad,2005-2014,ALL,ref_audited,ref_R3_midpoint,reference sensitivity,3651.0,3650.0,-0.19877081713857808,0.17784112851143163,0.2800494704082547,0.9973296962899362,-0.18471697063364445,-0.2742230400386205,-0.24756991449141452,-0.29984805622438415,37.0,-0.3703288229775156,PASS,7.8079978088195015,8.11068493150685,0.3935907970419063,,,,,,,,,,
+Hyderabad,2005-2014,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,28.0,225.11111111111111,213.88888888888889,244.11111111111111,PASS,PASS,False,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,30.0,117.11111111111111,107.55555555555556,136.22222222222223,PASS,FAIL,True,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_C1,gate under both references,,,,,,,,,,,,,,,,,32.0,45.0,37.888888888888886,49.44444444444444,PASS,FAIL,True,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,28.0,225.11111111111111,213.88888888888889,226.22222222222223,PASS,PASS,False,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,30.0,117.11111111111111,107.55555555555556,117.33333333333333,PASS,PASS,False,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_C2,gate under both references,,,,,,,,,,,,,,,,,32.0,45.0,37.888888888888886,35.22222222222222,FAIL,PASS,True,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,28.0,225.11111111111111,213.88888888888889,229.88888888888889,PASS,PASS,False,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,30.0,117.11111111111111,107.55555555555556,122.66666666666667,PASS,PASS,False,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_W1,gate under both references,,,,,,,,,,,,,,,,,32.0,45.0,37.888888888888886,36.666666666666664,PASS,PASS,False,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_W2,gate under both references,,,,,,,,,,,,,,,,,28.0,225.11111111111111,213.88888888888889,239.55555555555554,PASS,PASS,False,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_W2,gate under both references,,,,,,,,,,,,,,,,,30.0,117.11111111111111,107.55555555555556,130.88888888888889,PASS,FAIL,True,PASS,PASS,False
+Hyderabad,2005-2014,,,cand_W2,gate under both references,,,,,,,,,,,,,,,,,32.0,45.0,37.888888888888886,56.55555555555556,FAIL,FAIL,False,PASS,PASS,False

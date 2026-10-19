@@ -1,0 +1,1048 @@
+﻿
+
+India Resilience Tool
+User Stories
+https://resilience.org.in/ 
+
+Table of Content
+			TOC \o "1-9" \z \u \h1.	Introduction	PAGEREF _Toc475586942 \h2
+			1.1.	Background	PAGEREF _Toc1871804488 \h2
+			1.2.	Purpose of this document	PAGEREF _Toc101166154 \h2
+			2.	Visitor Stories	PAGEREF _Toc170972656 \h2
+		US 01: Landing & Access Options	PAGEREF _Toc1607523884 \h2
+		US 02: Sign In with Email & Password + 2FA	PAGEREF _Toc101110742 \h3
+		US 03: Create New Account (Sign Up) + Email Verification	PAGEREF _Toc84965979 \h4
+		US 04: Reset Password	PAGEREF _Toc772031918 \h6
+		US 05: First-Time Visitor Guide	PAGEREF _Toc87410244 \h7
+		US 06: Header & Dropdown Navigation	PAGEREF _Toc7423005 \h8
+		US 07: User Profile Management	PAGEREF _Toc1478305210 \h9
+		US 08: Feedback Form (Popup Submission)	PAGEREF _Toc1054380864 \h10
+		India Resilience Tool Dashboard Sections	PAGEREF _Toc2133974102 \h11
+		US 09: Geography Selection	PAGEREF _Toc76653133 \h12
+		US 10:  Coordinates Panel	PAGEREF _Toc948658501 \h15
+		US 11:  Resilience Filters	PAGEREF _Toc1151268404 \h17
+		US 12: View Mode (Radio Buttons)	PAGEREF _Toc2003791258 \h19
+		US 13: Map View & Interaction	PAGEREF _Toc799825132 \h20
+		US 14: Ranking Table View & Interaction	PAGEREF _Toc1512777822 \h22
+		US 15: My Analysis (Save List & Reload Analysis)	PAGEREF _Toc1701037306 \h24
+		US 16: Resilience Profile (Single-Site Analysis)	PAGEREF _Toc1528230444 \h26
+		US 17: My Analysis Profile (Multi-Site Analysis)	PAGEREF _Toc1279109093 \h28
+
+Introduction
+Background
+The Resilience Actions Climate Analytics Platform is developed to enable Visitors to analyze and understand climate risk and resilience across different geographic levels such as state, district, and block. It provides interactive tools and data visualizations to support informed decision-making for planning, policy, and research purposes.
+Purpose of this document
+This document defines the Visitor stories, system behaviors, and functional requirements of the platform. It serves as a reference for design, development, and QA teams to ensure a consistent understanding of features, Visitor flows, and expected outcomes.
+Visitor Stories 
+US 01: Landing & Access Options
+Role: Visitor,As a Visitor, I want to see access options (Sign In, Sign Up, Forgot Password) So that I can choose how I want to enter the platform.
+Pre-Condition
+Platform URL is accessible
+Visitor accesses the URL
+Acceptance Criteria:
+Visitor lands on dashboard
+System displays:
+Logos
+Resilience Actions Logo with Website URL
+Resustainability Logo with Website URL
+Welcome note with Dashboard Name
+Donate button (Hyperlinked)
+Sliding Images in Background (On Left)
+Log In option
+Create Account button
+Forgot Password button
+Post ConditionVisitor selects one of the following paths: 
+Logs In to the Dashboard
+Navigates to Sign Up page with “Create an account”
+Navigates to Reset Password Page
+US 02: Sign In with Email & Password + 2FA
+Role: Visitor,As a Visitor, I want to log in using my email and password So that I can access Resilience tool dashboard with my account
+Pre-Condition
+Visitor already has a registered account
+Visitor is not currently logged in
+Authentication service is available
+Acceptance Criteria:
+Visitor inputs email and password
+Visitor clicks login button
+System Validates Credentials Redirects to 2FA verification
+Visitor enters OTP (Sent to registered email)
+System Validates OTP
+Valid credentials → 2FA → login success → redirect to Resilience tool
+
+2FA (Login)
+After entering valid email and password, the system triggers 2FA and sends an OTP to registered email
+Visitor enters OTP on verification page 
+System validates OTP: 
+If valid → Visitor logged in and redirected to dashboard 
+If invalid → show error “Invalid code, please try again” 
+OTP expires after defined time 
+Resend OTP option available after defined time
+
+Validation Conditions & System Response
+Invalid email format → “Enter a valid email address”
+Invalid credentials → “Invalid email or password. Please try again”
+Post Condition
+Resilience tool loaded with visitor’s logged in account
+
+US 03: Create New Account (Sign Up) + Email Verification
+Role: Visitor,As a Visitor, I want to create an account by providing my details So that I can access Resilience Tool
+Pre-Condition
+Visitor clicks “Sign-Up” from landing page or accesses the page with direct URL
+Visitor Email ID is not registered in the system
+Registration service is available
+Authentication service is available
+
+Acceptance Criteria:
+
+Note: * Fields are Mandatory
+Step 1: Account Credentials
+Visitor provides:
+Name *
+Email *
+Phone Number (Optional)
+Password *
+Confirm Password *
+System behavior before moving to step 2:
+Email uniqueness enforced 
+Password strength rules applied
+Step 2: Profile Information
+Visitor provides:
+Organization (Dropdown Government / Private) *
+Designation *
+Purpose of Use *
+Thematic Activity *
+Country (Default & Locked : India) 
+State (Filtered based on selected country “INDIA”) *
+Checkboxes
+Final Submission
+Accept Terms & Conditions and Privacy Policy (Checkbox – Mandatory) 
+For latest updates, Subscribe to our newsletter (Checkbox – Optional)
+Submit Button
+
+Terms & Conditions Popup
+Opens in a modal when user clicks the link 
+Displays full terms in a scrollable view 
+User can close using “X” and return to same screen 
+
+Privacy Policy Popup
+Opens in a modal when user clicks the link 
+Displays information in a scrollable view 
+User can close using “X” and return to same screen
+
+Successful action (On click of submit)
+Mandatory fields validation → Email Verification → Login success → Redirect to Resilience tool)→ Redirect to Email Verification Screen→ On Email Verification, Logs in Visitor and Redirects to Resilience tool
+
+Email Verification (Sign Up)
+After submitting signup form, system sends a verification code to the registered email 
+Visitor enters code on verification page 
+System validates code: 
+If valid → account is created and Visitor is logged in 
+If invalid → show error “Invalid code, please try again
+Code expires after a defined time (5 Minutes)
+Resend verification code option available after defined time (30 Sec)
+
+Validation Conditions & System Response
+On validation, the system highlights the specific field’s border in red color and displays appropriate error messages and corrective actions
+Mandatory fields not filled → Show “This field is required” and block submission
+Email already exists → Show “An account with this email already exists” and suggest Sign In 
+Invalid email format → Show “Enter a valid email address” 
+Password doesn’t meet strength rules → Show “Password must meet required criteria” and block submission 
+Password & Confirm Password don’t match → Show “Passwords do not match” 
+Password Strength Criteria
+Minimum Length: 8 characters 
+Uppercase Letter: At least 1 (A–Z) 
+Lowercase Letter: At least 1 (a–z) 
+Number: At least 1 digit (0–9) 
+Special Character: At least 1 (e.g., @ # $) 
+No Spaces: Password cannot contain spaces 
+Confirm Password Match: Password and Confirm Password Input must match
+Country not selected → Disable State dropdown 
+Country changed after selecting State → Reset State field 
+All inputs valid → Allow submission 
+System failure → Show “Something went wrong. Please try again” 
+Post ConditionVisitor selects one of the following paths:
+Navigates to Sign In page
+Navigates to Sign Up page
+Navigates to Reset Password Page
+Enters platform as Guest Visitor
+
+US 04: Reset Password
+Role: Visitor (Registered user),As a Visitor, I want to reset my passwordSo that I can regain access to my account if I forget my login credentials.
+Pre-Condition
+User is on Login page 
+User has a registered email ID 
+Reset password feature is enabled
+Acceptance Criteria:
+Initiate Reset
+User clicks “Forgot Password?” on login page 
+User is redirected to Reset Password page
+User enters registered email 
+User clicks “Send Code” 
+
+Email Verification
+System sends authentication code to Visitor’s registered email 
+Visitor enters the received authentication code
+System validates it.
+Set New Password
+On code authentication, visitor is redirected to Reset Password page 
+User enters: 
+New password 
+Confirm password 
+System validates: 
+Password match 
+Password strength 
+User clicks “Submit”
+
+Post Condition
+Password is updated successfully 
+User is redirected to login page 
+Success message displayed
+
+US 05: First-Time Visitor Guide
+Role: Visitor,As a Visitor, I want to see a guided walkthrough of the platform So that I can understand how to use key features effectively.
+Pre-Condition
+Visitor is visiting the platform for the first time 
+No prior onboarding completion recorded 
+Dashboard is loaded 
+Visitor Guide feature is enabled
+Acceptance Criteria:
+Guide Trigger
+On first visit, system automatically displays Visitor Guide overlay
+Overlay appears above dashboard with background dimmed
+Guide Structure (Step-by-Step Flow)
+Guide is divided into multiple steps:
+Step 1: Geography Selection
+Step 2: Resilience Filters
+Step 3: Explore Map
+Step 4: Coordinates Panel
+Step 5: Customize View
+Each step contains:
+Title (e.g., “Quick Guide”)
+Step heading
+Description/instructions
+Contextual guidance related to UI
+Navigation Controls
+Buttons available:
+Next → Moves to next step (Remains non-clickable at last step)
+Previous → Moves to previous step (Remains non-clickable at first step)
+Skip → Exits guide immediately
+Done → Completes guide, Appears on final step
+UI Highlighting
+Relevant UI sections are visually highlighted per step
+Background remains dimmed
+Post Condition
+Guide is marked as completed or skipped 
+Guide does not auto-trigger again for same user/session 
+Visitor can continue using dashboard normally
+
+US 06: Header & Dropdown Navigation
+Role: Visitor (logged-in user),As a Visitor, I want to access profile-related options from the dashboard header So that I can quickly navigate to my profile, saved analysis, or logout.
+Pre-Condition
+User is logged in 
+Dashboard is loaded 
+User name and profile icon are visible in header
+Acceptance Criteria:
+Access Dropdown
+Visitor can see logo and title
+Visitor sees “Welcome, [Name]” with profile icon in header 
+Visitor can access Feedback form in popup from top navigation bar
+Visitor can access profile options from top navigation user icon
+On click of profile icon or name
+On click of profile icon or name → Dropdown menu is displayed
+Dropdown Options
+Dropdown includes: 
+User Profile 
+My Analysis 
+Logout
+Navigation Actions
+On clicking User Profile → Navigate to Profile Management page 
+On clicking My Analysis → Navigate to My Analysis section 
+On clicking Logout → User is redirected to feedback page and logged out and then redirected to login page.
+Post Condition
+User navigates to selected section OR logged out 
+Session updated accordingly
+
+US 07: User Profile Management
+Role: Visitor,As a Visitor, I want to view and manage my profile detailsSo that I can keep my information up to date and maintain my account.
+Pre-Condition
+User is logged into dashboard
+Profile section is accessible
+Acceptance Criteria:
+Access User Profile
+User can access profile options from top navigation user icon
+Dropdown includes: 
+User Profile 
+My Analysis 
+Logout 
+On clicking “User Profile” → User is navigated to Profile section
+View Profile
+User can view profile details: 
+Name 
+Email 
+Organization 
+Designation 
+Purpose of Use
+Thematic Activity
+Country (Default & Locked: India) 
+State 
+Reset Password (Redirected Reset Password Page, Keeping User Logged In)
+Edit Profile
+User can update: 
+Name 
+Email (Can’t be changed)
+Organization 
+Designation 
+Purpose of Use
+Thematic Activity
+Country (Default & Locked : India) 
+State 
+
+User clicks “Save” 
+Updated details are stored 
+Logout
+User can log out from profile section
+During Logout, Feedback feature will be triggered as per “Feedback Form” Feature
+Post Condition
+Updated profile details are saved 
+Changes reflected across system 
+Password updated successfully 
+User can securely log out
+
+US 08: Feedback Form (Popup Submission)
+Role: Visitor,As a Visitor, I want to submit feedback through a formSo that I can share my experience and help improve the platform.
+Pre-Condition
+User is logged into dashboard
+Feedback feature is enabled 
+Admin email is configured to receive feedback
+Acceptance Criteria:
+Access via Header (Manual Feedback)
+User clicks “Share Feedback” button in header 
+Feedback popup is displayed 
+Popup includes: 
+Experience selection (5-6 radio options) 
+“Tell us more” text field 
+Rating (star-based) 
+Submit button 
+On clicking Submit: 
+Feedback is validated 
+Feedback is submitted 
+User remains on dashboard 
+Popup closes 
+Feedback on Logout (Auto Trigger)
+When user clicks Logout 
+Feedback popup appears before logout 
+Popup includes: 
+Reason for leaving (5-6 radio options) 
+“Tell us more” text field 
+Rating (star-based) 
+Actions available: 
+Skip & Logout 
+Submit & Logout 
+Logout Feedback Behavior
+On clicking Skip & Logout: 
+Feedback is not submitted 
+User is logged out 
+Redirect to login screen 
+On clicking Submit & Logout: 
+Validate required fields 
+Feedback is submitted 
+User is logged out 
+Redirect to login screen 
+Submission Handling
+Feedback is sent to: 
+Admin configured email
+Submitted feedback includes: 
+Selected options 
+Comments (if provided) 
+Rating 
+User details
+Name
+Email
+Post Condition
+Feedback is successfully submitted 
+Admin receives feedback via email
+User remains logged in (header flow) OR logged out (logout flow)
+
+India Resilience Tool Dashboard Sections
+
+US 09: Geography Selection
+
+NOTE: 
+For Analysis, visitors can choose either the Geographic Selection option or Add/Upload Coordinates. 
+Only one option can be used at a time, and only one section will remain expanded while the other stays collapsed.
+While switching between these two, a note will appear that they are switching location selection mode with an option to save or proceed without saving
+
+Role: Visitor,As a Visitor, I want to select a geography (State, District/Block), View Mode and define my analysis focus So that I can view relevant resilience insights based on my selection.
+Pre-Condition
+Visitor is on the dashboard with Geography Selection panel visible on left
+List of States, Districts, and Blocks is available
+System supports:
+District and Block level analysis at single and multi-level
+Map and Ranking table view mode
+Acceptance Criteria:
+State Selection
+Visitor selects a State from dropdown
+District and Block data loads based on selected State
+View Zone Selection
+Visitor selects either:
+District
+Block
+District Analysis (Checkbox-based Logic)
+Visitor selects 
+District
+District list will be dynamically updated based on the chosen state
+One or more District(s) using checkboxes
+Behavior:
+If only one District is selected → System treats it as Single-Site Analysis
+If multiple or all Districts are selected → System automatically applies Multi-Site Analysis
+Block Analysis (Checkbox-based Logic)
+Visitor selects:
+District 
+District list will be dynamically updated based on the chosen state
+Note: Under Block analysis only one district can be selected from dropdown
+Block
+Block list will be dynamically updated based on the chosen district
+One or more Block(s) using checkboxes
+Behavior:
+If only one Block is selected → System treats it as Single-Site Analysis 
+If multiple or all Blocks are selected → System automatically applies Multi-Site Analysis
+Add to Analysis
+Visitor clicks “Add to Analysis”
+Selected locations added to My Analysis
+NOTE for “Add to Analysis”
+It will remain non-clickable and greyed out, if no location is selected & no resilience filters are applied
+On successfully clicking the “Add to Analysis”, Multi-site Analysis will be triggered
+Tooltip & Hover Enable/Disable
+Checkbox: “Enable hover highlight & tooltip”
+If enabled (checked by default) → Hovering on map highlights region → Tooltip displays relevant data
+If disabled → No highlight on hover on map → No tooltip displayed
+Reset Button
+→ Clear all selections and restore defaults (India Map)
+Panel Expand / Collapse Control
+Visitor clicks arrow icon (collapse/expand control)
+On collapse
+→ Left panel is hidden
+On expand
+→ Left panel is visible
+System retains last state (collapsed/expanded) during session
+Validation Conditions & System Response
+No State selected → Disable all dependent fields
+Switch between District and Block → Reset Analysis Focus and Geographic selections
+District/Block not selected → Prevent progression
+Single vs Multiple Selection Logic → 1 selection → System treats as Single-Site Analysis → Multiple/All selections → System treats as Multi-Site Analysis
+Tooltip toggle OFF → Ensure no hover interaction occurs on Map
+View switch (Map ↔ Ranking Table) → Preserve selected geography and filters
+Collapse and Expand panel → Ensure no loss of Visitor selections
+State change → Reset District, Blocks
+System failure → Show “Something went wrong, please try again”
+Reset action → Clear all selections and restore defaults
+Post Condition
+After valid selections, Visitor applies Resilience Filters
+Note – Visitor can also apply Resilience filters first and then Geographic location
+
+US 10:  Coordinates Panel
+NOTE: 
+For Analysis, visitors can choose either the Geographic Selection option or Add/Upload Coordinates. 
+Only one option can be used at a time, and only one section will remain expanded while the other stays collapsed.
+While switching between these two, a note will appear that they are switching location selection mode with an option to save or proceed without saving
+Role: Visitor,As a Visitor, I want to I want to add coordinates manually or upload coordinate files So that I can visualize and analyze specific locations on the map.
+Pre-Condition
+Visitor is logged in to dashboard 
+Coordinates Panel is visible 
+Map is loaded and interactive 
+Coordinate input/upload functionality is enabled
+Acceptance Criteria:
+
+Visitor is presented with two options:
+Add Coordinates
+Upload Coordinates
+Add Coordinates (Manual Entry)
+Visitor enters:
+Latitude * (Decimal Degrees Only)
+Longitude * (Decimal Degrees Only)
+Custom Name (optional)
+Visitor clicks “Show on Map”
+Location is shown below the Lat-long fields with Block Name & State Name
+Location is plotted on map
+Tooltip displays location details
+System shows details under Single-site Analysis
+
+Add to Analysis
+Visitor clicks “Add to Analysis”
+Selected locations added to My Analysis
+NOTE for “Add to Analysis”
+It will remain non-clickable and greyed out, if no location is selected & no resilience filters are applied
+On successfully clicking the “Add to Analysis”, Multi-site Analysis will be triggered
+Upload Coordinates (File Upload)
+Visitor clicks “Upload Coordinates”
+System displays 2 Options:
+Download sample files:
+CSV (columns: Latitude, Longitude, Label) - (Decimal Degrees Only)
+XLSX (columns: Latitude, Longitude, Label) - (Decimal Degrees Only)
+Zipped Shape File (Contains Sample files)
+Import File option
+Import File
+Visitor uploads file in supported formats:
+.csv
+.xlsx
+Zipped Shape File
+System validates file structure
+On successful upload: Uploaded Coordinates List
+All uploaded coordinates will be shown in a list, that will consist of Custom Label (If added), Point Number, Block Name, District Name
+List format:
+If custom name provided
+→ Custom Name, Block Name, District Name
+→ Example: ABC, Hanamkonda, Warangal
+If custom name not provided
+→ Point Number, Block Name, District Name
+→ Example: Point 1, ABC, Hanamkonda, Warangal
+Coordinates will be processed and Points will be plotted on map
+Note: Coordinates added are shown in order. If no custom name is given, they are labeled Point 1, Point 2, etc. Custom names replace the point label but keep the order.
+Example: If the first location is added with custom name “ABC”, and then the next location is added without a custom, it will appear as Point 2.
+Add to Analysis
+Visitor clicks “Add to Analysis”
+Selected locations added to My Analysis
+NOTE for “Add to Analysis”
+It will remain non-clickable and greyed out, if no location is selected & no resilience filters are applied
+On successfully clicking the “Add to Analysis”, Multi-site Analysis will be triggered
+Save Analysis
+User clicks “Save Analysis”
+Popup appears:
+Option to enter custom label
+Option to save with default label (“My Analysis”)
+On save:
+Analysis is added to Saved Analysis list
+Validation Conditions & System Response
+Invalid latitude/longitude → Show “Enter valid coordinates, Decimal Degrees Only” 
+Missing latitude/longitude → Show “Latitude and Longitude are required” 
+Invalid file format → Show “Unsupported file format” 
+Incorrect file structure → Show “Invalid file format. Please use the provided sample” 
+File upload failure → Show “Unable to upload file. Please try again” 
+Post Condition
+Points plotted on map 
+Selected points added to analysis 
+System updates map based on further selected resilience filters
+
+US 11:  Resilience Filters
+Role: Visitor,As a Visitor, I want to select resilience filters such as Risk Domain, Metrics, Scenario, Period, Statistic, and Map Mode So that I can analyze data based on specific climate conditions.
+Pre-Condition
+Visitor is on dashboard 
+Geography selection is completed 
+NOTE – Visitors can apply resilience filters first and then geographic location, or vice versa.
+Resilience Filters panel is visible 
+Filter data like Risk domains, metrics, scenarios, periods, statics and map modes is available
+Acceptance Criteria:
+
+1 > RISK DOMAIN
+Visitor hovers over “?” icon to view tooltip information
+Visitor selects Risk Domain from dropdown
+Options:
+Heat Risk 
+Heat Stress 
+Cold Risk 
+Agriculture & Growing Conditions 
+Flood & Extreme Rainfall Risk 
+Rainfall totals & Typical Wetness 
+Drought Risk 
+Temperature Variability 
+2 > METRIC
+Visitor hovers over “?” icon to view tooltip information
+Based on selected Risk Domain:
+Metric dropdown updates dynamically 
+Example – Visitor selects Metrics (Heat Risk):
+Annual Mean Temperature (TM Mean) 
+Annual Maximum Temperature (TXx) 
+Summer Days (TX > 32°C) 
+Hot Days (TX ≥ 30°C) 
+Extreme Heat Days (Tx ≥ 35°C) 
+Tropical Nights (TR, TN > 20°C) 
+Hot Days (TX90p) 
+Warm Nights (TN90p) 
+Warm Spell Duration Index (WSDI) 
+Heat Wave Frequency Index (HWFI, 4Days) 
+Heat Wave Frequency (txmax 90p, #Events) 
+Heatwave Amplitude (peak day) 
+Warmest Night 
+Summer Max Temperature (MAM Mean) 
+Summer Mean Temperature (TM; MAM Mean)
+3 > SCENARIO
+Visitor hovers over “?” icon to view tooltip information
+Visitor selects Scenario
+Options:
+Middle of the road (SSP2-4.5) 
+Fossil-fuelled development (SSP5-8.5) 
+Historical Scenario 
+4 > PERIOD
+Visitor hovers over “?” icon to view tooltip information
+Visitor selects Period
+Options:
+Early Century (2020–2040) 
+Mid Century (2040–2060) 
+Late Century (2060–2080) 
+5 > STATISTIC
+Visitor hovers over “?” icon to view tooltip information
+Visitor selects Statistic
+Options:
+Mean 
+Median 
+6 > MAP MODE
+Visitor hovers over “?” icon to view tooltip information
+Visitor selects Map Mode
+Options:
+Predicted Value 
+Historical baseline 
+Change from 1990–2010 baseline 
+Post Condition
+System updates map/ranking table based on selected filters
+
+US 12: View Mode (Radio Buttons)
+NOTE: For View Mode, Visitors can use only one view mode at a time, either Map View or Ranking Table View. Switching between modes will display one view.
+Role: Visitor,As a Visitor, I want to switch between Map View and Rankings Table So that I can analyze data visually or in tabular format.
+Pre-Condition
+Visitor is logged into dashboard 
+Data is available for selected geography and filters 
+View Mode options are visible
+Acceptance Criteria:
+Visitor lands on dashboard
+“Select Your View” section is available on left panel
+Visitor can select: 
+Map View (default selected) 
+Rankings Table 
+NOTE: Only one view can be active at a time 
+On selecting Map View → Map visualization is displayed → Rankings Table is hidden 
+On selecting Rankings Table → Tabular ranking view is displayed → Map visualization is hidden
+Validation Conditions & System Response
+No data available → Show “No data available for the selected filters” 
+Switching view → Preserve selected geography and filters
+Post Condition
+Selected view is applied 
+Data is rendered in chosen format
+
+US 13: Map View & Interaction
+Role: Visitor,As a Visitor, I want to view and interact with map-based data based on my selections (geography, coordinates, and filters) So that I can analyze resilience insights visually.
+Pre-Condition
+Visitor is logged into dashboard 
+Map View is selected 
+Geography selection is available 
+Resilience filters are available 
+Coordinates panel is enabled
+Acceptance Criteria:
+Geography-Based Map Update
+Visitor selects:
+State
+Single or Multi-District(s)
+Single or Multi-Block(s)
+Map updates in real-time based on selection
+Selected region’s boundaries are highlighted on map with blue color
+Coordinates-Based Visualization
+Visitor adds coordinates manually or uploads file
+Map displays:
+Pin markers for each coordinate
+On hover/click:
+Tooltip displays location details
+Resilience Filters Impact
+Visitor selects:
+Risk Domain
+Metric
+Scenario
+Period
+Statistic
+Map Mode
+Map updates dynamically based on selected filters
+Map displays data using color scale / legend
+Selected region’s area are filled on map with color based on it Legends
+Map Interaction
+Visitor can:
+Zoom in/out using scroll
+Drag map to navigate
+Map responds smoothly to interactions
+On click of any region or point, selected region's boundary (District or Block) gets highlighted with blue color
+Tooltip Interaction (On Click / Hover)
+Visitor hovers on region or point, tooltip appears and disappears when the cursor moves away
+Visitor clicks on a region or point, tooltip appears and disappears when the visitors click to some other place on dashboard
+Tooltip displays:
+District
+State
+Block (NOTE: This will only appear on block view zone mode)
+Value
+Baseline (1990–2010)
+Δ vs baseline with (Level of Change)
+Position in state
+Add to Analysis button (It will appear only on clicking the location and not on hovering)
+Tooltip includes:
+“Add to Analysis” CTA
+
+NOTE for “Add to Analysis”
+It will remain non-clickable and greyed out, if no location is selected & no resilience filters are applied
+On successfully clicking the “Add to Analysis”, Multi-site Analysis will be triggered
+
+Legend
+Legend is displayed
+Shows:
+Level of Change labels with Corresponding color indicators
+Labels with range numbers
+Very Low
+Low
+Moderate
+High
+Extreme
+
+Post Condition
+Map reflects selected geography and data based on filters 
+Coordinates are visible as pins 
+Tooltip provides contextual data 
+Visitor interactions (zoom, drag) are retained during session
+
+US 14: Ranking Table View & Interaction
+NOTE: For View Mode, Visitors can use only one view mode at a time, either Map View or Ranking Table View. Switching between modes will display one view.
+Role: Visitor,As a Visitor, I want to view resilience data in a ranked table format and select locations for analysis So that I compare and analyze regions efficiently.
+Pre-Condition
+Visitor is logged into dashboard 
+Rankings Table view is selected 
+Geography selection is available 
+Resilience filters are applied 
+Data is available for selected criteria
+Acceptance Criteria:
+Table Data Rendering
+System displays data in tabular format with rows and columns:
+Position in State
+State
+District
+Block (NOTE: This will only appear on block view zone mode)
+Index Value
+Absolute Change
+Change Percentile
+Level of Change
+Add to Analysis Checkbox
+Dynamic Update Based on Geography
+If State + District View selected:
+No district OR All districts selected
+→ Show all districts ranked
+Single/multiple district selected
+→ Show only selected district(s)
+
+If State + Block View selected:
+No block OR All blocks selected
+→ Show all blocks ranked
+Single/multiple block selected
+→ Show only selected block(s)
+Ranking Logic
+Data is ranked based on Percentile
+Sorting:
+Highest percentile → Rank 1
+Lowest percentile → Last rank
+Row Selection & Analysis
+Each row has a checkbox
+Visitor selects one or more rows
+On selection:
+“Add to Analysis” button appears at top
+Visitor clicks “Add to Analysis”
+Selected locations added to My Analysis
+NOTE for “Add to Analysis”
+It will remain non-clickable and greyed out, if no location is selected & no resilience filters are applied
+On successfully clicking the “Add to Analysis”, Multi-site Analysis will be triggered
+Visual Representation
+Rows are color-coded based on Level of Change:
+Very Low
+Low
+Moderate
+High
+Extreme
+Colors match legend
+
+Legend
+Legend is displayed
+Shows:
+Level of Change labels with Corresponding color indicators
+Labels with range numbers
+Very Low (0-20%)
+Low (20-40%)
+Moderate (40-60%)
+High (60-80%)
+Extreme (80-100%)
+Validation Conditions & System Response
+No data available → Show “No data available for the selected filters” 
+Switching view → Preserve selected geography and filters
+Post Condition
+Data displayed as per selected geography and filters 
+Selected rows added to My Analysis 
+Multi-site analysis triggered 
+Ranking reflects latest filter selection
+
+US 15: My Analysis (Save List & Reload Analysis)
+Role: Visitor,As a Visitor, I want to save my analysis configurations and reload them laterSo that I can revisit, compare, and continue my analysis without repeating steps.
+Pre-Condition
+Visitor is logged into dashboard 
+User has selected: 
+Geography (State/District/Block) OR Coordinates 
+Resilience filters 
+Analysis results are generated
+Acceptance Criteria:
+
+Note: When there is no location selected, it will show no Insights and will show a message to select a location or coordinate to view Insights.
+Saving Analysis
+Analysis can be saved in 2 flows
+Manual Save
+Auto trigger Save
+Manual Save
+User clicks “Save Analysis” from Geography or Coordinates Panel
+Popup appears:
+Option to enter custom label
+Option to save with default label (“My Analysis”)
+On save:
+Analysis is added to Saved Analysis list
+Auto Trigger Save
+System detects when:
+User has selected locations/coordinates
+Filters are applied
+User attempts to:
+Change State
+Change View Zone (District/Block)
+Switch between Geography Selection and Coordinates
+Popup appears:
+Message
+Options
+Save
+Don’t Save
+Auto Trigger Save Behavior
+On clicking Save:
+Prompt for custom label (optional)
+Save with custom/default label
+On clicking Not Now:
+Continue with user action
+Do not save analysis
+Saved Analysis Listing
+Visitor can access Saved Analysis from Top left navigation dropdown “My Analysis”
+User can view list under “My Analysis”
+Each saved item displays:
+Label:
+Custom label (if provided)
+Default label: “My Analysis”
+Tag: (Any one of them)
+Multi-District
+Multi-Block
+Multi-Coordinates
+Date of save
+Load Saved Analysis
+User clicks on any saved item
+System loads:
+Selected locations / coordinates
+Applied filters
+Generated results
+Dashboard updates accordingly
+
+Post Condition
+Analysis is stored and listed 
+Saved analysis can be reloaded anytime 
+Dashboard reflects loaded configuration
+
+US 16: Resilience Profile (Single-Site Analysis)
+Role: Visitor,As a Visitor, I want to view a detailed resilience profile for a selected single locationSo that I can understand climate risk, trends, and scenario comparisons for that geography.
+Pre-Condition
+Visitor is logged into dashboard 
+Visitor has selected a single site (District/Block/Coordinate) 
+Resilience filters are applied 
+Data is available for selected configuration
+Acceptance Criteria:
+
+Note: When there is no location selected, it will show no Insights and will show a message to select a location or coordinate to view Insights.
+Profile Overview
+Resilience Profile panel is displayed 
+Displays: 
+Geography name (State/District/Block) 
+Selected Index (Metric) 
+Scenario 
+Period 
+Risk Summary
+Displays: 
+Historical Baseline value 
+Projected Value 
+Δ vs baseline (with indicator) 
+Position in India 
+If data unavailable: 
+Show “Insufficient data” or “N/A” 
+Trend Over Time (State Average)
+Line chart is displayed 
+Includes: 
+Historical data 
+Future projections 
+Controls available: 
+Show model members (checkbox) 
+On Click, Slider for max models appears
+Show percentile band (p05–p95) 
+Tooltip on hover shows: 
+Year (On X-axis)
+Value (On Y-axix)
+Scenario Comparison (Period-Mean)
+Bar chart is displayed with color codes
+Includes: 
+Historical baseline (Blue)
+SSP2-4.5 (Orange)
+SSP5-8.5 (Red)
+Data grouped by period 
+Checkbox available: 
+“Start y-axis at zero” 
+Tooltip on hover shows: 
+Scenario 
+Period 
+Value 
+Panel Interaction
+Panel can be: 
+Expanded 
+Collapsed 
+Expand view shows full profile panel (In Popup)
+Collapse hides/minimizes full profile panel (In Popup)
+Expanded Resilience Profile
+Opens the resilience profile in a full-screen modal with same functionalities of the collapsed view
+Sections will split into left and right
+To Left - Saved Analysis, Manage Portfolio, Refine your filters
+To Right - Compare Portfolio
+
+Post Condition
+Updated images/logos are displayed on landing page
+Profile reflects selected geography and filters 
+Charts and values update dynamically 
+
+US 17: My Analysis Profile (Multi-Site Analysis)
+Role: Admin,As a Admin, I want to I want to manage multiple selected locations and compare their resilience data So that I can perform multi-site analysis and derive insights across regions.
+Pre-Condition
+Visitor is logged into dashboard 
+Visitor has added multiple locations (via map, table, or coordinates) 
+Visitor has added any location to analysis by the “Add to Analysis” option.
+Resilience filters are available 
+Data is available for selected locations
+Acceptance Criteria:
+Saved Analysis
+Visitor can view number of selected locations to analysis
+E.g.: You have added 2 districts to your portfolio
+Each location displays:
+Custom Label or Default Label “My Analysis”
+Multi-District / Multi-Block
+Date (On which the analysis is saved)
+3 Dot options
+Rename Analysis name
+Delete Analysis
+Manage Portfolio
+Visitor can see list of locations added to Analysis
+Format of location listing
+If added from Geography (District View)
+District Name
+If added from Geography (Block View)
+Block Name, District Name
+If added from Coordinates Panel
+Coordinates will be processed and Points will be plotted on map
+If custom name provided
+→ Custom Name, Block Name, District Name
+→ Example: ABC, Hanamkonda, Warangal
+If custom name not provided
+→ Point Number, Block Name, District Name
+→ Example: Point 1, ABC, Hanamkonda, Warangal
+Note: Coordinates added are shown in order. If no custom name is given, they are labeled Point 1, Point 2, etc. Custom names replace the point label but keep the order.
+Example: If the first point is named “ABC”, the next without a custom name will appear as Point 2.
+Remove Icon “X”
+Remove individual location using “X” icon
+Clear Portfolio Button
+Clear entire portfolio using “Clear Portfolio”
+Refine Filters
+Visitor can refine analysis using:
+Risk Domain
+Metric
+Scenario
+Period
+Statistic
+Map Mode
+Changes update analysis dynamically
+Compare Portfolio Configuration
+Risk Domain
+Visitor selects Risk Domain(s) to compare
+Note: Visitor can select only one Risk Domains from list 
+Metrics are:
+Auto included all metrics based on selected risk domain(s)
+Message: A note is also shown to indicate that all metrics are included.
+E.g.: 15 metrics from 1 domain(s). Metrics are auto included from selected domains. Use Advanced Metrics to refine.
+Advanced Metric
+“Manually refine metric selection” checkbox
+On Click, Option appears to add/remove metrices
+Visitor can do further refinements by adding/removing metrics as per preference based on selected risk domain(s)
+Scenario Mode
+Visitor can select:
+Single Scenario
+Compare Scenario
+Single Scenario Mode
+System shows number of locations with tag (district /block) is compared with number of chosen indices, along with name of chosen scenario, period, statistic
+E.g.: Comparing 2 districts across 15 indices • ssp245 • 2020-2040 • meanf
+Analysis details block
+Units (Shows number of district / block)
+States (Shows the number of states from where the locations are taken)
+Metrics (Shows number of Metrics chosen)
+Summary displays:
+Units (Number of locations)
+Scenario (Name of scenario chosen on Resilience)
+Metrics (Number of Metrics chosen)Table View
+Table displays comparison chosen location with below fields
+Position in State
+State
+District
+Block (NOTE: This will only appear on block view zone mode)
+Index Value
+Absolute Change
+Change Percentile
+Level of Change
+Visualization View
+Visualizations include:
+Heatmap (portfolio comparison)
+Scenario comparison charts
+Level of Change Legend
+Download Heatmap
+Allows to download Image
+Compare Scenario Mode
+Visitor selects multiple scenarios (e.g., SSP2-4.5, SSP5-8.5)
+System compares:
+Same locations across scenarios
+
+Visitor can toggle:
+Table
+Visualizations
+
+Table View
+
+Compare
+Dropdown options to choose Level of Change
+
+Table displays comparison chosen location with below fields
+Position in State
+State
+District
+Block (NOTE: This will only appear on block view zone mode)
+Index Value
+Absolute Change
+Change Percentile
+Level of Change
+Visualization View
+Visualizations include:
+Heatmap (portfolio comparison)
+Scenario comparison charts
+Change Level Legend
+Options available:
+Show visualizations (checkbox)
+Select visualization mode:
+Across indices (single scenario)
+Scenario comparison
+Download Heatmap
+Allows to download Image
+Panel Interaction
+Panel can be: 
+Expanded 
+Collapsed 
+Expand view shows full profile panel (In Popup)
+Collapse hides/minimizes full profile panel (In Popup)
+Expanded My Analysis Profile
+Opens the resilience profile in a full-screen modal with same functionalities of the collapsed view
+Sections will split into left and right
+To Left - Saved Analysis, Manage Portfolio, Refine your filters
+To Right - Compare Portfolio
+Post Condition
+Updated images/logos are displayed on landing page
+Profile reflects selected geography and filters 
+Charts and values update dynamically
+

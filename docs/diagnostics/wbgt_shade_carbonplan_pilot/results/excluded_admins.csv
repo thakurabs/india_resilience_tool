@@ -1,0 +1,6 @@
+state,level,admin_key,district,block,coverage,summed_coverage_retired,overlap_m2,overlap_fraction,source_units,excluded,exclusion_reason
+Kerala,block,Kerala::Ernakulam::Kothamangalam,Ernakulam,Kothamangalam,0.9999999999117506,1.0039498162118605,3800873.595662236,0.003949816300109898,8,True,unresolved_source_polygon_overlap
+Kerala,district,Kerala::Ernakulam,Ernakulam,,0.9938607977259242,0.9950978703778861,3800881.5539608,0.0012370726519619726,19,True,unresolved_source_polygon_overlap
+Himachal Pradesh,block,Himachal Pradesh::Shimla::Basantpur,Shimla,Basantpur,1.0000000000000029,1.214473979229,3740849.3519043103,0.21447397922899697,3,True,unresolved_source_polygon_overlap
+Himachal Pradesh,block,Himachal Pradesh::Shimla::Mashobra,Shimla,Mashobra,1.0000000000000029,1.012065484760594,8739789.187027574,0.012065484760591253,11,True,unresolved_source_polygon_overlap
+Himachal Pradesh,district,Himachal Pradesh::Shimla,Shimla,,0.9999999999999991,1.0024332278893524,12480638.538933754,0.002433227889353425,24,True,unresolved_source_polygon_overlap

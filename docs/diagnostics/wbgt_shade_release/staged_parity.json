@@ -1,0 +1,12 @@
+{
+  "bundle_root": "D:\\projects\\india_resilience_tool\\scratch\\wbgt_shade_stage\\processed_optimised",
+  "expected_context_outputs": 0,
+  "expected_geometry_outputs": 6,
+  "expected_glance_outputs": 0,
+  "expected_master_outputs": 24,
+  "expected_yearly_ensemble_outputs": 24,
+  "expected_yearly_model_outputs": 24,
+  "issue_count": 0,
+  "issues": [],
+  "metrics_considered": 4
+}

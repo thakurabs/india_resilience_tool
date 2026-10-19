@@ -1,0 +1,15 @@
+state_name,model,run,cells_computed,cells_complete_year,cells_invalid_year,rh_clipped_cell_days,cells_with_clipped_days,elevation_fallback_cells
+Kerala,ACCESS-CM2,baseline,86,85,1,0.0,0,0
+Kerala,ACCESS-CM2,rh,86,85,1,0.0,0,0
+Kerala,ACCESS-CM2,elev,86,85,1,0.0,0,0
+Kerala,ACCESS-CM2,combined,86,85,1,0.0,0,0
+Rajasthan,ACCESS-CM2,baseline,582,582,0,0.0,0,0
+Rajasthan,ACCESS-CM2,rh,582,582,0,0.0,0,0
+Rajasthan,ACCESS-CM2,elev,582,582,0,0.0,0,0
+Rajasthan,ACCESS-CM2,combined,582,582,0,0.0,0,0
+Himachal Pradesh,ACCESS-CM2,baseline,116,105,11,0.0,0,0
+Himachal Pradesh,ACCESS-CM2,rh,116,116,0,21.0,11,0
+Himachal Pradesh,ACCESS-CM2,elev,116,105,11,0.0,0,0
+Himachal Pradesh,ACCESS-CM2,combined,116,116,0,21.0,11,0
+Himachal Pradesh,MRI-ESM2-0,baseline,116,105,11,0.0,0,0
+Himachal Pradesh,MRI-ESM2-0,combined,116,116,0,43.0,11,0

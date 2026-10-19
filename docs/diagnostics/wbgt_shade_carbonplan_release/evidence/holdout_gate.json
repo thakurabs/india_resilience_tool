@@ -1,0 +1,30 @@
+{
+  "verdict": "BLOCK_USER_RULING",
+  "models": [
+    "ACCESS-CM2",
+    "ACCESS-ESM1-5",
+    "CMCC-CM2-SR5",
+    "CMCC-ESM2",
+    "CanESM5",
+    "EC-Earth3",
+    "EC-Earth3-Veg-LR",
+    "GFDL-CM4",
+    "GFDL-ESM4",
+    "INM-CM4-8",
+    "INM-CM5-0",
+    "KIOST-ESM",
+    "MPI-ESM1-2-HR",
+    "MPI-ESM1-2-LR",
+    "MRI-ESM2-0",
+    "NorESM2-LM",
+    "NorESM2-MM",
+    "TaiESM1"
+  ],
+  "worsened_cuts": 32,
+  "years": [
+    2000,
+    2010
+  ],
+  "method": "cache_holdout_vs_deployed_original",
+  "reference": "UHE_grid_first_cell_counts"
+}

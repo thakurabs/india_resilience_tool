@@ -1,0 +1,38 @@
+{
+  "source": {
+    "url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/outputs/zarr/daily/historical-WBGT-sun.zarr/",
+    "model": "ACCESS-CM2",
+    "gcm_index": 0,
+    "processing_id": 7886,
+    "position_in_processing_id_axis": 7883,
+    "chunk": "wbgt-sun/0.9.0",
+    "chunk_compressed_bytes": 61604645,
+    "chunk_sha256": "01e5c8d1f3756e74ac105b676bd2030b2aab9fef947232d8f1ee34b3abce0666",
+    "zmetadata_sha256": "efaedd7af4c274c90d95fa43517630afaa61ab75d48f12abc1b568c3ee5020db",
+    "published_units": "degC",
+    "published_bias_adjustment": "QuantileDeltaMapping(group=Grouper(name='time.dayofyear', window=31), kind='+').adjust(sim, )",
+    "time_units": "days since 1985-01-01T12:00:00"
+  },
+  "geography_url": "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/all_regions_and_cities.json",
+  "feature_sha256": "e8439a87bfeabb5f6c0dd4cd5c0d1f07f833d5da68c72c47a34adc237e332f19",
+  "feature_properties": {
+    "ID_HDC_G0": 7887.0,
+    "UC_NM_MN": "Kochi",
+    "UACE20": null,
+    "NAMELSAD20": null,
+    "gadmid": null,
+    "hierid": null,
+    "ISO": null,
+    "processing_id": 7886
+  },
+  "city_area_m2": 721432361.8218889,
+  "w1_city_valid_fraction": 1.0000000000000002,
+  "w1_source": "scratch\\wbgt_outdoor_pilot_qc\\cells_Kerala_ACCESS-CM2_2005_combined.nc",
+  "w1_source_sha256": "68d35bf6fcd32256f08c3d97366a7ebc7f645d2c6a000afd7f4c68e212d8c97d",
+  "w1_spatial_weighting": "EPSG:6933 area of city-polygon intersection with 0.25-degree NEX cells",
+  "carbonplan_spatial_weighting": "population weighted within city; see CarbonPlan notebook 05_aggregate.ipynb",
+  "target_year": 2005,
+  "carbonplan_data_license": "CC BY 4.0",
+  "git_snapshot": "add_flood_depth@8dd22e5",
+  "w1_method_signature": "outdoor-pilot-v2:W1:parton-logan-a1.86-b2.2:humidity-vapour_pressure:magnus-6.112-17.62-243.12:toa-shape-erbs1982:wind-w1-dtr-slope0.03-amp0.1-0.8:rh-clip100-rhpolicy-v1:pressure-isa-elev-gmted2010-mea300-cellmean-7dcdaeb7a588c910:liljegren-thermofeel2.3.0:day-nex-normalised-complete365-feb29dropped"
+}

@@ -1,0 +1,481 @@
+{
+ "verdict": "PASS",
+ "label": "production",
+ "bundle_root": "D:\\projects\\irt_data\\processed_optimised",
+ "harness": "streamlit.testing.v1.AppTest on main.py",
+ "quick": false,
+ "passed": 40,
+ "failed": 0,
+ "checks": [
+  {
+   "check": "bundle root is the intended one",
+   "status": "PASS",
+   "detail": "D:\\projects\\irt_data\\processed_optimised",
+   "seconds": 0.0
+  },
+  {
+   "check": "the app script runs clean into the map view",
+   "status": "PASS",
+   "detail": {
+    "selectboxes": [
+     "selected_bundle",
+     "selected_var",
+     "sel_scenario",
+     "sel_period",
+     "sel_stat",
+     "map_mode",
+     "analysis_mode",
+     "selected_state",
+     "selected_district",
+     "overlay_rural_facilities_density_category"
+    ],
+    "markdown_elements": 39
+   },
+   "seconds": 19.1
+  },
+  {
+   "check": "all four metrics are selectable in the Heat Stress domain",
+   "status": "PASS",
+   "detail": {
+    "metric_options": 23,
+    "shade_labels": [
+     "Shaded WBGT (Annual Mean)",
+     "Shaded WBGT Days (\u2265 28\u00b0C)",
+     "Shaded WBGT Days (\u2265 30\u00b0C)",
+     "Shaded WBGT Days (\u2265 32\u00b0C)"
+    ]
+   },
+   "seconds": 0.0
+  },
+  {
+   "check": "wbgt_shade_stull_annual_mean | Telangana/Hyderabad | district (ordinary mainland)",
+   "status": "PASS",
+   "detail": {
+    "charts": 2,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2225
+   },
+   "seconds": 0.5
+  },
+  {
+   "check": "wbgt_shade_stull_annual_mean | Telangana/Hyderabad | block (ordinary mainland)",
+   "status": "PASS",
+   "detail": {
+    "charts": 2,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2245
+   },
+   "seconds": 12.8
+  },
+  {
+   "check": "wbgt_shade_stull_annual_mean | Gujarat/Surat | district (coastal, partially excluded)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 319
+   },
+   "seconds": 0.4
+  },
+  {
+   "check": "wbgt_shade_stull_annual_mean | Gujarat/Surat | block (coastal, partially excluded)",
+   "status": "PASS",
+   "detail": {
+    "charts": 1,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2434
+   },
+   "seconds": 1.7
+  },
+  {
+   "check": "wbgt_shade_stull_annual_mean | Andaman & Nicobar Islands/Nicobars | district (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 319,
+    "no_data_shown": true
+   },
+   "seconds": 0.4
+  },
+  {
+   "check": "wbgt_shade_stull_annual_mean | Andaman & Nicobar Islands/Nicobars | block (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 313,
+    "no_data_shown": true
+   },
+   "seconds": 0.5
+  },
+  {
+   "check": "wbgt_shade_stull_annual_mean | Lakshadweep/Lakshadweep | district (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 318,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_annual_mean | Lakshadweep/Lakshadweep | block (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 395,
+    "no_data_shown": true
+   },
+   "seconds": 0.3
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_28 | Telangana/Hyderabad | district (ordinary mainland)",
+   "status": "PASS",
+   "detail": {
+    "charts": 2,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2118
+   },
+   "seconds": 0.6
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_28 | Telangana/Hyderabad | block (ordinary mainland)",
+   "status": "PASS",
+   "detail": {
+    "charts": 2,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2139
+   },
+   "seconds": 0.8
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_28 | Gujarat/Surat | district (coastal, partially excluded)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 319
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_28 | Gujarat/Surat | block (coastal, partially excluded)",
+   "status": "PASS",
+   "detail": {
+    "charts": 1,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2441
+   },
+   "seconds": 0.8
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_28 | Andaman & Nicobar Islands/Nicobars | district (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 319,
+    "no_data_shown": true
+   },
+   "seconds": 0.3
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_28 | Andaman & Nicobar Islands/Nicobars | block (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 313,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_28 | Lakshadweep/Lakshadweep | district (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 318,
+    "no_data_shown": true
+   },
+   "seconds": 0.1
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_28 | Lakshadweep/Lakshadweep | block (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 395,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_30 | Telangana/Hyderabad | district (ordinary mainland)",
+   "status": "PASS",
+   "detail": {
+    "charts": 2,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2113
+   },
+   "seconds": 0.6
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_30 | Telangana/Hyderabad | block (ordinary mainland)",
+   "status": "PASS",
+   "detail": {
+    "charts": 2,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2133
+   },
+   "seconds": 0.9
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_30 | Gujarat/Surat | district (coastal, partially excluded)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 319
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_30 | Gujarat/Surat | block (coastal, partially excluded)",
+   "status": "PASS",
+   "detail": {
+    "charts": 1,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2328
+   },
+   "seconds": 0.9
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_30 | Andaman & Nicobar Islands/Nicobars | district (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 319,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_30 | Andaman & Nicobar Islands/Nicobars | block (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 313,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_30 | Lakshadweep/Lakshadweep | district (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 318,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_30 | Lakshadweep/Lakshadweep | block (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 395,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_32 | Telangana/Hyderabad | district (ordinary mainland)",
+   "status": "PASS",
+   "detail": {
+    "charts": 2,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2109
+   },
+   "seconds": 0.5
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_32 | Telangana/Hyderabad | block (ordinary mainland)",
+   "status": "PASS",
+   "detail": {
+    "charts": 2,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2129
+   },
+   "seconds": 0.9
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_32 | Gujarat/Surat | district (coastal, partially excluded)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 319
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_32 | Gujarat/Surat | block (coastal, partially excluded)",
+   "status": "PASS",
+   "detail": {
+    "charts": 1,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 2323
+   },
+   "seconds": 1.0
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_32 | Andaman & Nicobar Islands/Nicobars | district (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 319,
+    "no_data_shown": true
+   },
+   "seconds": 0.1
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_32 | Andaman & Nicobar Islands/Nicobars | block (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 313,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_32 | Lakshadweep/Lakshadweep | district (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 318,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "wbgt_shade_stull_days_ge_32 | Lakshadweep/Lakshadweep | block (all units ineligible)",
+   "status": "PASS",
+   "detail": {
+    "charts": 0,
+    "dataframes": 0,
+    "downloads": 0,
+    "text_chars": 395,
+    "no_data_shown": true
+   },
+   "seconds": 0.2
+  },
+  {
+   "check": "download surfaces match the metric's source type",
+   "status": "PASS",
+   "detail": {
+    "download_buttons": 0,
+    "sizes": [],
+    "case_study_expanders": [
+     "Case study export (single district, multi-index)"
+    ],
+    "right_panel_sections": [
+     "Exposure Snapshot",
+     "Hydrological Context",
+     "Risk summary",
+     "Trend over time",
+     "Scenario comparison (period-mean)",
+     "Case study export (single district, multi-index)",
+     "View 22 included metrics",
+     "Geography & analysis focus"
+    ]
+   },
+   "seconds": 0.0
+  },
+  {
+   "check": "a model selection control is present",
+   "status": "PASS",
+   "detail": {
+    "controls": 24
+   },
+   "seconds": 0.0
+  },
+  {
+   "check": "the landing view still renders, with its downloads intact",
+   "status": "PASS",
+   "detail": {
+    "markdown_elements": 11,
+    "landing_active": true,
+    "download_buttons": 2,
+    "payload_sizes": [],
+    "payloads_not_exposed_by_apptest": [
+     "NoneType",
+     "NoneType"
+    ],
+    "note": "byte-level download content is verified by verify_release.py, which builds the payload itself"
+   },
+   "seconds": 104.3
+  },
+  {
+   "check": "incumbent swbgt_empirical_annual_mean still renders",
+   "status": "PASS",
+   "detail": {
+    "text_chars": 2225
+   },
+   "seconds": 0.6
+  },
+  {
+   "check": "incumbent wbgt_outdoor_route_b_annual_mean still renders",
+   "status": "PASS",
+   "detail": {
+    "text_chars": 1343
+   },
+   "seconds": 0.5
+  }
+ ]
+}

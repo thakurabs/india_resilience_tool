@@ -1,0 +1,574 @@
+{
+  "change_id": "CHG-0649",
+  "status": "REFERENCE_CONTROL_PASS",
+  "control_tolerance_c": 0.001,
+  "control_max_abs_c": 2.6201263381153694e-14,
+  "control_footprint": "published-025",
+  "control_only": true,
+  "control_rows": 36,
+  "sample_dates": 12,
+  "admin_units": 0,
+  "boundaries_sha256": {},
+  "valid_mask_stable": true,
+  "units_with_less_than_99pct_support": 0,
+  "units_without_support": 0,
+  "population_transfer": {
+    "received_bytes": 5185035,
+    "records": {
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/.zmetadata": {
+        "bytes": 4334,
+        "sha256": "0d11667377bcb00b1b615b4458ae24eebe431bd30c5cec835d4504e40dd71e12"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/x/0": {
+        "bytes": 5160,
+        "sha256": "f1035cf970e4c361841c34bdfc541425490a1ff6a1a78ee3ce835be4393b4803"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/y/0": {
+        "bytes": 3071,
+        "sha256": "a7275efed3b47808ed457e998c0e913e3e24bcb92b62fff5e3be5212fa48c04f"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/8.5": {
+        "bytes": 179699,
+        "sha256": "6a6a6b40349bdefe1eb7a8bede9f59928dac66defe3e1d3548cfeff9da71939a"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/8.6": {
+        "bytes": 237148,
+        "sha256": "4a9ed1ba653ab42776e501019906bd6e22443d4811d72e5c6ff0e31a627343d6"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/9.5": {
+        "bytes": 330509,
+        "sha256": "39c9f9989b9b65cf343ad7dba5f08d7abe6e20e4296a0c19f0165bd032db6e38"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/9.6": {
+        "bytes": 362491,
+        "sha256": "405c8d6649c31a99f339f1f33d30653dd6b566198399f155ff14a1c2ef8b4a99"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/10.5": {
+        "bytes": 798878,
+        "sha256": "e9278b9a5d4e097105764b2594e0adc8dd76e99d52924e2598c02658a313682e"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/10.6": {
+        "bytes": 679903,
+        "sha256": "a3d12761ea380c87485f664137c168c6eb1dc2b21ccd32c9222cb96e318560fb"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/11.5": {
+        "bytes": 704557,
+        "sha256": "69fb608a669b6632a0ac156e8c82ed7049e07b7b86030de41825d528fb61ede6"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/11.6": {
+        "bytes": 650028,
+        "sha256": "a0f88aef395e55db4d731fd2ef4adfd43db8fda5fde9cb8731e5f5fb60b5bae3"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/12.5": {
+        "bytes": 600586,
+        "sha256": "ba093794296249042073da422af0c3eb3a9ea6266009423d10e9321d778575bf"
+      },
+      "https://carbonplan-climate-impacts.s3.us-west-2.amazonaws.com/extreme-heat/v1.0/inputs/GHS_POP_E2030_GLOBE_R2023A_4326_30ss_V1_0_resampled_to_UHE_daily.zarr/population/12.6": {
+        "bytes": 628671,
+        "sha256": "53cf0e992d29b483fa61edb460d2d7f16b4ebd92e1c2ff0459f33c8c773e7bf0"
+      }
+    }
+  },
+  "reference_sources": [
+    {
+      "acquired_utc": "2026-10-03T07:08:45.642888+00:00",
+      "array_sha256": "cfbd2359142fe002b2983d4d6ecbf0d1e47af7ca674fa487f22d6e8ed3b01695",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "1985-01-15",
+      "header_sha256": "df241ff5f0505a62d5ee798073494571872cac07694b87ffd2dbffe89a2a93d8",
+      "qc": {
+        "max_c": 27.65369415283203,
+        "mean_c": 6.432986987489671,
+        "min_c": -31.44611167907715,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "f67e454dcb312d1626069a0d2a13ca91330008fc741ef43e2207223b5090aa18",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/1985/wbgtmax.1985.01.15.tif",
+      "source_validator": "\"610d8e41-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:08:50.870075+00:00",
+      "array_sha256": "ba136a101a03f2e1306cd24da01c9ed3c793ecdbf0dc203f4cd2618dc9b0d155",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "1985-04-15",
+      "header_sha256": "8c5565276b7caa8a190913442a902a8012dcbcf313a0da0474f8e59ebc39e8e5",
+      "qc": {
+        "max_c": 32.482086181640625,
+        "mean_c": 18.037621406898364,
+        "min_c": -10.3279390335083,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "886991415b37b8bd9aa72696602317d7fb99545659010a464e4cab244ad4db40",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/1985/wbgtmax.1985.04.15.tif",
+      "source_validator": "\"610d8e5f-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:08:55.776049+00:00",
+      "array_sha256": "835cd9ae52bee92fb58cd6c03eaa3c217c2d4d2c74aac869f04767c5dfdae75c",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "1985-07-15",
+      "header_sha256": "a9e9e017a82ee0a9c6aa14cada37f23e2990da33bda38cb4cd8181553f89b824",
+      "qc": {
+        "max_c": 32.41716003417969,
+        "mean_c": 21.398891320024063,
+        "min_c": -1.8107962608337402,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "197fc9ed0a955f1a5a6b687c4ae5bcf35c631020c84df40c080f110d35a7e41a",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/1985/wbgtmax.1985.07.15.tif",
+      "source_validator": "\"610d8e66-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:01.405227+00:00",
+      "array_sha256": "55450c201e2a79ecf77623f68dac7393f67a87e51e37736c98a50f87a992cc7e",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "1985-10-15",
+      "header_sha256": "4a82367edfd0b8219ee8d1967d6d3cd9463f101b0ffe7230f2a7d9e42c969156",
+      "qc": {
+        "max_c": 30.705747604370117,
+        "mean_c": 17.91529084765492,
+        "min_c": -10.483147621154785,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "71c4ec326a8d6f367d3c32835b26721d1be59b19dbc65668df1a2395687c09eb",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/1985/wbgtmax.1985.10.15.tif",
+      "source_validator": "\"610d8e6a-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:06.884579+00:00",
+      "array_sha256": "c050c7a057520ca6112950369652fcfdca8ca79d3a0045603bdf6974bb85ceda",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "2000-01-15",
+      "header_sha256": "4bcfd93576d8c4b812a65286576b779248aa94b2308ecfc347220b72a5841388",
+      "qc": {
+        "max_c": 28.981285095214844,
+        "mean_c": 5.652764997006253,
+        "min_c": -39.8552131652832,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "db6892113070d1f21af47a3331b50b5d4f290d7fb39c033a1af84312442e21f3",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2000/wbgtmax.2000.01.15.tif",
+      "source_validator": "\"610d8ddc-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:12.282055+00:00",
+      "array_sha256": "5cfa1d735a61fad23d70fe33cf994893a9eb3ba703d32310c74e96e98fd041bf",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "2000-04-15",
+      "header_sha256": "581109f7d297282c6505b5021fa152fccd243fb03fe15ea8ae5dfd75f81ddee6",
+      "qc": {
+        "max_c": 32.87092971801758,
+        "mean_c": 19.076689448146155,
+        "min_c": -11.463408470153809,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "5d2839590ae6b6ff3ca262cead62aec69a737f71951d67a13ff36840ec8cf379",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2000/wbgtmax.2000.04.15.tif",
+      "source_validator": "\"610d8df3-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:17.922620+00:00",
+      "array_sha256": "7ca576b7c6ff48864108bfc7eb7e0bb50e6bd04622dc1ae981d4213297bb88c3",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "2000-07-15",
+      "header_sha256": "55cb40ed24abfdaf7dbbd8a98bd336adf03b42cea7006558dcd2c2f22936c503",
+      "qc": {
+        "max_c": 33.2094612121582,
+        "mean_c": 22.632829374452648,
+        "min_c": -0.1860201507806778,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "effb2812138c9b26562e6f2be2403d6107e7f7e180a7e4b78568f884b07a0c9f",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2000/wbgtmax.2000.07.15.tif",
+      "source_validator": "\"610d8dfd-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:23.740604+00:00",
+      "array_sha256": "41dd6ff7dfeb80162d6a97480014cb989631649071a76fc6df0d5d298606d380",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "2000-10-15",
+      "header_sha256": "cd1a76f203671218ad877f132b132607590e630a6d8885281685ad9cc7983f32",
+      "qc": {
+        "max_c": 31.312177658081055,
+        "mean_c": 17.497979025946055,
+        "min_c": -10.83336067199707,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "bad0f864b04719fe2c5324b4398a83feea8f0c6a0aaaa6af367bf6b6f07da25e",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2000/wbgtmax.2000.10.15.tif",
+      "source_validator": "\"610d8e09-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:30.545164+00:00",
+      "array_sha256": "61289ff18c6baf42734e11c0df44b97ce40b8ce8cfe38755d0192392d1b48bc4",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "2014-01-15",
+      "header_sha256": "46d67a924a615effa2b02b94580dbf8af170ad50d62cf3cbbab9c523545774f5",
+      "qc": {
+        "max_c": 29.137399673461914,
+        "mean_c": 7.773285516064828,
+        "min_c": -24.227787017822266,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "8beaa5754d0929122b0b1dad5cc07bf6e9ccb2fdf97ae46d79bae3dd11f1000e",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2014/wbgtmax.2014.01.15.tif",
+      "source_validator": "\"610d9288-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:37.752251+00:00",
+      "array_sha256": "727f4712d9abf834634f3455093fbf4130d4425b092fac56f88c558cbf95de8d",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "2014-04-15",
+      "header_sha256": "4b1ec4d8e953ee9d128b9e8ec4bb09870aea6b8359f8d7c4f83c292d176309a6",
+      "qc": {
+        "max_c": 31.999235153198242,
+        "mean_c": 18.126827272410463,
+        "min_c": -12.063541412353516,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "f59d4c00343d8753d8b8830b2712b74e6c26558dfda388e7f7dde99cbf4ce554",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2014/wbgtmax.2014.04.15.tif",
+      "source_validator": "\"610d929a-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:45.128947+00:00",
+      "array_sha256": "10a31b4fc80794f125796b378fb5a8d678fec4e16809f011a3bdaed5a92b71c0",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "2014-07-15",
+      "header_sha256": "72ec660d8a74805cd4b88f03563dd4100ebcfa2b890da8419973da5f7f1df12c",
+      "qc": {
+        "max_c": 33.65681457519531,
+        "mean_c": 23.179691229252168,
+        "min_c": 0.8110203146934509,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "368754a4ba909d2fd51f296c99a8c2c98f981b722c175c227b16d1a39df27d08",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2014/wbgtmax.2014.07.15.tif",
+      "source_validator": "\"610d929f-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    },
+    {
+      "acquired_utc": "2026-10-03T07:09:52.939297+00:00",
+      "array_sha256": "3ed4ddf4a045e6b3060a1dc2971c698dd20d62e14ec4169783c2b6425b64eaf6",
+      "bounds": [
+        68.0,
+        6.0,
+        98.0,
+        38.0
+      ],
+      "crs": "EPSG:4326",
+      "date": "2014-10-15",
+      "header_sha256": "06d98c90047cbb54e3e5efdbb61bbd3e407508514898a1eab018f27a84a2d484",
+      "qc": {
+        "max_c": 31.026262283325195,
+        "mean_c": 18.542978451208086,
+        "min_c": -6.398036003112793,
+        "missing_cells": 135441,
+        "valid_cells": 248559,
+        "valid_fraction": 0.6472890625
+      },
+      "ranges": [
+        [
+          0,
+          65536
+        ],
+        [
+          18447966,
+          18432000
+        ]
+      ],
+      "received_bytes": 18497536,
+      "resolution_degrees": 0.05000000074505806,
+      "row_payload_sha256": "811c44a9b79348f5580cda8978f69e07054b2c7684d158aa31275ee4baa56b4f",
+      "schema": "irt-uhe-window-v1",
+      "source_bytes": 74895966,
+      "source_nodata": "None",
+      "source_url": "https://data.chc.ucsb.edu/people/cascade/UHE-daily/wbgtmax/2014/wbgtmax.2014.10.15.tif",
+      "source_validator": "\"610d92cc-476d25e\"",
+      "status": "ACQUIRED_NOT_SCIENTIFICALLY_VALIDATED",
+      "units": "degC"
+    }
+  ],
+  "elapsed_seconds": 2.327999999979511,
+  "scientific_status": "PROVISIONAL_REFERENCE_NOT_INDEPENDENTLY_VALIDATED",
+  "limitations": [
+    "12 dates cannot establish full-period completeness or extremes",
+    "No independent Indian WBGT observations scored",
+    "Area support is reported, not automatically accepted",
+    "CarbonPlan reference control is a lineage/aggregation check, not observational accuracy"
+  ]
+}

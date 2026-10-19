@@ -1,0 +1,227 @@
+{
+  "change": "CHG-0702",
+  "method_version": "carbonplan-shade-gridfirst-qdm-v1",
+  "shade_method_signature": "carbonplan-shade-gridfirst-qdm-v1",
+  "inputs": [
+    "tas",
+    "tasmax",
+    "huss",
+    "elevation"
+  ],
+  "stage": "D:\\projects\\india_resilience_tool\\scratch\\wbgt_shade_carbonplan_release",
+  "stage_models": {
+    "ACCESS-CM2": {
+      "status_sha256": "3a042adaa209497c5ed13a986f35f4723fb55335241a86fd8061aeff25cfdb96",
+      "yearly_sha256": "2920e137325c4e0db80fb32eed7c1b36075e0ca187c9a23b21fd3b7f1683d7e9",
+      "qdm_signature": "a1ce83d9a63d9c49d88a3af4408008b30518e57f5ab94cd0adc2e2b67884c4a6"
+    },
+    "ACCESS-ESM1-5": {
+      "status_sha256": "4246fe4805c569a1b83954a6bd34d479100ed87681eae4b39b5ae6e587da9260",
+      "yearly_sha256": "5c072ac98e47ab466d1e79570133c63ca020b62cf8714317c39bf0b500ceca65",
+      "qdm_signature": "ca45f344247f15e51f0395b41a593c88138494eac6f503925961af062b67b8a0"
+    },
+    "CMCC-CM2-SR5": {
+      "status_sha256": "dc2bbbec83ca681bcc3b64412e2b10a7aaa11e4c48637a2f5ef9be89968d16d2",
+      "yearly_sha256": "4ce51d382f788e0d50c91f29576c96b3ace0ddda25a780397f716374ffa88bda",
+      "qdm_signature": "3d508c8264e33efbc39e1429066b59ffbda2306b8d132281f4ae45bf14dda2c6"
+    },
+    "CMCC-ESM2": {
+      "status_sha256": "96412f0cf1a75346780bf8792e9cce6c1a4395ecb15350d5fe14435d2c0f93b1",
+      "yearly_sha256": "523bace3cc3ea58e3aca25bb1b09af50461ceb771ee7e2f2e5f9f412371819ef",
+      "qdm_signature": "4d23964c3524bdf55c071670a3d5dabef565aa5a01fce89c149351c6afa73830"
+    },
+    "CanESM5": {
+      "status_sha256": "eb3da9c90ecc23175b223fe6e88a803fd46e688bb3225938d86d5129cba76268",
+      "yearly_sha256": "069a4bc162bbd18a6494bd71a0e86c3892ba4b5a13171f842ab19ac4c7d4876f",
+      "qdm_signature": "182cbd0f172413ab7d997af181d3b10c575f5fad9e9eb98cb829dcc00b42f20a"
+    },
+    "EC-Earth3": {
+      "status_sha256": "895d00b8ba7668428a6807396cf6638658449b6c57956dfc265813b0c863dc97",
+      "yearly_sha256": "1fe5566fe86083ff95400d3a011e1ddf8fcf6010414d31567f337ebc6252e68e",
+      "qdm_signature": "6906dbfe099e71d11abfba63e9bb200652df3fbd6f15c0cc1ef9f6755c06f7fe"
+    },
+    "EC-Earth3-Veg-LR": {
+      "status_sha256": "df7a00ba25a6f113fa08d1470dd1b9419f3f2a2896e649e45665e6eab89e1e37",
+      "yearly_sha256": "e9662c5c5f88020fa03384f23fd64358d58fd50d7c931e315890781e7859011b",
+      "qdm_signature": "f23e580f2fda8947240574e5c87a573c03df9fb84a6ebec2c3df3c1ff36816a1"
+    },
+    "GFDL-CM4": {
+      "status_sha256": "347da39d4c65064eac96d1c7598188dbe9da1591860c7359f2696a16d961effd",
+      "yearly_sha256": "bf236656e43e1f963fa52276ce22fdba9c8f7a0cfc5bfc9547ad3ba38fb6455d",
+      "qdm_signature": "8e2ef53c6ec0025844893870388b509f8f9ab1103f0500bd55014875e51d3fe0"
+    },
+    "GFDL-ESM4": {
+      "status_sha256": "44a6aa1efb07331034abb375f787bfa0e54a88dae8036c117494536a8fb1aa75",
+      "yearly_sha256": "8f041485ef8d7f1f73196c33134546cd985a82ca373513500c087ef079bce85c",
+      "qdm_signature": "0e49a279404516e6c5a4fa3cee49ca9d60efc093a04a6827851972f94ea67373"
+    },
+    "INM-CM4-8": {
+      "status_sha256": "183101d6147428d5bbfe86adacbaf082660b4b27a27ae09650480e8f253e9b98",
+      "yearly_sha256": "6df6e02c81673292df007a7dd28eba2408c51269700e173ef8229b4877f1d955",
+      "qdm_signature": "e912235b37f4a5909d82e6508db8633152626e46094fe431cd083a18575aff09"
+    },
+    "INM-CM5-0": {
+      "status_sha256": "3c41d77472dfd6aac743e3275fd5b02fe6c6b0d119b3a3fd3835247f96a4a1d0",
+      "yearly_sha256": "33af9e6bc833d98d2b068402ceb42cedec0a1274863a65230d6dcbb90759448c",
+      "qdm_signature": "0d75968cb891ee9f654f19ea60237b32d863200c6e73f81020dc0bb3a77a8ec5"
+    },
+    "KIOST-ESM": {
+      "status_sha256": "18c9b7e29b39441fccc73d5fb5891844f5812044311690564d96b5c01d81c44d",
+      "yearly_sha256": "b19b1c974144e0de7ae52eb21a6dda82ea1ec65997c4cf5e78696abe4f1bc9d8",
+      "qdm_signature": "38f9f4977cf4a57e70013dc171bc261e2971a78d88ae23d41599e004c56a4f29"
+    },
+    "MPI-ESM1-2-HR": {
+      "status_sha256": "0911cb1677e4bf41c68301e1c73005410a03050b350a6a5e8bcf05c078d9c46f",
+      "yearly_sha256": "2b9f482e1cc308558deb0f22745c2de5c5d0da03c628ac263ea56400f507b8a3",
+      "qdm_signature": "41633710db67e2267344d11d2a82d3509e8b8c290ba72c2acd81e32b3dc2e729"
+    },
+    "MPI-ESM1-2-LR": {
+      "status_sha256": "4bcaebbb99a3c592664c6e490397a1d80cb92931731b4933e070175b59a59281",
+      "yearly_sha256": "b8120ab4900943fc86035b87612e24f72f3c390993ffad2eac9cd88480d14d9f",
+      "qdm_signature": "fa5c6c89d9d30781a008ba62de055dd2d8663fc0882839d01a7e9204283f43cc"
+    },
+    "MRI-ESM2-0": {
+      "status_sha256": "83fbc43eface8029172bcf96fbdb6e449ae0fb4152ddb98524253c7220ea9c18",
+      "yearly_sha256": "619e78c528f52604a9b9a28cf40805394408e81d4da07973797df2253c08ee4c",
+      "qdm_signature": "a0f1e1c2c144f6c358b01d8e740a7f970a87842884468c4307e71b2237a273ce"
+    },
+    "NorESM2-LM": {
+      "status_sha256": "3c00bb2ef3b8a22e5d6d2cf6ea732f2fcfc024be9b33b13a33ce61f271e43769",
+      "yearly_sha256": "696414ec614280f5a65ddac016fc51363e805440dbd3a948524556bf9828ed2e",
+      "qdm_signature": "e814223af320691d77ce858d0922db1bbcd9076f16e5987b7c40c184590029d9"
+    },
+    "NorESM2-MM": {
+      "status_sha256": "880d4a01608d630e6365b82fa2f7104e7ac794713cd874ad2b77fff02647d2fd",
+      "yearly_sha256": "f6cec46555e43d28a03e3abeaf63148d6dd7d29457e75e5884ed8acb1eb1d264",
+      "qdm_signature": "c590218338b761950a6f7871e5fd2493b7b7f908075d075c91b74b2870f67bb4"
+    },
+    "TaiESM1": {
+      "status_sha256": "8b7c0558fdf0a166270229332a51bba3fd1f07040c9601fac62663db75f9a238",
+      "yearly_sha256": "473f122b3c3403d2c5828c4276e3e2c71582d74aa4f353d0422590071182e520",
+      "qdm_signature": "438cd6b2c930c0d3599a9f606637f6fbd5a8bb564ed3534f31701a5e83279bb3"
+    }
+  },
+  "path_preflight": {
+    "longest_path_chars": 193,
+    "limit": 260,
+    "headroom_chars": 67,
+    "longest_path_example": "C:\\irt_shade_s1\\wbgt_shade_stull_annual_mean\\Jharkhand\\blocks\\ensembles\\Chatra\\Shaligram_Ram_Narayanpur_Alias_Hunterganj\\historical\\Shaligram_Ram_Narayanpur_Alias_Hunterganj_yearly_ensemble.csv"
+  },
+  "models": [
+    "ACCESS-CM2",
+    "ACCESS-ESM1-5",
+    "CMCC-CM2-SR5",
+    "CMCC-ESM2",
+    "CanESM5",
+    "EC-Earth3",
+    "EC-Earth3-Veg-LR",
+    "GFDL-CM4",
+    "GFDL-ESM4",
+    "INM-CM4-8",
+    "INM-CM5-0",
+    "KIOST-ESM",
+    "MPI-ESM1-2-HR",
+    "MPI-ESM1-2-LR",
+    "MRI-ESM2-0",
+    "NorESM2-LM",
+    "NorESM2-MM",
+    "TaiESM1"
+  ],
+  "model_count": 18,
+  "slugs": {
+    "wbgt_shade_stull_annual_mean": {
+      "value_col": "wbgt_shade_stull_annual_mean_C",
+      "staged_column": "mean_c"
+    },
+    "wbgt_shade_stull_days_ge_28": {
+      "value_col": "wbgt_shade_stull_days_ge_28_days",
+      "staged_column": "days_ge_28"
+    },
+    "wbgt_shade_stull_days_ge_30": {
+      "value_col": "wbgt_shade_stull_days_ge_30_days",
+      "staged_column": "days_ge_30"
+    },
+    "wbgt_shade_stull_days_ge_32": {
+      "value_col": "wbgt_shade_stull_days_ge_32_days",
+      "staged_column": "days_ge_32"
+    }
+  },
+  "envelope": {
+    "historical": [
+      1985,
+      2014
+    ],
+    "ssp245": [
+      2020,
+      2080
+    ],
+    "ssp585": [
+      2020,
+      2080
+    ]
+  },
+  "periods": {
+    "historical": [
+      "1990-2010"
+    ],
+    "ssp245": [
+      "2020-2040",
+      "2040-2060",
+      "2060-2080"
+    ],
+    "ssp585": [
+      "2020-2040",
+      "2040-2060",
+      "2060-2080"
+    ]
+  },
+  "states": [
+    "Andaman & Nicobar Islands",
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chandigarh",
+    "Chhattisgarh",
+    "Dadra, Nagar Haveli, Daman & Diu",
+    "Delhi",
+    "Goa",
+    "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jammu & Kashmir",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Ladakh",
+    "Lakshadweep",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Puducherry",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
+    "Uttar Pradesh",
+    "Uttarakhand",
+    "West Bengal"
+  ],
+  "units_total": 7921,
+  "unit_coverage_gate": 0.95,
+  "units_eligible": 7752,
+  "units_excluded": 169,
+  "exclusion_reasons": {
+    "eligible": 7752,
+    "coverage_below_gate_reference_support_dominant": 165,
+    "coverage_below_gate_grid_gap_dominant": 4
+  },
+  "files_written": 3517788,
+  "elapsed_seconds": 2991.1
+}
