@@ -39,16 +39,12 @@ APPROVED_FIGURES: tuple[str, ...] = (
     "fig_08_district_block_resolution_zoom.svg",
     "FIG-V1V2V3_taylor.png",
     "FIG-V5_rx1day_adilabad.png",
-    "fig_01_pipeline_flow.svg",
     "fig_09_admin_first_vs_grid_first.svg",
     "fig_10_fractional_area_overlap_weights.svg",
     "fig_11_temporal_aggregation_ensemble_chain.svg",
     "fig_12_doy_percentile_threshold_curve.svg",
     "fig_14_spi_derivation.svg",
     "fig_15_jrc_rp100_severity_lookup_matrix.svg",
-    "fig_18_three_lens_blended_rule.svg",
-    "fig_19_impact_band_ramp.svg",
-    "fig_20_district_a_b_lens_example.svg",
 )
 
 

@@ -13,30 +13,8 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 ## Current capabilities
 
 ### Core dashboard
-- Default landing discovery surface:
-  - includes a top-level `Read the Docs` view that renders the Technical Guidance Note inside the dashboard without triggering dashboard compute
-  - launches into an India state-level climate-hazard screening map
-  - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
-  - surfaces one grouped bundle list in Glance and Deep Dive with exact selector labels such as `Thematic - Heat Risk` and `Sector-wise - Health Risk`
-  - thematic bundles remain available for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, and `Cold Risk`
-  - `Heat Risk` is scored against a **frozen national CDF ruler**, not per-state min-max: one transfer function fitted once over the national district pool (784 districts x 7 slices) and committed at `india_resilience_tool/config/frozen_rulers/composite_heat_risk/cdf_v1/`, so scores are comparable across states and across scenarios/periods. Its production masters publish that exact seven-slice grid (`historical/1990-2010` plus three periods for each future SSP), while Glance intentionally exposes only the six future scenario-period pairs. Its published composite is the **absolute-threshold half only** — 9 of the 14 bundle metrics, weights renormalized 0.633 -> 1.0; the 5 baseline-referenced (percentile) metrics are retained as a lens and excluded from the headline. Re-fit with `python -m tools.pipeline.fit_frozen_ruler`.
-  - `Heat Stress` is scored against its own frozen national CDF ruler at `india_resilience_tool/config/frozen_rulers/composite_heat_stress/cdf_v1/`, fitted over 784 districts x 7 slices. Its headline retains the six absolute wet-bulb/threshold metrics at configured weight 0.70, renormalized to 1.0; TN90p and WSDI are baseline-referenced lenses and excluded. The evidence-backed coverage gate is 1.0 because every fitting row carried all six headline metrics.
-  - `Extreme Rainfall | Flash Flood Risk` is scored against its own frozen national CDF ruler at `india_resilience_tool/config/frozen_rulers/composite_flood_extreme_rainfall_risk/cdf_v1/`, fitted over 784 districts x 7 slices. Its headline is the four absolute-depth/threshold metrics (`pr_max_1day_precip`, `pr_max_5day_precip`, `r20mm_very_heavy_precip_days`, `cwd_consecutive_wet_days`) at configured weight 0.75, renormalized to 1.0. R95p and R95pTOT are measured against each unit's own baseline 95th percentile of wet-day rainfall, so an arid district and a coastal one are held to different millimetre thresholds; both are retained as lenses and excluded from the headline. The evidence-backed coverage gate is 1.0 because all 5,488 fitting rows carried all four headline metrics.
-  - `Cold Risk` is scored against its own frozen national CDF ruler at `india_resilience_tool/config/frozen_rulers/composite_cold_risk/cdf_v1/`, fitted over 784 districts x 7 slices. Its headline is the eight absolute metrics at configured weight 0.75, renormalized to 1.0: four winter/annual temperatures in degrees C (`rank_higher_is_worse=False`, so the coldest district scores 100) and four fixed-threshold day counts (TN<=10C, TN<=5C, TX<=15C, consecutive TN<=10C). TX10p, TN10p and CSDI are measured against each unit's own 10th-percentile baseline and are retained as lenses. This is the first bundle to score inverted and normal metrics together; the published national mean correctly *falls* from 57.4 (historical) to 38.4 (SSP5-8.5 2060-2080). Coverage gate 1.0, 0 rows gated.
-  - `Drought Risk` is scored against its own frozen national CDF ruler at `india_resilience_tool/config/frozen_rulers/composite_drought_risk/cdf_v1/`, fitted over 784 districts x 7 slices. Its headline is a single absolute metric, `pr_consecutive_dry_days_lt1mm` (CDD, the longest run of days under 1mm), renormalized to 1.0. The six SPI metrics are z-scores against each unit's own 1981-2010 rainfall, so they measure drought as an anomaly rather than as a condition and are retained as a lens on drying relative to a unit's own past. Scored nationally they inverted the map, ranking the Andamans above Rajasthan; see `docs/composite_scale_decisions.md` Part D5. An aridity index (P/PET) is now registered and implemented for grid-first district/block computation from daily `pr`, `tasmax` and `tasmin`, using Hargreaves-Samani PET. It is intended to add atmospheric-demand information that CDD lacks. PET treats days with `tasmax < tasmin` as missing; those days count against the 90% monthly coverage requirement. Existing P/PET outputs must be rebuilt for methodology `aridity-index-gridfirst-2`. Its inclusion in the composite, weighting and frozen-ruler update remain pending; the published headline is still CDD-only.
-  - `Riverine Flood` uses its own frozen national CDF ruler at `india_resilience_tool/config/frozen_rulers/composite_flood_jrc_depth/cdf_v1/`, fitted over 784 national districts for the single `snapshot/Current` slice. The RP-100 severity index remains the sole scored metric at weight 1.0; depth and extent remain weight-0 attributes. Its evidence-backed coverage gate is 1.0 because coverage is binary for a one-metric composite and all 784 fitting rows were complete.
-  - `Water Risk` is a district-only thematic snapshot bundle (NITI Aayog per-capita water scarcity): the scored headline is the present-day (2025) scarcity class, with the 2050 projection and its deterioration shown as inline attributes; its composite uses an absolute pre-scaled ordinal score (fixed classes → 0/33/67/100), not relative normalization
-  - sector-wise bundles are available for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
-  - `Agricultural Risk` is the survivor agriculture bundle; the former `Agriculture & Growing Conditions` thematic bundle is retired and treated as a legacy alias to `Agricultural Risk`
-  - `Life & Livelihood Loss Risk` is available at district and block level when the persisted block proposal bundle master has been built
-  - each visible Glance bundle now reads a persisted optimized Glance view model from disk; the dashboard no longer computes scores, ranks, bands, drivers, attributes, or distributions at runtime
-  - `Deep Dive` from Glance opens the matching persisted composite metric such as `Composite Heat Stress`
-  - supports India -> state -> district drill-down before entering Deep Dive
-  - block drill-down drawers use block-scoped persisted driver rows when available, with a clearly labeled parent-district fallback for older Glance artifacts or bundles without block driver inputs
-  - Glance Rankings include an Answer & Export section that generates copyable prose, downloads the currently visible ranking rows as CSV, and downloads an Excel answer pack with ranking, drivers, metadata, and method notes
-  - uses explicit state clicks at India overview and district clicks within the selected state
-  - top-bar geography search provides type-to-filter state and district suggestions
-  - Deep Dive preserves current bundle, scenario-period, and geography and opens the existing detailed workflow
+- Opens directly into the metric map/rankings/details workflow. Composite scores are excluded from thematic and sectoral metric selectors; their offline definitions remain available.
+- A top-level `Read the Docs` view renders the individual-metric Technical Guidance Note.
 - Level selector: `District` / `Block`
 - Ribbon-driven metric selection:
   - domain
@@ -220,11 +198,8 @@ Extreme Rainfall | Flash Flood Risk v2 computes the active six-metric admin bund
 CHG-0038 does not change `jrc_flood_depth_index_rp100` or `r95p_interannual_variability`; both remain out of scope and on their existing behavior.
 
 Launch behavior:
-- the app now opens into a climate-hazard discovery landing surface by default
-- the landing search bar filters state and district suggestions as you type
-- the Deep Dive screen includes a top-right `Back to Glance` action
-- `Back to Glance` restores the current climate/admin district context when compatible, and otherwise reopens the last stored glance context
-- use `Deep Dive` from the landing page to enter the existing detailed ribbon/sidebar workflow on the persisted composite metric for the active Glance bundle
+- the app opens directly into the ribbon/sidebar metric workflow
+- Glance and the Back to Glance action are retired
 
 Performance note:
 - the dashboard now reads the compact `processed_optimised/` runtime bundle by default
@@ -244,15 +219,8 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 - compact ADM1 state polygons at `processed_optimised/geometry/admin/adm1.geojson` for ADM1-first dashboard boot
 - simplified runtime geometry shards plus a compact selector index for block dropdowns
 - reference overlay context files, including river display artifacts and exposure/hazard overlay PNG/metadata when present
-- Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`
 
-Glance artifacts can also be built directly for debugging:
-
-```bash
-python -m tools.pipeline.build_glance_view_model --help
-```
-
-The normal operator sequence is: build climate/proposal/exposure/JRC masters, run `python -m tools.optimized.build_processed_optimised`, rebuild lightweight context summaries when exposure inputs changed, then deploy the dashboard. Streamlit reads the persisted Glance view-model Parquet files only; formatting or scoring changes require rebuilding those artifacts.
+Routine optimized builds no longer generate Glance view models. The legacy standalone builder and existing artifacts are retained for historical reproducibility; the dashboard does not load them.
 
 JRC RP-100 reference overlay artifacts:
 - the existing JRC build command also exports `IRT_DATA_DIR/jrc_flood_depth/overlay/rp100_depth_overlay.png`

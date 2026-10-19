@@ -1964,19 +1964,7 @@ def _build_execution_plan(
         else tuple()
     )
     glance_slugs: tuple[str, ...] = ()
-    if include_context and "district" in selected_levels and (not scoped_admin_run or include_shared_admin_artifacts):
-        selected_metric_set = {str(slug).strip() for slug in metrics or [] if str(slug).strip()}
-        dashboard_specs = [
-            spec
-            for spec in get_dashboard_bundle_specs()
-            if spec.show_in_landing
-            and (not selected_metric_set or spec.composite_slug in selected_metric_set)
-        ]
-        glance_slugs = tuple(
-            spec.composite_slug
-            for spec in dashboard_specs
-            if _admin_sources_for_glance_slug(spec.composite_slug, data_dir=data_dir)
-        )
+    # Glance is retired; routine builds no longer schedule its legacy artifacts.
     manifest_task = BuildTask(
         stage="manifest",
         label="bundle manifest",

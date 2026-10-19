@@ -1011,11 +1011,11 @@ def figure_11() -> str:
     body.append(text(610, 122, "1. time-average within each model", "small", "middle"))
 
     fan_x0, fan_y0 = 110, 390
-    body.append(text(600, 340, "24 model period means collapse to ensemble statistics", "label", "middle"))
+    body.append(text(600, 340, "Available model period means form ensemble statistics", "label", "middle"))
     body.append(line(132, fan_y0 + 82, 448, fan_y0 + 82, COLORS["grid"], 1.1))
     body.append(line(132, fan_y0 + 46, 132, fan_y0 + 118, COLORS["grid"], 1.1))
     body.append(line(448, fan_y0 + 46, 448, fan_y0 + 118, COLORS["grid"], 1.1))
-    body.append(text(290, fan_y0 + 140, "24 model period means", "small", "middle"))
+    body.append(text(290, fan_y0 + 140, "Available model means", "small", "middle"))
     member_values = [17, 25, 31, 35, 39, 42, 44, 46, 49, 51, 53, 55, 57, 59, 61, 62, 64, 66, 68, 70, 72, 75, 79, 84]
     for i in range(24):
         x = 150 + i * 12

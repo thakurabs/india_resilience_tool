@@ -88,17 +88,12 @@ def run_app() -> None:
 
     from india_resilience_tool.app.geo_cache import (
         build_adm1_from_adm2,
-        build_adm3_geojson_by_district,
         enrich_adm2_with_state_names,
         load_local_adm1,
         load_local_adm2,
         load_local_adm3,
     )
     from india_resilience_tool.app.geography_controls import render_geography_and_analysis_focus
-    from india_resilience_tool.app.landing_runtime import (
-        build_glance_handoff_from_deep_dive,
-        render_landing_page,
-    )
     from india_resilience_tool.app.views.read_the_docs_view import render_read_the_docs
     from india_resilience_tool.app.master_freshness import (
         master_needs_rebuild,
@@ -207,45 +202,6 @@ def run_app() -> None:
             )
         return adm2_df
 
-    if bool(st.session_state.get("landing_active", False)):
-        if not ADM2_GEOJSON.exists():
-            st.error(
-                f"ADM2 geojson not found at {ADM2_GEOJSON}. Place your districts_4326.geojson at this path."
-            )
-            st.stop()
-
-        with perf_section("cold: load adm2 [landing]"):
-            adm2 = load_local_adm2(
-                str(ADM2_GEOJSON),
-                tolerance=SIMPLIFY_TOL_ADM2,
-                cache_version="adm2_state_v2",
-            )
-        adm2 = _ensure_adm2_keys(adm2)
-
-        with perf_section("cold: build adm1 [landing]"):
-            adm1 = build_adm1_from_adm2(adm2)
-        with st.spinner("Preparing landing geography..."):
-            with perf_section("cold: enrich adm2 state names [landing]"):
-                adm2 = enrich_adm2_with_state_names(adm2, adm1)
-            with perf_section("cold: build adm3 by district [landing]"):
-                adm3_by_district = (
-                    build_adm3_geojson_by_district(
-                        str(ADM3_GEOJSON),
-                        tolerance=SIMPLIFY_TOL_ADM3,
-                        mtime=ADM3_GEOJSON.stat().st_mtime,
-                    )
-                    if ADM3_GEOJSON.exists()
-                    else None
-                )
-
-        render_landing_page(
-            adm1=adm1,
-            adm2=adm2,
-            adm3_by_district=adm3_by_district,
-            data_dir=DATA_DIR,
-        )
-        return
-
     with st.sidebar:
         render_sidebar_branding(logo_path=LOGO_PATH)
 
@@ -280,16 +236,7 @@ def run_app() -> None:
 
         perf_panel_placeholder = st.empty()
 
-    header_col, action_col = st.columns([8.5, 1.5])
-    with header_col:
-        st.title("India Resilience Tool")
-    with action_col:
-        st.write("")
-        if st.button("Back to Glance", key="btn_back_to_glance", use_container_width=True):
-            updates = build_glance_handoff_from_deep_dive(st.session_state)
-            for key, value in updates.items():
-                st.session_state[key] = value
-            st.rerun()
+    st.title("India Resilience Tool")
 
     # Pilot state default
     PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")

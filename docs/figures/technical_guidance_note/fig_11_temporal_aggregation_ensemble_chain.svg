@@ -43,11 +43,11 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <line x1="350" y1="132" x2="350" y2="145" stroke="#2b8a7e" stroke-width="1.5"/>
 <line x1="870" y1="132" x2="870" y2="145" stroke="#2b8a7e" stroke-width="1.5"/>
 <text x="610.0" y="122.0" class="small" text-anchor="middle">1. time-average within each model</text>
-<text x="600.0" y="340.0" class="label" text-anchor="middle">24 model period means collapse to ensemble statistics</text>
+<text x="600.0" y="340.0" class="label" text-anchor="middle">Available model period means form ensemble statistics</text>
 <line x1="132" y1="472" x2="448" y2="472" stroke="#d9e2ec" stroke-width="1.1"/>
 <line x1="132" y1="436" x2="132" y2="508" stroke="#d9e2ec" stroke-width="1.1"/>
 <line x1="448" y1="436" x2="448" y2="508" stroke="#d9e2ec" stroke-width="1.1"/>
-<text x="290.0" y="530.0" class="small" text-anchor="middle">24 model period means</text>
+<text x="290.0" y="530.0" class="small" text-anchor="middle">Available model means</text>
 <line x1="150" y1="472" x2="150" y2="495.76" stroke="#8b95a1" stroke-width="0.9"/>
 <circle cx="150" cy="495.8" r="4.2" fill="#8b95a1" fill-opacity="0.78"/>
 <line x1="162" y1="472" x2="162" y2="490.0" stroke="#8b95a1" stroke-width="0.9"/>

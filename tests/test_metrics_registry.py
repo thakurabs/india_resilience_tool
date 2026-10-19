@@ -161,7 +161,6 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
 
     heat_stress_metrics = get_metrics_for_bundle("Heat Stress", spatial_family="admin", level="district")
     assert heat_stress_metrics == [
-        "composite_heat_stress",
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
@@ -284,7 +283,6 @@ def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
 
     cold_risk_metrics = get_metrics_for_bundle("Cold Risk", spatial_family="admin", level="district")
     assert cold_risk_metrics == [
-        "composite_cold_risk",
         "tas_winter_mean",
         "tasmin_winter_mean",
         "tnn_annual_min",
@@ -328,7 +326,6 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
     # CDD carries the published headline; the SPI metrics are the anomaly lens.
     # The aridity index is the absolute water-balance statement CDD cannot make.
     assert drought_metrics == [
-        "composite_drought_risk",
         "pr_consecutive_dry_days_lt1mm",
         "aridity_index_p_over_pet",
         "spi3_count_events_lt_minus1",
@@ -372,7 +369,6 @@ def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
         level="district",
     )
     assert flood_metrics == [
-        "composite_flood_extreme_rainfall_risk",
         "pr_max_1day_precip",
         "pr_max_5day_precip",
         "r20mm_very_heavy_precip_days",
@@ -447,7 +443,6 @@ def test_agricultural_risk_bundle_membership_uses_final_seven_metric_mix_and_leg
         level="district",
     )
     assert agriculture_metrics == [
-        "composite_agricultural_risk",
         "txx_annual_max",
         "txge35_extreme_heat_days",
         "wsdi_warm_spell_days",
@@ -463,7 +458,7 @@ def test_agricultural_risk_bundle_membership_uses_final_seven_metric_mix_and_leg
     ) == agriculture_metrics
 
 
-def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hydro() -> None:
+def test_legacy_composites_remain_registered_but_are_hidden_from_selectors() -> None:
     expected = {
         "Heat Risk": "composite_heat_risk",
         "Drought Risk": "composite_drought_risk",
@@ -475,8 +470,8 @@ def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hy
     for domain, slug in expected.items():
         district_metrics = get_metrics_for_bundle(domain, spatial_family="admin", level="district")
         block_metrics = get_metrics_for_bundle(domain, spatial_family="admin", level="block")
-        assert district_metrics[0] == slug
-        assert block_metrics[0] == slug
+        assert slug not in district_metrics
+        assert slug not in block_metrics
         assert slug not in get_metrics_for_bundle(domain, spatial_family="hydro", level="basin")
 
         spec = METRICS_BY_SLUG[slug]
@@ -505,13 +500,12 @@ def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
         assert slug in METRICS_BY_SLUG
 
 
-def test_sector_wise_domains_expand_to_composite_plus_source_metrics_in_exact_order() -> None:
+def test_sector_wise_domains_expand_to_source_metrics_in_exact_order() -> None:
     assert get_metrics_for_domain(
         "Infrastructure Risk",
         spatial_family="admin",
         level="district",
     ) == [
-        "composite_infrastructure_risk",
         "pr_max_1day_precip",
         "pr_max_5day_precip",
         "txx_annual_max",
@@ -521,7 +515,6 @@ def test_sector_wise_domains_expand_to_composite_plus_source_metrics_in_exact_or
         spatial_family="admin",
         level="block",
     ) == [
-        "composite_infrastructure_risk",
         "pr_max_1day_precip",
         "pr_max_5day_precip",
         "txx_annual_max",
@@ -531,7 +524,6 @@ def test_sector_wise_domains_expand_to_composite_plus_source_metrics_in_exact_or
         spatial_family="admin",
         level="district",
     ) == [
-        "composite_health_risk",
         "txx_annual_max",
         "wsdi_warm_spell_days",
         "tnx_annual_max",
@@ -592,7 +584,6 @@ def test_hydropower_sector_bundle_includes_helper_metric() -> None:
         spatial_family="admin",
         level="district",
     ) == [
-        "composite_asset_risk_hydropower",
         "pr_max_5day_precip",
         "pr_consecutive_dry_days_lt1mm",
         "r95p_interannual_variability",
@@ -691,14 +682,13 @@ def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None
         level="block",
     )
     assert district_metrics == [
-        "composite_flood_jrc_depth",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp100",
     ]
     assert block_metrics == district_metrics
-    # Composite is first so Deep Dive opens the same choropleth as Glance.
-    assert district_metrics[0] == "composite_flood_jrc_depth"
+    # The first selectable metric is the physical severity index.
+    assert district_metrics[0] == "jrc_flood_depth_index_rp100"
     assert get_metrics_for_bundle(
         "Riverine Flood",
         spatial_family="hydro",
@@ -828,3 +818,11 @@ def test_only_empirical_swbgt_metrics_are_absent_from_dashboard_options() -> Non
             )
     assert "twb_annual_mean" in VARIABLES
     assert "composite_heat_stress" in VARIABLES
+
+
+def test_no_composite_is_selectable_in_any_admin_domain() -> None:
+    from india_resilience_tool.config.metrics_registry import DOMAIN_ORDER
+    for level in ("district", "block"):
+        for domain in DOMAIN_ORDER:
+            slugs = get_metrics_for_domain(domain, spatial_family="admin", level=level)
+            assert not any(slug.startswith("composite_") for slug in slugs), (domain, level)

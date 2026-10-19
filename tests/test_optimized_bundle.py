@@ -1459,3 +1459,12 @@ def test_strict_audit_requires_block_yearly_models_when_ensemble_exists(tmp_path
         and issue.get("reason") == "block_yearly_ensemble_without_yearly_models"
         for issue in report["issues"]
     )
+
+
+def test_routine_build_never_schedules_retired_glance(tmp_path: Path, monkeypatch) -> None:
+    import tools.optimized.build_processed_optimised as builder
+    # Even if legacy sources exist, a normal context build must not produce Glance.
+    monkeypatch.setattr(builder, "_admin_sources_for_glance_slug", lambda *a, **k: True)
+    plan = builder._build_execution_plan(data_dir=tmp_path, levels=["district"], include_geometry=False)
+    assert plan.glance_slugs == ()
+    assert plan.stage_totals()["glance"] == 0

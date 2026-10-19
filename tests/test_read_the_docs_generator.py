@@ -80,7 +80,7 @@ def test_generated_html_invariants() -> None:
 
     assert "[FIGURE:" not in html_doc
     assert "[FIGURES TO INSERT]" not in html_doc
-    assert html_doc.count("<figure") == 16
+    assert html_doc.count("<figure") == 12
     assert "<figcaption" not in html_doc
     assert "http://" not in html_doc
     assert "https://" not in html_doc
@@ -91,13 +91,13 @@ def test_generated_html_invariants() -> None:
     assert size_info["html_bytes"] == len(html_doc.encode("utf-8"))
 
     figures = re.findall(r'<figure class="doc-figure"[^>]*>.*?</figure>', html_doc, re.S)
-    assert len(figures) == 16
+    assert len(figures) == 12
     for figure_html in figures:
         img_match = re.search(r"<img\b[^>]*\balt=\"([^\"]*)\"", figure_html)
         assert img_match is not None
         assert html_lib.unescape(img_match.group(1)).strip()
 
-    assert len(_embedded_svg_roots(html_doc)) == 14
+    assert len(_embedded_svg_roots(html_doc)) == 10
     for root in _embedded_svg_roots(html_doc):
         visible_text_nodes = [node for node in root.iter() if _local_name(node.tag) == "text"]
         assert not any(node.attrib.get("class") in {"title", "subtitle", "note"} for node in visible_text_nodes)
@@ -271,7 +271,9 @@ Dubash, N. K., and Jogesh, A. (2014). *From Margins to Mainstream?*
 
 
 def test_false_positive_year_mentions_remain_plain_text() -> None:
-    html_doc, _size_info = _generated_html()
+    # Exercise citation parsing independently of the current note's prose.
+    markdown = "Kerala 2018, Mumbai 2005, Economic Survey 2017.\n\n## References\n\n" + builder.DEFAULT_SOURCE.read_text(encoding="utf-8").split("## References", 1)[1]
+    html_doc, _headings = builder.render_markdown(markdown, {})
 
     for phrase in ("Kerala 2018", "Mumbai 2005", "Economic Survey 2017"):
         assert phrase in html_doc

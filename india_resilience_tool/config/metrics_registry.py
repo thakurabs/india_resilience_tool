@@ -3504,7 +3504,7 @@ def _sector_wise_domain_metric_slugs(
     if level_norm and level_norm not in supported_levels:
         return []
 
-    candidate_slugs = [spec.composite_slug, *get_proposal_bundle_source_metric_slugs(spec.composite_slug)]
+    candidate_slugs = list(get_proposal_bundle_source_metric_slugs(spec.composite_slug))
     filtered: list[str] = []
     for slug in candidate_slugs:
         metric_spec = METRICS_BY_SLUG.get(slug)
@@ -3598,7 +3598,8 @@ def get_metrics_for_domain(
     if sector_wise_slugs is not None:
         return sector_wise_slugs
 
-    slugs = list(DOMAINS.get(canonical_domain, []))
+    # Keep offline composite definitions; expose individual metrics only.
+    slugs = [slug for slug in DOMAINS.get(canonical_domain, []) if not slug.startswith("composite_")]
     filtered: list[str] = []
     for slug in slugs:
         spec = METRICS_BY_SLUG.get(slug)
